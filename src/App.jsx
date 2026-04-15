@@ -1,5 +1,50 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
+  // ===== NOTIFICATIONS =====
+function useNotifications() {
+  const [permitted, setPermitted] = useState(false);
+
+  useEffect(() => {
+    if (window.OneSignal) {
+      window.OneSignal.Notifications.requestPermission().then(p => setPermitted(p));
+    }
+  }, []);
+
+  const notify = (title, message, icon = "🚕") => {
+    if (!("Notification" in window)) return;
+    if (Notification.permission === "granted") {
+      new Notification(`${icon} ${title}`, {
+        body: message,
+        icon: "/logo192.png",
+        badge: "/logo192.png",
+        dir: "rtl",
+        lang: "ar",
+      });
+    }
+  };
+
+  const notifyDriverAccepted = (driverName, price) => {
+    notify("تم قبول طلبك! 🎉", `${driverName} قبل رحلتك بـ ${price} دج`);
+  };
+
+  const notifyDriverArriving = (driverName) => {
+    notify("السائق في الطريق 🚕", `${driverName} سيصل خلال 3 دقائق`);
+  };
+
+  const notifyRideStarted = () => {
+    notify("بدأت رحلتك 🛣️", "استمتع برحلتك — وصولاً آمناً!");
+  };
+
+  const notifyRideCompleted = (price) => {
+    notify("وصلت بسلام! 🏁", `تم الدفع ${price} دج — شكراً لاستخدامك TaxiDZ`);
+  };
+
+  const notifyNewOffer = (price) => {
+    notify("عرض جديد من سائق 🤝", `سائق قريب يعرض ${price} دج`);
+  };
+
+  return { permitted, notify, notifyDriverAccepted, notifyDriverArriving, notifyRideStarted, notifyRideCompleted, notifyNewOffer };
+}
   GoogleMap,
   useJsApiLoader,
   Marker,
