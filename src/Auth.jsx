@@ -219,4 +219,4 @@ function AuthForm({ role, onSuccess, onBack }) {
   );
 }
 
-export { WelcomeScreen, AuthForm
+export { WelcomeScreen, AuthForm };
