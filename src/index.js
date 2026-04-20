@@ -1,24 +1,6 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#1a1a2e" />
-    <title>TaxiDZ - تاكسي الجزائر</title>
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-    <script>
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      OneSignalDeferred.push(async function(OneSignal) {
-        await OneSignal.init({
-          appId: "f9e7686d-1859-497d-a3e1-c758e3b19de6",
-          notifyButton: { enable: false },
-          allowLocalhostAsSecureOrigin: true,
-        });
-      });
-    </script>
-  </head>
-  <body>
-    <noscript>يحتاج هذا التطبيق JavaScript للعمل.</noscript>
-    <div id="root"></div>
-  </body>
-</html>
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<React.StrictMode><App /></React.StrictMode>);
