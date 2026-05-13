@@ -172,7 +172,7 @@ function AuthForm({ role, onSuccess, onBack }) {
       onSuccess();
     } catch (e) {
       const m = { "auth/email-already-in-use": "البريد مستخدم", "auth/wrong-password": "كلمة المرور خاطئة", "auth/user-not-found": "المستخدم غير موجود", "auth/weak-password": "كلمة المرور قصيرة", "auth/invalid-credential": "بيانات غير صحيحة" };
-      setError(m[e.code] || "حدث خطأ");
+      setError(m[e.code] || e.code || e.message || "حدث خطأ");
     }
     setLoading(false);
   };
