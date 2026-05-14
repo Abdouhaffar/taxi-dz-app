@@ -23,6 +23,13 @@ const ALGERIA_CENTER = { lat: 36.737, lng: 3.086 };
 const PRICE_PER_KM = 30;
 const MIN_PRICE = 100;
 
+// السعر = المسافة × 30 دج، والحد الأدنى 100 دج
+// مثال: 5 كم = 150 دج، 10 كم = 300 دج، 1 كم = 100 دج، 2 كم = 100 دج
+const calcPrice = (km, multiplier = 1.0) => {
+  if (!km || km <= 0) return MIN_PRICE;
+  return Math.max(Math.round(km * PRICE_PER_KM * multiplier), MIN_PRICE);
+};
+
 const MAP_STYLE = [
   { featureType: "all", elementType: "geometry", stylers: [{ color: "#f5f0eb" }] },
   { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
@@ -54,12 +61,6 @@ const DRIVERS = [
   { id: 2, name: "يوسف مزياني", rating: 4.7, car: "بيجو 301 2020", plate: "107-16-DZ", avatar: "🧔", position: { lat: 36.720, lng: 3.110 } },
   { id: 3, name: "أمين شريف", rating: 4.8, car: "داسيا لوغان 2022", plate: "445-09-DZ", avatar: "👨‍🦱", position: { lat: 36.745, lng: 3.060 } },
 ];
-
-// ===== HELPERS =====
-const calcPrice = (km, multiplier = 1.0) => {
-  if (!km || km <= 0) return MIN_PRICE;
-  return Math.max(Math.round(km * PRICE_PER_KM * multiplier), MIN_PRICE);
-};
 
 // ===== MAP =====
 function TaxiMap({ origin, destination, showDrivers, height = 220 }) {
@@ -225,6 +226,28 @@ function AuthForm({ role, onSuccess, onBack }) {
   );
 }
 
+// ===== LOCATION PICKER =====
+function LocationInput({ value, onChange, onPlaceSelect, placeholder, color, acRef, onGPSClick, isOrigin }) {
+  return (
+    <div style={{ background: isOrigin ? C.greenLight : C.orangeLight, borderRadius: 14, padding: "10px 16px", display: "flex", gap: 10, alignItems: "center" }}>
+      <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
+      <Autocomplete onLoad={ac => acRef.current = ac} onPlaceChanged={onPlaceSelect} options={{ componentRestrictions: { country: "dz" } }}>
+        <input
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          style={{ background: "none", border: "none", outline: "none", fontFamily: "inherit", fontSize: 14, color: C.text, flex: 1, textAlign: "right", width: "calc(100% - 40px)" }}
+        />
+      </Autocomplete>
+      {isOrigin && (
+        <button onClick={onGPSClick} title="استخدم موقعي الحالي" style={{ background: C.green, border: "none", borderRadius: 8, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: 16 }}>
+          📍
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ===== PASSENGER APP =====
 function PassengerApp({ onLogout, user }) {
   const [screen, setScreen] = useState("home");
@@ -245,13 +268,13 @@ function PassengerApp({ onLogout, user }) {
   const [elapsed, setElapsed] = useState(0);
   const [done, setDone] = useState(false);
   const [rating, setRating] = useState(0);
+  const [gpsLoading, setGpsLoading] = useState(false);
   const originRef = useRef(null);
   const destRef = useRef(null);
 
   const currentType = RIDE_TYPES.find(t => t.id === rideType) || RIDE_TYPES[0];
   const base = calcPrice(distanceKm, currentType.multiplier);
 
-  // Update price when distance or type changes
   useEffect(() => { setMyPrice(base); }, [distanceKm, rideType]);
 
   useEffect(() => {
@@ -286,6 +309,31 @@ function PassengerApp({ onLogout, user }) {
       const place = destRef.current.getPlace();
       if (place?.geometry) { setDestPlace(place.geometry.location); setDestText(place.formatted_address || place.name); }
     }
+  };
+
+  // GPS: استخدم الموقع الحالي كنقطة انطلاق
+  const handleGPS = () => {
+    setGpsLoading(true);
+    navigator.geolocation?.getCurrentPosition(
+      pos => {
+        const latlng = new window.google.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+        setOriginPlace(latlng);
+        // عكس الإحداثيات للحصول على العنوان
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ location: latlng }, (results, status) => {
+          if (status === "OK" && results[0]) {
+            setOriginText(results[0].formatted_address);
+          } else {
+            setOriginText(`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+          }
+          setGpsLoading(false);
+        });
+      },
+      () => {
+        setGpsLoading(false);
+        alert("لم نتمكن من تحديد موقعك. تأكد من تفعيل GPS.");
+      }
+    );
   };
 
   const startSearch = (price, negotiated) => {
@@ -342,14 +390,24 @@ function PassengerApp({ onLogout, user }) {
       <RouteInfo origin={originPlace} destination={destPlace} onDistanceChange={km => setDistanceKm(km)} />
 
       <div style={{ margin: "14px 20px", background: C.card, borderRadius: 24, padding: 20, boxShadow: C.shadow }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
-          <div style={{ background: C.greenLight, borderRadius: 14, padding: "12px 16px", display: "flex", gap: 10, alignItems: "center" }}>
+
+        {/* GPS Button */}
+        <button onClick={handleGPS} disabled={gpsLoading} style={{ width: "100%", background: gpsLoading ? C.border : C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer", marginBottom: 12, fontFamily: "inherit", fontWeight: 700, fontSize: 14, color: gpsLoading ? C.textMuted : C.greenDark }}>
+          <span style={{ fontSize: 18 }}>📍</span>
+          {gpsLoading ? "جارٍ تحديد موقعك..." : "استخدم موقعي الحالي كنقطة انطلاق"}
+        </button>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+          {/* Origin */}
+          <div style={{ background: C.greenLight, borderRadius: 14, padding: "10px 16px", display: "flex", gap: 10, alignItems: "center" }}>
             <div style={{ width: 10, height: 10, borderRadius: "50%", background: C.green, flexShrink: 0 }} />
             <Autocomplete onLoad={ac => originRef.current = ac} onPlaceChanged={onOriginChanged} options={{ componentRestrictions: { country: "dz" } }}>
               <input value={originText} onChange={e => setOriginText(e.target.value)} placeholder="نقطة الانطلاق..." style={{ background: "none", border: "none", outline: "none", fontFamily: "inherit", fontSize: 14, color: C.text, width: "100%", textAlign: "right" }} />
             </Autocomplete>
           </div>
-          <div style={{ background: C.orangeLight, borderRadius: 14, padding: "12px 16px", display: "flex", gap: 10, alignItems: "center" }}>
+
+          {/* Destination */}
+          <div style={{ background: C.orangeLight, borderRadius: 14, padding: "10px 16px", display: "flex", gap: 10, alignItems: "center" }}>
             <div style={{ width: 10, height: 10, borderRadius: "50%", background: C.orange, flexShrink: 0 }} />
             <Autocomplete onLoad={ac => destRef.current = ac} onPlaceChanged={onDestChanged} options={{ componentRestrictions: { country: "dz" } }}>
               <input value={destText} onChange={e => setDestText(e.target.value)} placeholder="إلى أين؟ مثال: حيدرة..." style={{ background: "none", border: "none", outline: "none", fontFamily: "inherit", fontSize: 14, color: C.text, width: "100%", textAlign: "right" }} />
@@ -357,15 +415,18 @@ function PassengerApp({ onLogout, user }) {
           </div>
         </div>
 
-        {/* Pricing info */}
-        <div style={{ background: C.bg, borderRadius: 14, padding: "10px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 12, color: C.textMuted }}>
-            {distanceKm > 0 ? `${distanceKm.toFixed(1)} كم × 30 دج` : "أدخل الوجهة لحساب السعر"}
+        {/* Price calculation preview */}
+        {distanceKm > 0 && (
+          <div style={{ background: C.bg, borderRadius: 14, padding: "12px 16px", marginBottom: 14, border: `1px solid ${C.green}33` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 12, color: C.textMuted }}>
+                {distanceKm.toFixed(1)} كم × {PRICE_PER_KM} دج/كم
+                {calcPrice(distanceKm) === MIN_PRICE && <span style={{ color: C.orange }}> (حد أدنى)</span>}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: C.green }}>{calcPrice(distanceKm)} دج</div>
+            </div>
           </div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: C.green }}>
-            {distanceKm > 0 ? `= ${calcPrice(distanceKm)} دج` : "—"}
-          </div>
-        </div>
+        )}
 
         <div style={{ fontWeight: 700, marginBottom: 10, color: C.text }}>نوع السيارة</div>
         {RIDE_TYPES.map(t => {
@@ -381,7 +442,7 @@ function PassengerApp({ onLogout, user }) {
               </div>
               <div style={{ textAlign: "left" }}>
                 <div style={{ fontWeight: 900, fontSize: 16, color: rideType === t.id ? C.greenDark : C.text }}>{price} دج</div>
-                <div style={{ fontSize: 10, color: C.textMuted }}>سعر مقترح</div>
+                {distanceKm === 0 && <div style={{ fontSize: 10, color: C.textMuted }}>أدخل الوجهة</div>}
               </div>
             </div>
           );
@@ -390,7 +451,7 @@ function PassengerApp({ onLogout, user }) {
         <button
           onClick={() => { if (originPlace && destPlace) setScreen("negotiate"); }}
           style={{ width: "100%", marginTop: 8, background: originPlace && destPlace ? `linear-gradient(135deg,${C.green},${C.greenDark})` : C.border, border: "none", borderRadius: 16, padding: 16, color: originPlace && destPlace ? "#fff" : C.textMuted, fontFamily: "inherit", fontWeight: 800, fontSize: 16, cursor: originPlace && destPlace ? "pointer" : "default" }}>
-          {originPlace && destPlace ? `التالي: تحديد السعر (${base} دج) 💰` : "اختر نقطة الانطلاق والوجهة"}
+          {originPlace && destPlace ? `التالي: تحديد السعر${distanceKm > 0 ? ` (${base} دج)` : ""} 💰` : "اختر نقطة الانطلاق والوجهة"}
         </button>
       </div>
     </div>
@@ -402,7 +463,6 @@ function PassengerApp({ onLogout, user }) {
     const maxAllowed = Math.round(base * 2);
     const discount = myPrice < base ? Math.round(((base - myPrice) / base) * 100) : 0;
     const premium = myPrice > base ? Math.round(((myPrice - base) / base) * 100) : 0;
-    const isLow = myPrice < MIN_PRICE;
 
     return (
       <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl", paddingBottom: 40 }}>
@@ -432,15 +492,25 @@ function PassengerApp({ onLogout, user }) {
                 <span style={{ background: C.orangeLight, color: C.orange, padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700 }}>🚗 {currentType.label}</span>
               </div>
             </div>
-            <div style={{ background: C.card, borderRadius: 16, padding: "12px 16px", marginBottom: 14, border: `1px solid ${C.green}33` }}>
-              <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6 }}>تفاصيل الحساب</div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.text }}>
-                <span>{distanceKm.toFixed(1)} كم × {PRICE_PER_KM} دج × {currentType.multiplier}</span>
-                <span style={{ fontWeight: 700 }}>{base} دج</span>
-              </div>
-              {base === MIN_PRICE && <div style={{ fontSize: 11, color: C.orange, marginTop: 4 }}>* تم تطبيق الحد الأدنى {MIN_PRICE} دج</div>}
+
+            {/* Pricing table */}
+            <div style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${C.green}22` }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>جدول الأسعار</div>
+              {[
+                { km: 1, note: "أدنى سعر" },
+                { km: 2, note: "أدنى سعر" },
+                { km: 3, note: "" },
+                { km: 5, note: "" },
+                { km: 10, note: "" },
+              ].map(row => (
+                <div key={row.km} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: 13, color: C.textMuted }}>{row.km} كم {row.note && <span style={{ fontSize: 11, color: C.orange }}>({row.note})</span>}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: calcPrice(row.km) === MIN_PRICE ? C.orange : C.green }}>{calcPrice(row.km)} دج</span>
+                </div>
+              ))}
             </div>
-            <button onClick={() => startSearch(base, false)} style={{ width: "100%", background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 16, padding: 18, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 17, cursor: "pointer", boxShadow: `0 6px 20px ${C.green}44` }}>
+
+            <button onClick={() => startSearch(base, false)} style={{ width: "100%", background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 16, padding: 18, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 17, cursor: "pointer" }}>
               ✅ قبول السعر — {base} دج
             </button>
           </div>
@@ -452,34 +522,37 @@ function PassengerApp({ onLogout, user }) {
                 {discount > 0 && <div style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>وفّرت {discount}%</div>}
                 {premium > 0 && <div style={{ fontSize: 12, color: C.orange, fontWeight: 700 }}>أعلى بـ {premium}%</div>}
               </div>
-              <div style={{ fontSize: 56, fontWeight: 900, color: isLow ? C.red : myPrice < base ? C.orange : C.dark, lineHeight: 1, marginBottom: 4 }}>{myPrice}</div>
+              <div style={{ fontSize: 56, fontWeight: 900, color: myPrice <= MIN_PRICE ? C.orange : myPrice < base ? C.blue : C.dark, lineHeight: 1, marginBottom: 4 }}>{myPrice}</div>
               <div style={{ fontSize: 16, color: C.textMuted, marginBottom: 16 }}>دينار جزائري</div>
 
               <input type="range" min={minAllowed} max={maxAllowed} step={10} value={myPrice}
                 onChange={e => setMyPrice(Number(e.target.value))}
-                style={{ width: "100%", accentColor: isLow ? C.red : C.green, cursor: "pointer", marginBottom: 8, height: 6 }} />
+                style={{ width: "100%", accentColor: C.green, cursor: "pointer", marginBottom: 8, height: 6 }} />
 
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.textLight }}>
-                <span style={{ color: C.red }}>{minAllowed} دج (أدنى)</span>
+                <span style={{ color: C.orange }}>{minAllowed} دج (أدنى)</span>
                 <span style={{ color: C.green, fontWeight: 700 }}>مقترح: {base} دج</span>
-                <span style={{ color: C.orange }}>{maxAllowed} دج</span>
+                <span style={{ color: C.red }}>{maxAllowed} دج</span>
               </div>
 
-              {isLow && <div style={{ marginTop: 10, background: C.redLight, borderRadius: 10, padding: "8px 12px", fontSize: 12, color: C.red }}>⚠️ لا يمكن أن يقل عن {MIN_PRICE} دج</div>}
+              {myPrice === MIN_PRICE && (
+                <div style={{ marginTop: 10, background: C.orangeLight, borderRadius: 10, padding: "8px 12px", fontSize: 12, color: C.orange }}>
+                  ℹ️ هذا هو الحد الأدنى للسعر
+                </div>
+              )}
             </div>
 
-            {/* Quick suggestions */}
             <div style={{ background: C.card, borderRadius: 20, padding: 18, boxShadow: C.shadow, marginBottom: 14 }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>اقتراحات سريعة</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {[
-                  { label: "أدنى 🔵", value: MIN_PRICE, color: C.blue },
+                  { label: "الحد الأدنى 🔵", value: MIN_PRICE, color: C.blue },
                   { label: "خصم 20% 🟢", value: Math.max(Math.round(base * 0.8), MIN_PRICE), color: C.green },
                   { label: "مقترح ⭐", value: base, color: C.dark },
                   { label: "زيادة 20% 🔥", value: Math.round(base * 1.2), color: C.orange },
                 ].map((s, i) => (
                   <button key={i} onClick={() => setMyPrice(s.value)}
-                    style={{ flex: 1, minWidth: "calc(50% - 4px)", padding: "10px 6px", borderRadius: 12, border: `2px solid ${myPrice === s.value ? s.color : C.border}`, background: myPrice === s.value ? s.color + "15" : C.bg, cursor: "pointer", fontFamily: "inherit", textAlign: "center", transition: "all 0.2s" }}>
+                    style={{ flex: 1, minWidth: "calc(50% - 4px)", padding: "10px 6px", borderRadius: 12, border: `2px solid ${myPrice === s.value ? s.color : C.border}`, background: myPrice === s.value ? s.color + "15" : C.bg, cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: myPrice === s.value ? s.color : C.text }}>{s.value} دج</div>
                     <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{s.label}</div>
                   </button>
@@ -489,14 +562,11 @@ function PassengerApp({ onLogout, user }) {
 
             <div style={{ background: C.card, borderRadius: 20, padding: 18, boxShadow: C.shadow, marginBottom: 14 }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 8 }}>رسالة للسائق (اختياري)</div>
-              <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="مثال: سأكون جاهزاً خلال دقيقتين، أو لدي حقيبة..." style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", fontFamily: "inherit", fontSize: 13, color: C.text, resize: "none", outline: "none", height: 60, direction: "rtl" }} />
+              <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="مثال: سأكون جاهزاً خلال دقيقتين..." style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", fontFamily: "inherit", fontSize: 13, color: C.text, resize: "none", outline: "none", height: 60, direction: "rtl" }} />
             </div>
 
-            <button
-              onClick={() => { if (myPrice >= MIN_PRICE) startSearch(myPrice, true); }}
-              disabled={myPrice < MIN_PRICE}
-              style={{ width: "100%", background: myPrice < MIN_PRICE ? C.border : `linear-gradient(135deg,${C.dark},#2d1b69)`, border: "none", borderRadius: 16, padding: 18, color: myPrice < MIN_PRICE ? C.textMuted : "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 17, cursor: myPrice < MIN_PRICE ? "default" : "pointer" }}>
-              {myPrice < MIN_PRICE ? `الحد الأدنى ${MIN_PRICE} دج` : `🤝 إرسال العرض — ${myPrice} دج`}
+            <button onClick={() => startSearch(myPrice, true)} style={{ width: "100%", background: `linear-gradient(135deg,${C.dark},#2d1b69)`, border: "none", borderRadius: 16, padding: 18, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 17, cursor: "pointer" }}>
+              🤝 إرسال العرض — {myPrice} دج
             </button>
           </div>
         )}
@@ -510,9 +580,7 @@ function PassengerApp({ onLogout, user }) {
       <TaxiMap origin={booking?.originPlace} destination={booking?.destPlace} showDrivers={true} />
       <div style={{ padding: "14px 20px 0" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: C.text }}>{phase === 0 ? "📡 يتم بث طلبك..." : "📨 ردود السائقين"}</div>
-        <div style={{ fontSize: 13, color: C.textMuted }}>
-          عرضك: {booking?.price} دج · {booking?.distanceKm?.toFixed(1)} كم · ⏱ {timer}ث
-        </div>
+        <div style={{ fontSize: 13, color: C.textMuted }}>عرضك: {booking?.price} دج · {booking?.distanceKm?.toFixed(1)} كم · ⏱ {timer}ث</div>
       </div>
       {phase === 0 && (
         <div style={{ margin: "20px auto", width: 100, height: 100, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -536,12 +604,7 @@ function PassengerApp({ onLogout, user }) {
                 <div style={{ textAlign: "left" }}>
                   {d.status === "pending" && <span style={{ color: C.textLight, fontSize: 12 }}>ينتظر...</span>}
                   {d.status === "accepted" && <div style={{ fontWeight: 900, fontSize: 18, color: C.green }}>{d.offerPrice} دج ✅</div>}
-                  {d.status === "counter" && (
-                    <div>
-                      <div style={{ fontWeight: 900, fontSize: 18, color: C.orange }}>{d.offerPrice} دج</div>
-                      <div style={{ fontSize: 10, color: C.orange }}>عرض مضاد 🤝</div>
-                    </div>
-                  )}
+                  {d.status === "counter" && <div><div style={{ fontWeight: 900, fontSize: 18, color: C.orange }}>{d.offerPrice} دج</div><div style={{ fontSize: 10, color: C.orange }}>عرض مضاد 🤝</div></div>}
                 </div>
               </div>
               {(d.status === "accepted" || d.status === "counter") && (
@@ -581,8 +644,8 @@ function PassengerApp({ onLogout, user }) {
               <div style={{ fontSize: 11, color: C.green }}>السعر المتفق</div>
             </div>
             <div style={{ flex: 1, background: C.blueLight, borderRadius: 12, padding: 10, textAlign: "center" }}>
-              <div style={{ fontWeight: 900, fontSize: 20, color: C.blue }}>{booking?.distanceKm?.toFixed(1)}</div>
-              <div style={{ fontSize: 11, color: C.blue }}>كيلومتر</div>
+              <div style={{ fontWeight: 900, fontSize: 20, color: C.blue }}>{booking?.distanceKm?.toFixed(1)} كم</div>
+              <div style={{ fontSize: 11, color: C.blue }}>المسافة</div>
             </div>
           </div>
         </div>
@@ -615,9 +678,7 @@ function PassengerApp({ onLogout, user }) {
             <div style={{ fontSize: 26, fontWeight: 900, color: C.greenDark }}>{selectedDriver?.offerPrice} دج</div>
             <div style={{ fontSize: 13, color: C.green }}>المبلغ المدفوع</div>
           </div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>
-            {booking?.distanceKm?.toFixed(1)} كم · {selectedDriver?.offerPrice / booking?.distanceKm?.toFixed(1) | 0} دج/كم فعلياً
-          </div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>{booking?.distanceKm?.toFixed(1)} كم</div>
           <button onClick={() => { setScreen("home"); setRating(0); setDistanceKm(0); }} style={{ width: "100%", background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 14, padding: 16, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>✅ إنهاء وتقييم</button>
         </div>
       </div>
@@ -638,13 +699,6 @@ function PassengerApp({ onLogout, user }) {
             <div style={{ background: C.dark, borderRadius: 12, padding: "8px 14px", textAlign: "center" }}>
               <div style={{ fontSize: 10, color: "#ffffff88" }}>السعر</div>
               <div style={{ fontWeight: 800, color: "#fff" }}>{selectedDriver?.offerPrice} دج</div>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", background: C.bg, borderRadius: 14, padding: 12, marginBottom: 14 }}>
-            <div style={{ fontSize: 26 }}>{selectedDriver?.avatar}</div>
-            <div>
-              <div style={{ fontWeight: 700, color: C.text }}>{selectedDriver?.name}</div>
-              <div style={{ fontSize: 12, color: C.textMuted }}>{selectedDriver?.car} · {selectedDriver?.plate}</div>
             </div>
           </div>
           <button onClick={() => setDone(true)} style={{ width: "100%", background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 14, padding: 16, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>🏁 محاكاة الوصول</button>
@@ -701,7 +755,6 @@ function DriverDashboard({ onLogout }) {
               ))}
             </div>
 
-            {/* Pricing reminder */}
             <div style={{ margin: "12px 20px 0", background: "#1a1d27", borderRadius: 14, padding: "12px 16px", border: "1px solid #2a2d3e", display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: 13, color: "#94a3b8" }}>نظام التسعير المعتمد</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.green }}>30 دج/كم · أدنى 100 دج</span>
@@ -718,7 +771,7 @@ function DriverDashboard({ onLogout }) {
                         <div>
                           <div style={{ fontWeight: 700, fontSize: 14, color: "#fff" }}>{r.name}</div>
                           <div style={{ fontSize: 12, color: "#94a3b8" }}>{r.from} ← {r.to}</div>
-                          <div style={{ fontSize: 11, color: "#4a5568" }}>📏 {r.km} كم · مقترح: {calcPrice(r.km)} دج</div>
+                          <div style={{ fontSize: 11, color: "#4a5568" }}>📏 {r.km} كم · معيار: {calcPrice(r.km)} دج</div>
                         </div>
                       </div>
                       <div style={{ textAlign: "left" }}>
@@ -772,7 +825,7 @@ function DriverDashboard({ onLogout }) {
   );
 }
 
-// ===== MAIN APP =====
+// ===== MAIN =====
 export default function App() {
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_KEY || "",
@@ -801,7 +854,6 @@ export default function App() {
       <div style={{ textAlign: "center", padding: 24 }}>
         <div style={{ fontSize: 48, marginBottom: 12 }}>⚠️</div>
         <div style={{ fontWeight: 800, fontSize: 18, color: C.text }}>خطأ في تحميل الخريطة</div>
-        <div style={{ fontSize: 14, color: C.textMuted, marginTop: 8 }}>تحقق من مفتاح Google Maps</div>
       </div>
     </div>
   );
