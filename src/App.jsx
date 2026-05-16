@@ -25,6 +25,17 @@ const ALGERIA_CENTER = { lat: 36.737, lng: 3.086 };
 const PRICE_PER_KM = 30;
 const MIN_PRICE = 100;
 
+// حساب المسافة بين نقطتين بالكيلومتر (Haversine)
+const getDistanceKm = (lat1, lng1, lat2, lng2) => {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+};
+
 // ===== حساب السعر =====
 // السعر = المسافة × 30 دج، الحد الأدنى 100 دج
 // مثال: 1كم=100، 2كم=100، 3كم=100، 5كم=150، 10كم=300، 20كم=600
@@ -327,29 +338,19 @@ function PassengerApp({ onLogout, user }) {
       if (p?.geometry) {
         setDestPlace(p.geometry.location);
         setDestText(p.formatted_address || p.name);
-        // ===== حساب المسافة والسعر فوراً =====
-        const origin = originPlace;
-        const dest = p.geometry.location;
-        if (origin) {
-          setPriceLoading(true);
-          new window.google.maps.DistanceMatrixService().getDistanceMatrix(
-            { origins: [origin], destinations: [dest], travelMode: "DRIVING" },
-            (res, status) => {
-              setPriceLoading(false);
-              if (status === "OK") {
-                const el = res.rows[0].elements[0];
-                if (el.status === "OK") {
-                  const km = el.distance.value / 1000;
-                  setDistanceKm(km);
-                  setDistanceText(el.distance.text);
-                  setDurationText(el.duration.text);
-                  const price = calcPrice(km, currentType.multiplier);
-                  setSuggestedPrice(price);
-                  setOfferPrice(price);
-                }
-              }
-            }
-          );
+
+        if (originPlace) {
+          // حساب المسافة مباشرة
+          const lat1 = typeof originPlace.lat === "function" ? originPlace.lat() : originPlace.lat;
+          const lng1 = typeof originPlace.lng === "function" ? originPlace.lng() : originPlace.lng;
+          const lat2 = p.geometry.location.lat();
+          const lng2 = p.geometry.location.lng();
+          const km = getDistanceKm(lat1, lng1, lat2, lng2);
+          const price = Math.max(Math.round(km * 30), 100);
+          setDistanceKm(km);
+          setDistanceText(`${km.toFixed(1)} كم`);
+          setSuggestedPrice(price);
+          setOfferPrice(price);
         }
       }
     }
