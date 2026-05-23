@@ -4,12 +4,12 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBIVg4BuL38sGZrcY4vrHLEbmwgVu1knlA",
-  authDomain: "taxi-dz-ee993.firebaseapp.com",
-  projectId: "taxi-dz-ee993",
-  storageBucket: "taxi-dz-ee993.firebasestorage.app",
-  messagingSenderId: "547448954066",
-  appId: "1:547448954066:web:75185d79056a27b5eb610b",
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
 
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
