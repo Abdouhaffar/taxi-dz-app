@@ -1,27 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { initializeApp, getApps } from "firebase/app";
+import { auth, db } from "./firebase";
 import {
-  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword,
   signOut, onAuthStateChanged, updateProfile
 } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } from "@react-google-maps/api";
-
-const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
-};
-
-let auth, db;
-try {
-  const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = getFirestore(app);
-} catch (e) { console.log("Firebase error:", e); }
+import DriverDashboard from "./DriverDashboard";
 
 const LIBRARIES = ["places"];
 const ALGERIA_CENTER = { lat: 36.737, lng: 3.086 };
@@ -159,19 +144,16 @@ function AuthForm({ role, onSuccess, onBack }) {
   const accent = isPassenger ? C.green : C.orange;
   const accentDark = isPassenger ? C.greenDark : "#ea580c";
 
-  const errMsg = (code) => {
-    const m = {
-      "auth/email-already-in-use": "البريد مستخدم مسبقاً — جرّب تسجيل الدخول",
-      "auth/wrong-password": "كلمة المرور خاطئة",
-      "auth/user-not-found": "الحساب غير موجود — أنشئ حساباً جديداً",
-      "auth/weak-password": "كلمة المرور قصيرة (6 أحرف على الأقل)",
-      "auth/invalid-credential": "البريد أو كلمة المرور غير صحيحة",
-      "auth/invalid-email": "البريد الإلكتروني غير صحيح",
-      "auth/network-request-failed": "تحقق من اتصالك بالإنترنت",
-      "auth/too-many-requests": "محاولات كثيرة — انتظر قليلاً",
-    };
-    return m[code] || "حدث خطأ، حاول مرة أخرى";
-  };
+  const errMsg = (code) => ({
+    "auth/email-already-in-use": "البريد مستخدم مسبقاً — جرّب تسجيل الدخول",
+    "auth/wrong-password": "كلمة المرور خاطئة",
+    "auth/user-not-found": "الحساب غير موجود — أنشئ حساباً جديداً",
+    "auth/weak-password": "كلمة المرور قصيرة (6 أحرف على الأقل)",
+    "auth/invalid-credential": "البريد أو كلمة المرور غير صحيحة",
+    "auth/invalid-email": "البريد الإلكتروني غير صحيح",
+    "auth/network-request-failed": "تحقق من اتصالك بالإنترنت",
+    "auth/too-many-requests": "محاولات كثيرة — انتظر قليلاً",
+  }[code] || "حدث خطأ، حاول مرة أخرى");
 
   const handleRegister = async () => {
     if (!email || !password) { setError("أدخل البريد وكلمة المرور"); return; }
@@ -182,17 +164,16 @@ function AuthForm({ role, onSuccess, onBack }) {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: name || email.split("@")[0] });
       const phoneFormatted = isPassenger ? (phone.startsWith("+") ? phone : `+213${phone.replace(/^0/, "")}`) : "";
-      // Save user data
       try {
         await setDoc(doc(db, role === "driver" ? "drivers" : "passengers", cred.user.uid), {
           uid: cred.user.uid, email,
           name: name || email.split("@")[0],
-          phone: phoneFormatted,
-          role, status: role === "driver" ? "pending" : "active",
+          phone: phoneFormatted, role,
+          status: role === "driver" ? "pending" : "active",
+          verificationStatus: role === "driver" ? "none" : null,
           createdAt: serverTimestamp(),
         });
       } catch (e) { console.log("Firestore:", e); }
-      // Save locally
       if (isPassenger) {
         localStorage.setItem("taxidz_phone", phoneFormatted);
         localStorage.setItem("taxidz_name", name);
@@ -207,7 +188,6 @@ function AuthForm({ role, onSuccess, onBack }) {
     setLoading(true); setError("");
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
-      // Load saved phone from Firestore
       if (isPassenger) {
         try {
           const snap = await getDoc(doc(db, "passengers", cred.user.uid));
@@ -230,31 +210,22 @@ function AuthForm({ role, onSuccess, onBack }) {
         <div style={{ fontSize: 48, marginBottom: 8 }}>{isPassenger ? "🧑" : "👨‍✈️"}</div>
         <div style={{ fontSize: 20, fontWeight: 900, color: "#fff" }}>{isPassenger ? "بوابة الراكب" : "بوابة السائق"}</div>
       </div>
-
       <div style={{ padding: "24px 20px" }}>
-        {/* Login / Register tabs */}
         <div style={{ background: "#e2ddd8", borderRadius: 14, padding: 4, display: "flex", marginBottom: 20 }}>
           {[{ id: "login", label: "🔑 تسجيل الدخول" }, { id: "register", label: "✅ حساب جديد" }].map(m => (
             <button key={m.id} onClick={() => { setMode(m.id); setError(""); }}
               style={{ flex: 1, padding: 10, borderRadius: 11, border: "none", background: mode === m.id ? C.card : "transparent", color: mode === m.id ? C.text : C.textMuted, cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 13 }}>{m.label}</button>
           ))}
         </div>
-
         <div style={{ background: C.card, borderRadius: 24, padding: 24, boxShadow: C.shadow, display: "flex", flexDirection: "column", gap: 12 }}>
-
-          {/* Register fields */}
           {mode === "register" && isPassenger && (
             <input value={name} onChange={e => setName(e.target.value)} placeholder="الاسم الكامل"
               style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", textAlign: "right" }} />
           )}
-
           <input value={email} onChange={e => setEmail(e.target.value)} placeholder="البريد الإلكتروني" type="email"
             style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", direction: "ltr", textAlign: "left" }} />
-
           <input value={password} onChange={e => setPassword(e.target.value)} placeholder="كلمة المرور" type="password"
             style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", direction: "ltr", textAlign: "left" }} />
-
-          {/* Phone field - register passenger only */}
           {mode === "register" && isPassenger && (
             <div style={{ display: "flex", gap: 8 }}>
               <div style={{ background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 14, padding: "14px 12px", fontSize: 14, color: C.greenDark, fontWeight: 700, whiteSpace: "nowrap" }}>🇩🇿 +213</div>
@@ -263,18 +234,13 @@ function AuthForm({ role, onSuccess, onBack }) {
                 style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", direction: "ltr", textAlign: "left" }} />
             </div>
           )}
-
           {mode === "register" && isPassenger && (
             <div style={{ background: C.blueLight, borderRadius: 12, padding: "10px 14px", fontSize: 12, color: C.blue }}>
-              📌 رقم هاتفك سيظهر للسائق عند قبول رحلتك — للتواصل المباشر
+              📌 رقم هاتفك سيظهر للسائق عند قبول رحلتك
             </div>
           )}
-
           {error && <div style={{ background: C.redLight, borderRadius: 12, padding: "10px 14px", fontSize: 13, color: C.red, textAlign: "center" }}>{error}</div>}
-
-          <button
-            onClick={mode === "register" ? handleRegister : handleLogin}
-            disabled={loading}
+          <button onClick={mode === "register" ? handleRegister : handleLogin} disabled={loading}
             style={{ background: `linear-gradient(135deg,${accent},${accentDark})`, border: "none", borderRadius: 16, padding: 16, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 16, cursor: "pointer", opacity: loading ? 0.7 : 1 }}>
             {loading ? "جارٍ..." : mode === "register" ? "✅ إنشاء الحساب" : "🔑 تسجيل الدخول"}
           </button>
@@ -315,8 +281,7 @@ function PassengerApp({ onLogout, user }) {
   useEffect(() => {
     if (distanceKm > 0) {
       const price = calcPrice(distanceKm, currentType.multiplier);
-      setSuggestedPrice(price);
-      setOfferPrice(price);
+      setSuggestedPrice(price); setOfferPrice(price);
     }
   }, [rideType, distanceKm]);
 
@@ -345,8 +310,7 @@ function PassengerApp({ onLogout, user }) {
     const km = getDistanceKm(lat1, lng1, lat2, lng2);
     setDistanceKm(km);
     const price = calcPrice(km, currentType.multiplier);
-    setSuggestedPrice(price);
-    setOfferPrice(price);
+    setSuggestedPrice(price); setOfferPrice(price);
   };
 
   const handleGPS = () => {
@@ -372,8 +336,7 @@ function PassengerApp({ onLogout, user }) {
     if (originRef.current) {
       const p = originRef.current.getPlace();
       if (p?.geometry) {
-        setOriginPlace(p.geometry.location);
-        setOriginText(p.formatted_address || p.name);
+        setOriginPlace(p.geometry.location); setOriginText(p.formatted_address || p.name);
         if (destPlace) {
           const { lat: lat1, lng: lng1 } = getLatLng(p.geometry.location);
           const { lat: lat2, lng: lng2 } = getLatLng(destPlace);
@@ -387,8 +350,7 @@ function PassengerApp({ onLogout, user }) {
     if (destRef.current) {
       const p = destRef.current.getPlace();
       if (p?.geometry) {
-        setDestPlace(p.geometry.location);
-        setDestText(p.formatted_address || p.name);
+        setDestPlace(p.geometry.location); setDestText(p.formatted_address || p.name);
         if (originPlace) {
           const { lat: lat1, lng: lng1 } = getLatLng(originPlace);
           const { lat: lat2, lng: lng2 } = getLatLng(p.geometry.location);
@@ -436,20 +398,16 @@ function PassengerApp({ onLogout, user }) {
         <div style={{ fontWeight: 800, fontSize: 18, color: C.text }}>تفاصيل الرحلة</div>
       </div>
       <TaxiMap origin={originPlace} destination={destPlace} showDrivers={false} />
-
       {distanceKm > 0 && (
         <div style={{ display: "flex", gap: 8, margin: "10px 20px 0", justifyContent: "center" }}>
           <div style={{ background: C.greenLight, borderRadius: 20, padding: "6px 14px", fontSize: 13, color: C.greenDark, fontWeight: 700 }}>📏 {distanceKm.toFixed(1)} كم</div>
           <div style={{ background: C.orangeLight, borderRadius: 20, padding: "6px 14px", fontSize: 14, color: C.orange, fontWeight: 900 }}>💰 {suggestedPrice} دج</div>
         </div>
       )}
-
       <div style={{ margin: "14px 20px", background: C.card, borderRadius: 24, padding: 20, boxShadow: C.shadow }}>
         <button onClick={handleGPS} disabled={gpsLoading} style={{ width: "100%", background: gpsLoading ? C.border : C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer", marginBottom: 12, fontFamily: "inherit", fontWeight: 700, fontSize: 14, color: gpsLoading ? C.textMuted : C.greenDark }}>
-          <span style={{ fontSize: 18 }}>📍</span>
-          {gpsLoading ? "جارٍ تحديد موقعك..." : "استخدم موقعي الحالي"}
+          <span style={{ fontSize: 18 }}>📍</span>{gpsLoading ? "جارٍ تحديد موقعك..." : "استخدم موقعي الحالي"}
         </button>
-
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
           <div style={{ background: C.greenLight, borderRadius: 14, padding: "10px 16px", display: "flex", gap: 10, alignItems: "center" }}>
             <div style={{ width: 10, height: 10, borderRadius: "50%", background: C.green, flexShrink: 0 }} />
@@ -464,7 +422,6 @@ function PassengerApp({ onLogout, user }) {
             </Autocomplete>
           </div>
         </div>
-
         <div style={{ fontWeight: 700, marginBottom: 10, color: C.text }}>نوع السيارة</div>
         {RIDE_TYPES.map(t => (
           <div key={t.id} onClick={() => setRideType(t.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: 14, border: `2px solid ${rideType === t.id ? C.green : C.border}`, background: rideType === t.id ? C.greenLight : C.bg, cursor: "pointer", marginBottom: 8 }}>
@@ -475,7 +432,6 @@ function PassengerApp({ onLogout, user }) {
             <div style={{ fontWeight: 900, fontSize: 16, color: rideType === t.id ? C.greenDark : C.text }}>{calcPrice(distanceKm, t.multiplier)} دج</div>
           </div>
         ))}
-
         <button onClick={() => { if (originPlace && destPlace) setScreen("offer"); }}
           style={{ width: "100%", marginTop: 8, background: originPlace && destPlace ? `linear-gradient(135deg,${C.green},${C.greenDark})` : C.border, border: "none", borderRadius: 16, padding: 16, color: originPlace && destPlace ? "#fff" : C.textMuted, fontFamily: "inherit", fontWeight: 800, fontSize: 16, cursor: originPlace && destPlace ? "pointer" : "default" }}>
           {originPlace && destPlace ? `التالي: إرسال العرض (${suggestedPrice} دج) 🚀` : "اختر نقطة الانطلاق والوجهة"}
@@ -494,7 +450,6 @@ function PassengerApp({ onLogout, user }) {
           <div style={{ fontSize: 12, color: C.textMuted }}>{distanceKm.toFixed(1)} كم × {PRICE_PER_KM} دج = {suggestedPrice} دج</div>
         </div>
       </div>
-
       <div style={{ margin: "0 20px 14px", background: C.card, borderRadius: 24, padding: 24, boxShadow: C.shadow, textAlign: "center" }}>
         <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>سعرك المقترح</div>
         <div style={{ fontSize: 64, fontWeight: 900, color: offerPrice >= suggestedPrice ? C.green : C.orange, lineHeight: 1 }}>{offerPrice}</div>
@@ -508,7 +463,6 @@ function PassengerApp({ onLogout, user }) {
           <span>{Math.round(suggestedPrice * 2)} دج</span>
         </div>
       </div>
-
       <div style={{ margin: "0 20px 14px", background: C.card, borderRadius: 20, padding: 18, boxShadow: C.shadow }}>
         <div style={{ fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>اقتراحات سريعة</div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -525,7 +479,6 @@ function PassengerApp({ onLogout, user }) {
           ))}
         </div>
       </div>
-
       <div style={{ margin: "0 20px" }}>
         <button onClick={() => startSearch(offerPrice)}
           style={{ width: "100%", background: `linear-gradient(135deg,${C.dark},#2d1b69)`, border: "none", borderRadius: 16, padding: 18, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 17, cursor: "pointer" }}>
@@ -543,7 +496,6 @@ function PassengerApp({ onLogout, user }) {
         <div style={{ fontWeight: 800, fontSize: 18, color: C.text }}>{phase === 0 ? "📡 جارٍ إرسال عرضك..." : "📨 ردود السائقين"}</div>
         <div style={{ fontSize: 13, color: C.textMuted }}>عرضك: {booking?.price} دج · {booking?.distanceKm?.toFixed(1)} كم · ⏱ {timer}ث</div>
       </div>
-
       {phase === 0 && (
         <div style={{ margin: "20px auto", width: 100, height: 100, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
           {[0,1,2].map(i => <div key={i} style={{ position: "absolute", width: 30+i*25, height: 30+i*25, borderRadius: "50%", border: `2px solid ${C.green}`, animation: "pg 1.5s ease-out infinite", animationDelay: `${i*0.4}s` }} />)}
@@ -551,7 +503,6 @@ function PassengerApp({ onLogout, user }) {
           <style>{`@keyframes pg{0%{transform:scale(0.8);opacity:0.6}100%{transform:scale(1.5);opacity:0}}`}</style>
         </div>
       )}
-
       {noDrivers && (
         <div style={{ margin: "14px 20px", background: C.orangeLight, borderRadius: 20, padding: 20, border: `1px solid ${C.orange}44`, textAlign: "center" }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>😔</div>
@@ -559,17 +510,12 @@ function PassengerApp({ onLogout, user }) {
           <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 16 }}>يمكنك زيادة السعر لجذب السائقين</div>
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={() => { setOfferPrice(Math.round((booking?.price || MIN_PRICE) * 1.2)); setScreen("offer"); }}
-              style={{ flex: 1, background: `linear-gradient(135deg,${C.orange},#ea580c)`, border: "none", borderRadius: 14, padding: "12px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>
-              💰 زيادة السعر
-            </button>
+              style={{ flex: 1, background: `linear-gradient(135deg,${C.orange},#ea580c)`, border: "none", borderRadius: 14, padding: "12px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>💰 زيادة السعر</button>
             <button onClick={() => setScreen("home")}
-              style={{ flex: 1, background: C.redLight, border: "none", borderRadius: 14, padding: "12px", color: C.red, fontFamily: "inherit", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
-              ❌ إلغاء
-            </button>
+              style={{ flex: 1, background: C.redLight, border: "none", borderRadius: 14, padding: "12px", color: C.red, fontFamily: "inherit", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>❌ إلغاء</button>
           </div>
         </div>
       )}
-
       {phase === 1 && !noDrivers && (
         <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
           {drivers.map(d => (
@@ -605,6 +551,7 @@ function PassengerApp({ onLogout, user }) {
         <div style={{ textAlign: "center", marginBottom: 18 }}>
           <div style={{ fontSize: 44 }}>🎉</div>
           <div style={{ fontWeight: 900, fontSize: 20, color: C.text }}>تم قبول طلبك!</div>
+          <div style={{ fontSize: 13, color: C.textMuted }}>السائق في طريقه إليك</div>
         </div>
         <div style={{ background: C.bg, borderRadius: 16, padding: 16, marginBottom: 14 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
@@ -627,7 +574,7 @@ function PassengerApp({ onLogout, user }) {
           </div>
         </div>
         <div style={{ background: C.dark, borderRadius: 14, padding: 14, marginBottom: 14, textAlign: "center" }}>
-          <div style={{ fontSize: 11, color: "#ffffff88", marginBottom: 6 }}>رمز التحقق</div>
+          <div style={{ fontSize: 11, color: "#ffffff88", marginBottom: 6 }}>رمز التحقق — أعطه للسائق</div>
           <div style={{ fontSize: 34, fontWeight: 900, color: "#fff", letterSpacing: 8 }}>4782</div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
@@ -653,7 +600,7 @@ function PassengerApp({ onLogout, user }) {
           </div>
           <div style={{ background: C.greenLight, borderRadius: 14, padding: 14, marginBottom: 14 }}>
             <div style={{ fontSize: 26, fontWeight: 900, color: C.greenDark }}>{selectedDriver?.offerPrice} دج</div>
-            <div style={{ fontSize: 13, color: C.green }}>المبلغ المدفوع · {booking?.distanceKm?.toFixed(1)} كم</div>
+            <div style={{ fontSize: 13, color: C.green }}>{booking?.distanceKm?.toFixed(1)} كم</div>
           </div>
           <button onClick={() => { setScreen("home"); setRating(0); setDistanceKm(0); setSuggestedPrice(MIN_PRICE); }}
             style={{ width: "100%", background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 14, padding: 16, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>✅ إنهاء</button>
@@ -687,124 +634,6 @@ function PassengerApp({ onLogout, user }) {
   return null;
 }
 
-// ===== DRIVER DASHBOARD =====
-function DriverDashboard({ onLogout }) {
-  const [online, setOnline] = useState(false);
-  const [tab, setTab] = useState("home");
-  const [reqs, setReqs] = useState([
-    { id: 1, name: "أحمد سليم", phone: "+213550123456", from: "باب الزوار", to: "حيدرة", offer: 280, km: 9.3, avatar: "👨" },
-    { id: 2, name: "نور الهدى", phone: "+213661234567", from: "القبة", to: "المطار", offer: 630, km: 21, avatar: "👩" },
-  ]);
-  const stats = [
-    { label: "أرباح اليوم", value: "4,550 دج", icon: "💰", color: C.green },
-    { label: "رحلات اليوم", value: "3", icon: "🚕", color: C.blue },
-    { label: "التقييم", value: "4.9 ⭐", icon: "🏆", color: C.yellow },
-    { label: "معدل القبول", value: "94%", icon: "📊", color: C.orange },
-  ];
-
-  return (
-    <div style={{ minHeight: "100vh", background: "#0f1117", fontFamily: "'Cairo',sans-serif", direction: "rtl" }}>
-      <div style={{ background: "#1a1d27", padding: "48px 20px 20px", borderBottom: "1px solid #2a2d3e" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <div style={{ width: 52, height: 52, borderRadius: "50%", background: `linear-gradient(135deg,${C.orange},#ea580c)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>👨‍✈️</div>
-            <div><div style={{ fontSize: 17, fontWeight: 800, color: "#fff" }}>كريم بن علي</div><div style={{ fontSize: 12, color: "#94a3b8" }}>⭐ 4.9 · رونو سيمبول 2021</div></div>
-          </div>
-          <div onClick={() => setOnline(!online)} style={{ width: 56, height: 28, borderRadius: 14, background: online ? C.green : "#2a2d3e", position: "relative", cursor: "pointer", transition: "all 0.3s" }}>
-            <div style={{ position: "absolute", top: 3, right: online ? 3 : "auto", left: online ? "auto" : 3, width: 22, height: 22, borderRadius: "50%", background: "#fff", transition: "all 0.3s" }} />
-          </div>
-        </div>
-        {online && <div style={{ marginTop: 12, background: "#00b37e22", border: "1px solid #00b37e44", borderRadius: 12, padding: "8px 14px", fontSize: 13, color: C.green }}>🟢 متصل — تلقّي الطلبات</div>}
-      </div>
-
-      <div style={{ paddingBottom: 100 }}>
-        {tab === "home" && (
-          <>
-            <div style={{ padding: "16px 20px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              {stats.map((s, i) => (
-                <div key={i} style={{ background: "#1a1d27", borderRadius: 16, padding: 16, border: "1px solid #2a2d3e" }}>
-                  <div style={{ fontSize: 22, marginBottom: 6 }}>{s.icon}</div>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: s.color }}>{s.value}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {online && reqs.length > 0 && (
-              <div style={{ padding: "16px 20px 0" }}>
-                <div style={{ fontWeight: 800, fontSize: 15, color: "#fff", marginBottom: 12 }}>🔔 طلبات جديدة</div>
-                {reqs.map(r => (
-                  <div key={r.id} style={{ background: "#1a1d27", borderRadius: 18, padding: 16, marginBottom: 10, border: `1px solid ${C.orange}44` }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#2a2d3e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{r.avatar}</div>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 14, color: "#fff" }}>{r.name}</div>
-                          <div style={{ fontSize: 12, color: "#94a3b8" }}>{r.from} ← {r.to} · {r.km} كم</div>
-                          <div style={{ fontSize: 11, color: r.offer >= calcPrice(r.km) ? C.green : C.red }}>
-                            معيار: {calcPrice(r.km)} دج {r.offer >= calcPrice(r.km) ? "✅" : "⚠️"}
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "left" }}>
-                        <div style={{ fontSize: 22, fontWeight: 900, color: C.orange }}>{r.offer} دج</div>
-                      </div>
-                    </div>
-
-                    {/* ===== رقم هاتف الراكب ===== */}
-                    <a href={`tel:${r.phone}`} style={{ display: "flex", alignItems: "center", gap: 10, background: "#00b37e15", border: "1px solid #00b37e44", borderRadius: 12, padding: "10px 14px", marginBottom: 10, textDecoration: "none" }}>
-                      <span style={{ fontSize: 20 }}>📞</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 11, color: "#94a3b8" }}>رقم هاتف الراكب</div>
-                        <div style={{ fontSize: 16, fontWeight: 900, color: C.green, direction: "ltr" }}>{r.phone}</div>
-                      </div>
-                      <div style={{ background: C.green, borderRadius: 8, padding: "4px 10px", fontSize: 12, color: "#fff", fontWeight: 700 }}>اتصل ☎️</div>
-                    </a>
-
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => setReqs(p => p.filter(x => x.id !== r.id))} style={{ flex: 1, background: "#ef444422", border: "none", borderRadius: 10, padding: 10, color: C.red, fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>❌ رفض</button>
-                      <button onClick={() => setReqs(p => p.filter(x => x.id !== r.id))} style={{ flex: 2, background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 10, padding: 10, color: "#fff", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>✅ قبول {r.offer} دج</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {!online && (
-              <div style={{ margin: "16px 20px", background: "#1a1d27", borderRadius: 20, padding: 24, border: "1px solid #2a2d3e", textAlign: "center" }}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>😴</div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: "#fff", marginBottom: 8 }}>أنت غير متصل</div>
-                <button onClick={() => setOnline(true)} style={{ background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 14, padding: "14px 32px", color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>🟢 تفعيل الاتصال</button>
-              </div>
-            )}
-          </>
-        )}
-
-        {tab === "profile" && (
-          <div style={{ padding: "20px 20px 100px" }}>
-            <div style={{ background: "#1a1d27", borderRadius: 20, padding: 24, border: "1px solid #2a2d3e", textAlign: "center", marginBottom: 16 }}>
-              <div style={{ fontSize: 56, marginBottom: 12 }}>👨‍✈️</div>
-              <div style={{ fontWeight: 900, fontSize: 20, color: "#fff" }}>كريم بن علي</div>
-              <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 4 }}>رونو سيمبول 2021 · 213-01-DZ</div>
-              <div style={{ display: "inline-block", background: "#00b37e22", color: C.green, padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, marginTop: 8 }}>✅ سائق معتمد</div>
-            </div>
-            <button onClick={onLogout} style={{ width: "100%", background: "#ef444422", border: "1px solid #ef444444", borderRadius: 16, padding: 16, color: C.red, fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>🚪 تسجيل الخروج</button>
-          </div>
-        )}
-      </div>
-
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, background: "#1a1d27", borderTop: "1px solid #2a2d3e", display: "flex", padding: "8px 0 20px" }}>
-        {[{ id: "home", label: "الرئيسية", icon: "🏠" }, { id: "profile", label: "حسابي", icon: "👤" }].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "8px 0" }}>
-            <div style={{ fontSize: 22, opacity: tab === t.id ? 1 : 0.4 }}>{t.icon}</div>
-            <div style={{ fontSize: 10, color: tab === t.id ? C.green : "#4a5568", fontWeight: tab === t.id ? 700 : 400 }}>{t.label}</div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ===== MAIN =====
 export default function App() {
   const { isLoaded, loadError } = useJsApiLoader({
@@ -817,7 +646,6 @@ export default function App() {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    if (!auth) return;
     const unsub = onAuthStateChanged(auth, u => {
       if (u) {
         setUser(u);
@@ -832,7 +660,7 @@ export default function App() {
   }, []);
 
   const handleLogout = async () => {
-    if (auth) { try { await signOut(auth); } catch(e) {} }
+    try { await signOut(auth); } catch(e) {}
     setUser(null); setRole(null); setScreen("welcome");
     localStorage.removeItem("taxidz_role");
     localStorage.removeItem("taxidz_phone");
@@ -869,7 +697,7 @@ export default function App() {
       {screen === "welcome" && <WelcomeScreen onSelect={r => { setRole(r); setScreen("auth"); }} />}
       {screen === "auth" && <AuthForm role={role} onSuccess={handleAuthSuccess} onBack={() => { setRole(null); setScreen("welcome"); }} />}
       {screen === "app" && role === "passenger" && <PassengerApp onLogout={handleLogout} user={user} />}
-      {screen === "app" && role === "driver" && <DriverDashboard onLogout={handleLogout} />}
+      {screen === "app" && role === "driver" && <DriverDashboard user={user} onLogout={handleLogout} />}
     </div>
   );
 }
