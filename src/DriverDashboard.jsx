@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { doc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 
 const C = {
@@ -27,27 +27,66 @@ const STEPS = [
   { id: "docs", label: "الوثائق", icon: "📄" },
 ];
 
-const WILAYAS = ["الجزائر","البليدة","تيبازة","بومرداس","تيزي وزو","بجاية","عنابة","قسنطينة","سطيف","وهران","تلمسان","ورقلة","الأغواط","غرداية","بسكرة","المسيلة","باتنة","أم البواقي","خنشلة","سكيكدة","الوادي","بشار","تندوف","إليزي","تمنراست"];
-const CAR_BRANDS = ["RENAULT","PEUGEOT","TOYOTA","HYUNDAI","KIA","VOLKSWAGEN","DACIA","FORD","NISSAN","MERCEDES","BMW","SUZUKI","MITSUBISHI","SEAT","OPEL"];
+// ===== 69 ولاية جزائرية كاملة =====
+const WILAYAS = [
+  "01 - أدرار", "02 - الشلف", "03 - الأغواط", "04 - أم البواقي",
+  "05 - باتنة", "06 - بجاية", "07 - بسكرة", "08 - بشار",
+  "09 - البليدة", "10 - البويرة", "11 - تمنراست", "12 - تبسة",
+  "13 - تلمسان", "14 - تيارت", "15 - تيزي وزو", "16 - الجزائر",
+  "17 - الجلفة", "18 - جيجل", "19 - سطيف", "20 - سعيدة",
+  "21 - سكيكدة", "22 - سيدي بلعباس", "23 - عنابة", "24 - قالمة",
+  "25 - قسنطينة", "26 - المدية", "27 - مستغانم", "28 - المسيلة",
+  "29 - معسكر", "30 - ورقلة", "31 - وهران", "32 - البيض",
+  "33 - إليزي", "34 - برج بوعريريج", "35 - بومرداس", "36 - الطارف",
+  "37 - تندوف", "38 - تيسمسيلت", "39 - الوادي", "40 - خنشلة",
+  "41 - سوق أهراس", "42 - تيبازة", "43 - ميلة", "44 - عين الدفلى",
+  "45 - النعامة", "46 - عين تموشنت", "47 - غرداية", "48 - غليزان",
+  "49 - تيميمون", "50 - برج باجي مختار", "51 - أولاد جلال",
+  "52 - بني عباس", "53 - عين صالح", "54 - عين قزام",
+  "55 - توقرت", "56 - جانت", "57 - المغير", "58 - المنيعة",
+  "59 - بلعباس الجديدة", "60 - الونشريس", "61 - تاسيلي",
+  "62 - السوقر", "63 - قصر الشلالة", "64 - الزيبان",
+  "65 - تلغوت", "66 - الهقار", "67 - تيديكلت",
+  "68 - عين بن خليل", "69 - الرشيد",
+];
+
+const CAR_BRANDS = [
+  "RENAULT", "PEUGEOT", "TOYOTA", "HYUNDAI", "KIA", "VOLKSWAGEN",
+  "DACIA", "FORD", "NISSAN", "MERCEDES", "BMW", "SUZUKI", "MITSUBISHI",
+  "SEAT", "OPEL", "CITROEN", "FIAT", "HONDA", "MAZDA", "CHEVROLET",
+  "SKODA", "AUDI", "JEEP", "LAND ROVER", "أخرى (أدخل يدوياً)",
+];
+
 const CAR_MODELS = {
-  RENAULT:["Clio","Symbol","Logan","Megane","Kangoo","Fluence"],
-  PEUGEOT:["206","207","208","301","308","405","406","Partner"],
-  TOYOTA:["Corolla","Yaris","Camry","RAV4","Land Cruiser"],
-  HYUNDAI:["i10","i20","i30","Accent","Elantra","Tucson"],
-  KIA:["Picanto","Rio","Cerato","Sportage","Sorento"],
-  VOLKSWAGEN:["Golf","Polo","Passat","Tiguan","Jetta"],
-  DACIA:["Logan","Sandero","Duster","Dokker"],
-  FORD:["Fiesta","Focus","Fusion","Mondeo"],
-  NISSAN:["Micra","Sunny","Almera","Tiida","Qashqai"],
-  MERCEDES:["C200","E200","A180","Sprinter"],
-  BMW:["316i","320i","520i","X1"],
-  SUZUKI:["Alto","Swift","Vitara","Jimny"],
-  MITSUBISHI:["Lancer","Colt","Galant","Outlander"],
-  SEAT:["Ibiza","Leon","Altea"],
-  OPEL:["Corsa","Astra","Vectra"],
+  RENAULT: ["Clio", "Symbol", "Logan", "Megane", "Kangoo", "Fluence", "Captur"],
+  PEUGEOT: ["206", "207", "208", "301", "308", "405", "406", "Partner", "Expert"],
+  TOYOTA: ["Corolla", "Yaris", "Camry", "RAV4", "Land Cruiser", "Hilux"],
+  HYUNDAI: ["i10", "i20", "i30", "Accent", "Elantra", "Tucson", "Santa Fe"],
+  KIA: ["Picanto", "Rio", "Cerato", "Sportage", "Sorento", "Carnival"],
+  VOLKSWAGEN: ["Golf", "Polo", "Passat", "Tiguan", "Jetta", "Caddy"],
+  DACIA: ["Logan", "Sandero", "Duster", "Dokker", "Lodgy"],
+  FORD: ["Fiesta", "Focus", "Fusion", "Mondeo", "Transit"],
+  NISSAN: ["Micra", "Sunny", "Almera", "Tiida", "Qashqai", "Navara"],
+  MERCEDES: ["C200", "E200", "A180", "Sprinter", "Vito"],
+  BMW: ["316i", "318i", "320i", "520i", "X1", "X3"],
+  SUZUKI: ["Alto", "Swift", "Vitara", "Jimny", "Baleno"],
+  MITSUBISHI: ["Lancer", "Colt", "Galant", "Outlander", "L200"],
+  SEAT: ["Ibiza", "Leon", "Altea", "Toledo"],
+  OPEL: ["Corsa", "Astra", "Vectra", "Zafira"],
+  CITROEN: ["C3", "C4", "C5", "Berlingo", "Jumper"],
+  FIAT: ["Punto", "Bravo", "Tipo", "Doblo", "Ducato"],
+  HONDA: ["Jazz", "Civic", "Accord", "CR-V"],
+  MAZDA: ["Mazda2", "Mazda3", "Mazda6", "CX-5"],
+  CHEVROLET: ["Aveo", "Cruze", "Captiva", "Spark"],
+  SKODA: ["Fabia", "Octavia", "Superb", "Rapid"],
+  AUDI: ["A3", "A4", "A6", "Q5"],
+  JEEP: ["Wrangler", "Cherokee", "Compass", "Renegade"],
+  "LAND ROVER": ["Discovery", "Defender", "Range Rover"],
+  "أخرى (أدخل يدوياً)": [],
 };
-const YEARS = Array.from({length:25},(_,i)=>String(2024-i));
-const COLORS = ["أبيض","أسود","رمادي","فضي","أحمر","أزرق","أخضر","بيج","بني","برتقالي","بنفسجي","ذهبي"];
+
+const YEARS = Array.from({ length: 30 }, (_, i) => String(2024 - i));
+const COLORS = ["أبيض", "أسود", "رمادي", "فضي", "أحمر", "أزرق", "أخضر", "بيج", "بني", "برتقالي", "بنفسجي", "ذهبي", "أصفر"];
 
 // ===== HOOK =====
 function useDriverStatus(uid) {
@@ -96,7 +135,7 @@ function InputField({ label, value, onChange, placeholder, type = "text", dir = 
   );
 }
 
-// تحويل الصورة إلى Base64 مضغوطة
+// ضغط الصورة إلى Base64
 const compressToBase64 = (file, maxWidth = 800) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -149,7 +188,7 @@ function PhotoUpload({ label, preview, onSelect, required = true }) {
 }
 
 // ===== DRIVER VERIFICATION =====
-function DriverVerification({ uid }) {
+function DriverVerification({ uid, userEmail }) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -168,12 +207,19 @@ function DriverVerification({ uid }) {
   // Step 2
   const [carYear, setCarYear] = useState("");
   const [carBrand, setCarBrand] = useState("");
+  const [carBrandManual, setCarBrandManual] = useState("");
   const [carModel, setCarModel] = useState("");
+  const [carModelManual, setCarModelManual] = useState("");
   const [carColor, setCarColor] = useState("");
   const [plateNumber, setPlateNumber] = useState("");
   const [ownerConfirm, setOwnerConfirm] = useState("");
 
-  // Step 3 - Base64 previews
+  const isManualBrand = carBrand === "أخرى (أدخل يدوياً)";
+  const finalBrand = isManualBrand ? carBrandManual : carBrand;
+  const isManualModel = isManualBrand || carModel === "أخرى";
+  const finalModel = isManualModel ? carModelManual : carModel;
+
+  // Step 3
   const [selfieB64, setSelfieB64] = useState(null);
   const [carFrontB64, setCarFrontB64] = useState(null);
   const [carSideB64, setCarSideB64] = useState(null);
@@ -185,21 +231,25 @@ function DriverVerification({ uid }) {
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) { setError("الصورة أكبر من 5MB"); return; }
     setError("");
-    try {
-      const b64 = await compressToBase64(file);
-      setter(b64);
-    } catch { setError("خطأ في معالجة الصورة"); }
+    try { setter(await compressToBase64(file)); }
+    catch { setError("خطأ في معالجة الصورة"); }
   };
 
   const validateStep = () => {
-    if (step === 0 && (!gender || !firstName || !lastName || !birthDate || !wilaya)) {
-      setError("يرجى إكمال جميع الحقول المطلوبة"); return false;
+    if (step === 0) {
+      if (!gender || !firstName || !lastName || !birthDate || !wilaya) {
+        setError("يرجى إكمال جميع الحقول المطلوبة ⚠️"); return false;
+      }
     }
-    if (step === 1 && (!carYear || !carBrand || !carModel || !carColor || !plateNumber || !ownerConfirm)) {
-      setError("يرجى إكمال جميع بيانات السيارة"); return false;
+    if (step === 1) {
+      if (!carYear || !finalBrand || !finalModel || !carColor || !plateNumber || !ownerConfirm) {
+        setError("يرجى إكمال جميع بيانات السيارة ⚠️"); return false;
+      }
     }
-    if (step === 2 && (!selfieB64 || !carFrontB64 || !carSideB64 || !grayCardB64)) {
-      setError("يرجى رفع جميع الصور الإلزامية"); return false;
+    if (step === 2) {
+      if (!selfieB64 || !carFrontB64 || !carSideB64 || !grayCardB64) {
+        setError("يرجى رفع جميع الصور الإلزامية ⚠️"); return false;
+      }
     }
     return true;
   };
@@ -210,12 +260,15 @@ function DriverVerification({ uid }) {
     if (!validateStep()) return;
     setSaving(true); setError("");
     try {
-      await updateDoc(doc(db, "drivers", uid), {
+      // استخدام setDoc بدلاً من updateDoc لإنشاء الوثيقة إذا لم تكن موجودة
+      await setDoc(doc(db, "drivers", uid), {
+        uid,
+        email: userEmail || "",
         verificationStatus: "pending",
         name: `${firstName} ${lastName}`,
         firstName, lastName, gender, birthDate,
         driverType, wilaya, daira,
-        carYear, carBrand, carModel, carColor,
+        carYear, carBrand: finalBrand, carModel: finalModel, carColor,
         plateNumber: plateNumber.trim().toUpperCase(),
         ownerConfirm, hasLicense, hasCar,
         selfieUrl: selfieB64,
@@ -225,12 +278,19 @@ function DriverVerification({ uid }) {
         licenseUrl: licenseB64 || null,
         submittedAt: serverTimestamp(),
         rejectionReason: null,
-      });
+        rating: null,
+        role: "driver",
+      }, { merge: true }); // merge: true يحفظ أو يحدث
     } catch (err) {
+      console.log("Firestore error:", err);
       setError("خطأ أثناء الحفظ: " + (err.message || "حاول مرة أخرى"));
     }
     setSaving(false);
   };
+
+  const modelOptions = carBrand && !isManualBrand
+    ? [...(CAR_MODELS[carBrand] || []), "أخرى"]
+    : [];
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl" }}>
@@ -248,7 +308,7 @@ function DriverVerification({ uid }) {
 
       <div style={{ padding: "20px 20px 120px" }}>
 
-        {/* STEP 1: معلومات السائق */}
+        {/* STEP 1 */}
         {step === 0 && (
           <>
             <SelectField label="الجنس" value={gender} onChange={setGender} placeholder="اختر الجنس" options={["ذكر", "أنثى"]} />
@@ -260,8 +320,8 @@ function DriverVerification({ uid }) {
                 style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", direction: "ltr" }} />
             </div>
             <SelectField label="نوع السائق" value={driverType} onChange={setDriverType} placeholder="اختر النوع" options={["تاكسي", "سيارة خاصة", "حافلة صغيرة"]} />
-            <SelectField label="الولاية" value={wilaya} onChange={setWilaya} placeholder="اختر الولاية" options={WILAYAS} />
-            <InputField label="الدائرة" value={daira} onChange={setDaira} placeholder="أدخل الدائرة" required={false} />
+            <SelectField label="الولاية (69 ولاية)" value={wilaya} onChange={setWilaya} placeholder="اختر ولايتك" options={WILAYAS} />
+            <InputField label="الدائرة / البلدية" value={daira} onChange={setDaira} placeholder="أدخل الدائرة أو البلدية" required={false} />
             <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 14, border: `1px solid ${C.border}` }}>
               {[
                 { label: "لديّ سيارة خاصة", value: hasCar, set: setHasCar },
@@ -279,31 +339,57 @@ function DriverVerification({ uid }) {
           </>
         )}
 
-        {/* STEP 2: معلومات السيارة */}
+        {/* STEP 2 */}
         {step === 1 && (
           <>
             <SelectField label="سنة الصنع" value={carYear} onChange={setCarYear} placeholder="اختر السنة" options={YEARS} />
-            <SelectField label="الماركة" value={carBrand} onChange={v => { setCarBrand(v); setCarModel(""); }} placeholder="اختر الماركة" options={CAR_BRANDS} />
-            <SelectField label="الموديل" value={carModel} onChange={setCarModel} placeholder="اختر الموديل" options={carBrand ? (CAR_MODELS[carBrand] || []) : []} />
+
+            {/* الماركة */}
+            <SelectField label="الماركة" value={carBrand} onChange={v => { setCarBrand(v); setCarModel(""); setCarModelManual(""); setCarBrandManual(""); }} placeholder="اختر الماركة" options={CAR_BRANDS} />
+            {isManualBrand && (
+              <InputField label="أدخل الماركة يدوياً" value={carBrandManual} onChange={setCarBrandManual} placeholder="مثال: LADA, SKODA..." dir="ltr" />
+            )}
+
+            {/* الموديل */}
+            {!isManualBrand && carBrand && (
+              <SelectField label="الموديل" value={carModel} onChange={setCarModel} placeholder="اختر الموديل" options={modelOptions} />
+            )}
+            {(isManualBrand || carModel === "أخرى") && (
+              <InputField label="أدخل الموديل يدوياً" value={carModelManual} onChange={setCarModelManual} placeholder="مثال: 206 Plus, Logan MCV..." dir="ltr" />
+            )}
+
             <SelectField label="اللون" value={carColor} onChange={setCarColor} placeholder="اختر اللون" options={COLORS} />
+
+            {/* رقم اللوحة */}
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 6, fontWeight: 600 }}>رقم اللوحة *</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <div style={{ background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 10, padding: "12px 14px", fontSize: 14, color: C.green, fontWeight: 700, whiteSpace: "nowrap" }}>🇩🇿 DZ</div>
-                <input value={plateNumber} onChange={e => setPlateNumber(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""))}
-                  placeholder="213-01-DZ" maxLength={12}
+                <input value={plateNumber} onChange={e => setPlateNumber(e.target.value.toUpperCase())}
+                  placeholder="213-01-DZ" maxLength={15}
                   style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: "inherit", fontSize: 15, color: C.text, outline: "none", direction: "ltr", textAlign: "left", fontWeight: 700, letterSpacing: 1 }} />
               </div>
+              <div style={{ fontSize: 11, color: C.textLight, marginTop: 4 }}>مثال: 213-01-DZ · 107-16-DZ · 00224-31-DZ</div>
             </div>
+
             <SelectField label="هل تملك إذن باستخدام السيارة؟" value={ownerConfirm} onChange={setOwnerConfirm} placeholder="اختر" options={["نعم، أنا المالك", "نعم، لديّ إذن المالك"]} />
+
+            {/* ملخص السيارة */}
+            {finalBrand && finalModel && carYear && carColor && (
+              <div style={{ background: C.greenLight, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.green}44`, marginTop: 8 }}>
+                <div style={{ fontSize: 12, color: C.green, fontWeight: 700, marginBottom: 4 }}>✅ السيارة المختارة:</div>
+                <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>{finalBrand} {finalModel} {carYear} · {carColor}</div>
+                {plateNumber && <div style={{ fontSize: 12, color: C.textMuted, direction: "ltr", marginTop: 2 }}>🔢 {plateNumber}</div>}
+              </div>
+            )}
           </>
         )}
 
-        {/* STEP 3: الوثائق */}
+        {/* STEP 3 */}
         {step === 2 && (
           <>
             <div style={{ background: "#3b82f615", borderRadius: 12, padding: "10px 14px", marginBottom: 16, border: `1px solid ${C.blue}44` }}>
-              <div style={{ fontSize: 12, color: C.blue, fontWeight: 600 }}>📌 الصور ستُحفظ مباشرة — تأكد من وضوحها وإضاءة جيدة</div>
+              <div style={{ fontSize: 12, color: C.blue, fontWeight: 600 }}>📌 تأكد من وضوح الصور وإضاءة جيدة قبل الرفع</div>
             </div>
             <PhotoUpload label="🤳 صورة شخصية (سيلفي)" preview={selfieB64} onSelect={e => handlePhoto(e, setSelfieB64)} required />
             <PhotoUpload label="🚗 صورة السيارة من الأمام" preview={carFrontB64} onSelect={e => handlePhoto(e, setCarFrontB64)} required />
@@ -315,11 +401,10 @@ function DriverVerification({ uid }) {
 
         {error && (
           <div style={{ background: C.redLight, borderRadius: 12, padding: "12px 16px", color: C.red, fontSize: 13, marginBottom: 16, border: `1px solid ${C.red}44`, textAlign: "center" }}>
-            ⚠️ {error}
+            {error}
           </div>
         )}
 
-        {/* Buttons */}
         <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
           {step > 0 && (
             <button onClick={() => { setStep(s => s - 1); setError(""); }}
@@ -335,7 +420,9 @@ function DriverVerification({ uid }) {
           ) : (
             <button onClick={handleSubmit} disabled={saving}
               style={{ flex: 2, background: saving ? C.border : `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 14, padding: "14px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: saving ? "default" : "pointer", fontSize: 15, opacity: saving ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              {saving ? <><span style={{ width: 16, height: 16, border: "2px solid #fff", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 1s linear infinite" }} /> جارٍ الحفظ...</> : "✅ إرسال للمراجعة"}
+              {saving
+                ? <><span style={{ width: 16, height: 16, border: "2px solid #fff", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 1s linear infinite" }} /> جارٍ الحفظ...</>
+                : "✅ إرسال للمراجعة"}
             </button>
           )}
         </div>
@@ -345,7 +432,7 @@ function DriverVerification({ uid }) {
   );
 }
 
-// ===== PENDING VIEW =====
+// ===== PENDING =====
 function PendingView({ onLogout }) {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -367,7 +454,7 @@ function PendingView({ onLogout }) {
   );
 }
 
-// ===== REJECTED VIEW =====
+// ===== REJECTED =====
 function RejectedView({ data, onRetry }) {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -381,7 +468,7 @@ function RejectedView({ data, onRetry }) {
           </div>
         )}
         <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 24, lineHeight: 1.7 }}>
-          يمكنك تصحيح البيانات وإعادة الإرسال.<br />تأكد من وضوح الصور وصحة المعلومات.
+          يمكنك تصحيح البيانات وإعادة الإرسال.
         </div>
         <button onClick={onRetry}
           style={{ width: "100%", background: `linear-gradient(135deg,${C.orange},${C.orangeDark})`, border: "none", borderRadius: 14, padding: "14px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", fontSize: 15 }}>
@@ -401,9 +488,9 @@ export default function DriverDashboard({ user, onLogout }) {
 
   const handleRetry = async () => {
     try {
-      await updateDoc(doc(db, "drivers", user.uid), {
+      await setDoc(doc(db, "drivers", user.uid), {
         verificationStatus: "none", submittedAt: null, rejectionReason: null,
-      });
+      }, { merge: true });
     } catch (e) { console.log(e); }
   };
 
@@ -416,7 +503,7 @@ export default function DriverDashboard({ user, onLogout }) {
     </div>
   );
 
-  if (status === "none") return <DriverVerification uid={user?.uid} />;
+  if (status === "none") return <DriverVerification uid={user?.uid} userEmail={user?.email} />;
   if (status === "rejected") return <RejectedView data={data} onRetry={handleRetry} />;
   if (status === "pending") return <PendingView onLogout={onLogout} />;
 
@@ -430,7 +517,6 @@ export default function DriverDashboard({ user, onLogout }) {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl" }}>
-      {/* Header */}
       <div style={{ background: C.card, padding: "48px 20px 20px", borderBottom: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -488,7 +574,6 @@ export default function DriverDashboard({ user, onLogout }) {
                         <div style={{ fontSize: 22, fontWeight: 900, color: C.orange }}>{r.offer} دج</div>
                       </div>
                     </div>
-                    {/* رقم هاتف الراكب */}
                     <a href={`tel:${r.phone}`} style={{ display: "flex", alignItems: "center", gap: 10, background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 12, padding: "12px 14px", marginBottom: 12, textDecoration: "none" }}>
                       <span style={{ fontSize: 22 }}>📞</span>
                       <div style={{ flex: 1 }}>
@@ -534,34 +619,15 @@ export default function DriverDashboard({ user, onLogout }) {
               <div style={{ fontWeight: 900, fontSize: 20, color: C.text, marginBottom: 4 }}>{data?.name || "سائق"}</div>
               <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>{data?.email || user?.email}</div>
               <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>🚗 {data?.carBrand} {data?.carModel} {data?.carYear} · {data?.carColor}</div>
+              <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>📍 {data?.wilaya}</div>
               {data?.plateNumber && <div style={{ fontSize: 13, color: C.textLight, direction: "ltr", marginBottom: 12 }}>🔢 {data.plateNumber}</div>}
               <div style={{ display: "inline-block", background: C.greenLight, color: C.green, padding: "6px 18px", borderRadius: 20, fontSize: 13, fontWeight: 800, border: `1px solid ${C.green}44` }}>✅ سائق معتمد</div>
             </div>
-
-            {(data?.selfieUrl || data?.carFrontUrl) && (
-              <div style={{ background: C.card, borderRadius: 16, padding: 20, border: `1px solid ${C.border}`, marginBottom: 16 }}>
-                <div style={{ fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 12 }}>📋 وثائق التوثيق</div>
-                {data?.selfieUrl && (
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6 }}>الصورة الشخصية ✅</div>
-                    <img src={data.selfieUrl} alt="selfie" style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 10, border: `1px solid ${C.border}` }} />
-                  </div>
-                )}
-                {data?.carFrontUrl && (
-                  <div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6 }}>صورة السيارة ✅</div>
-                    <img src={data.carFrontUrl} alt="car" style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 10, border: `1px solid ${C.border}` }} />
-                  </div>
-                )}
-              </div>
-            )}
-
             <button onClick={onLogout} style={{ width: "100%", background: C.redLight, border: `1px solid ${C.red}44`, borderRadius: 16, padding: 16, color: C.red, fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>🚪 تسجيل الخروج</button>
           </div>
         )}
       </div>
 
-      {/* Bottom Nav */}
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: C.card, borderTop: `1px solid ${C.border}`, display: "flex", padding: "8px 0 20px", zIndex: 100 }}>
         {[{ id: "home", label: "الرئيسية", icon: "🏠" }, { id: "profile", label: "حسابي", icon: "👤" }].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "8px 0" }}>
