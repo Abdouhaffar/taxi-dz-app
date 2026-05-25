@@ -4,21 +4,18 @@ const handleLogin = async () => {
   try {
     const cred = await signInWithEmailAndPassword(auth, email, password);
     
-    const rightCol = isPassenger ? "passengers" : "drivers";
-    const wrongCol = isPassenger ? "drivers" : "passengers";
-    const snap = await getDoc(doc(db, rightCol, cred.user.uid));
+    // ===== التحقق من الدور =====
+    const userCol = role === "driver" ? "drivers" : "passengers";
+    const snap = await getDoc(doc(db, userCol, cred.user.uid));
     
     if (!snap.exists()) {
-      const wrongSnap = await getDoc(doc(db, wrongCol, cred.user.uid));
+      setError("هذا الحساب مسجل كـ " + (role === "driver" ? "راكب" : "سائق"));
       await signOut(auth);
-      setError(wrongSnap.exists()
-        ? `هذا الحساب مسجل كـ ${isPassenger ? "سائق" : "راكب"} — ادخل من البوابة الصحيحة`
-        : "الحساب غير موجود — أنشئ حساباً جديداً"
-      );
       setLoading(false);
       return;
     }
     
+    // إذا كان الراكب، نحفظ البيانات
     if (isPassenger) {
       const data = snap.data();
       if (data.phone) localStorage.setItem("taxidz_phone", data.phone);
