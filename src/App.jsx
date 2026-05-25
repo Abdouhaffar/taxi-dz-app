@@ -188,16 +188,29 @@ function AuthForm({ role, onSuccess, onBack }) {
     setLoading(true); setError("");
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
-      if (isPassenger) {
-        try {
-          const snap = await getDoc(doc(db, "passengers", cred.user.uid));
-          if (snap.exists()) {
-            const data = snap.data();
-            if (data.phone) localStorage.setItem("taxidz_phone", data.phone);
-            if (data.name) localStorage.setItem("taxidz_name", data.name);
-          }
-        } catch (e) { console.log("Firestore:", e); }
-      }
+      // ===== التحقق من الدور =====
+      try {
+        const rightCol = isPassenger ? "passengers" : "drivers";
+        const wrongCol = isPassenger ? "drivers" : "passengers";
+        const snap = await getDoc(doc(db, rightCol, cred.user.uid));
+        if (!snap.exists()) {
+          const wrongSnap = await getDoc(doc(db, wrongCol, cred.user.uid));
+          await signOut(auth);
+          setError(wrongSnap.exists()
+            ? isPassenger
+              ? "⚠️ هذا الحساب مسجل كسائق — ادخل من بوابة السائق"
+              : "⚠️ هذا الحساب مسجل كراكب — ادخل من بوابة الراكب"
+            : "الحساب غير موجود — أنشئ حساباً جديداً"
+          );
+          setLoading(false);
+          return;
+        }
+        if (isPassenger) {
+          const data = snap.data();
+          if (data.phone) localStorage.setItem("taxidz_phone", data.phone);
+          if (data.name) localStorage.setItem("taxidz_name", data.name);
+        }
+      } catch (e) { console.log("Firestore:", e); }
       onSuccess(role);
     } catch (e) { setError(errMsg(e.code)); }
     setLoading(false);
