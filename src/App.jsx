@@ -709,4 +709,8 @@ export default function App() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap'); *{box-sizing:border-box;margin:0;padding:0}`}</style>
       {screen === "welcome" && <WelcomeScreen onSelect={r => { setRole(r); setScreen("auth"); }} />}
       {screen === "auth" && <AuthForm role={role} onSuccess={handleAuthSuccess} onBack={() => { setRole(null); setScreen("welcome"); }} />}
-      {screen === "app" && role =
+      {screen === "app" && role === "passenger" && <PassengerApp onLogout={handleLogout} user={user} />}
+      {screen === "app" && role === "driver" && <DriverDashboard user={user} onLogout={handleLogout} />}
+    </div>
+  );
+}
