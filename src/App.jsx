@@ -4,13 +4,14 @@ import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   signOut, onAuthStateChanged, updateProfile
 } from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, addDoc, collection, onSnapshot, updateDoc } from "firebase/firestore";
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } from "@react-google-maps/api";
 import DriverDashboard from "./DriverDashboard";
 
 const LIBRARIES = ["places"];
 const ALGERIA_CENTER = { lat: 36.737, lng: 3.086 };
 const PRICE_PER_KM = 30;
+const BASE_PRICE = 40;
 const MIN_PRICE = 100;
 
 const getDistanceKm = (lat1, lng1, lat2, lng2) => {
@@ -21,9 +22,12 @@ const getDistanceKm = (lat1, lng1, lat2, lng2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 };
 
+// السعر = 40 + (كم × 30)
+// الحد الأدنى 100 دج فقط لأقل من 2 كم
 const calcPrice = (km, multiplier = 1.0) => {
   if (!km || km <= 0) return MIN_PRICE;
-  return Math.max(Math.round(km * PRICE_PER_KM * multiplier), MIN_PRICE);
+  const price = Math.round((BASE_PRICE + km * PRICE_PER_KM) * multiplier);
+  return km < 2 ? Math.max(price, MIN_PRICE) : price;
 };
 
 const getLatLng = (place) => {
@@ -60,16 +64,20 @@ const RIDE_TYPES = [
   { id: "xl", label: "XL كبير", icon: "🚐", multiplier: 1.8, time: "7 دق" },
 ];
 
-const MOCK_DRIVERS = [
-  { id: 1, name: "كريم بن علي", rating: 4.9, car: "رونو سيمبول 2021", plate: "213-01-DZ", avatar: "👨‍✈️", position: { lat: 36.752, lng: 3.042 } },
-  { id: 2, name: "يوسف مزياني", rating: 4.7, car: "بيجو 301 2020", plate: "107-16-DZ", avatar: "🧔", position: { lat: 36.720, lng: 3.110 } },
-  { id: 3, name: "أمين شريف", rating: 4.8, car: "داسيا لوغان 2022", plate: "445-09-DZ", avatar: "👨‍🦱", position: { lat: 36.745, lng: 3.060 } },
-];
+// ===== BACK BUTTON =====
+function BackBtn({ onBack }) {
+  return (
+    <button onClick={onBack} style={{ width: 40, height: 40, borderRadius: 12, background: C.card, border: `1px solid ${C.border}`, cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: C.shadow }}>
+      ←
+    </button>
+  );
+}
 
 // ===== MAP =====
 function TaxiMap({ origin, destination, showDrivers, height = 220 }) {
   const [directions, setDirections] = useState(null);
   const [userLocation, setUserLocation] = useState(ALGERIA_CENTER);
+  const [nearbyDrivers, setNearbyDrivers] = useState([]);
   const mapRef = useRef(null);
 
   useEffect(() => {
@@ -78,6 +86,18 @@ function TaxiMap({ origin, destination, showDrivers, height = 220 }) {
       () => setUserLocation(ALGERIA_CENTER)
     );
   }, []);
+
+  // استمع للسائقين المتصلين من Firestore
+  useEffect(() => {
+    if (!showDrivers) return;
+    const unsub = onSnapshot(collection(db, "drivers"), snap => {
+      const online = snap.docs
+        .filter(d => d.data().isOnline && d.data().verificationStatus === "approved" && d.data().location)
+        .map(d => ({ id: d.id, ...d.data() }));
+      setNearbyDrivers(online);
+    });
+    return () => unsub();
+  }, [showDrivers]);
 
   useEffect(() => {
     if (!origin || !destination) { setDirections(null); return; }
@@ -103,7 +123,9 @@ function TaxiMap({ origin, destination, showDrivers, height = 220 }) {
         {origin && !directions && <Marker position={origin} icon={{ url: makeMarker("📍", C.green), scaledSize: new window.google.maps.Size(40, 40) }} />}
         {destination && !directions && <Marker position={destination} icon={{ url: makeMarker("🏁", C.orange), scaledSize: new window.google.maps.Size(40, 40) }} />}
         {directions && <DirectionsRenderer directions={directions} options={{ polylineOptions: { strokeColor: C.green, strokeWeight: 4, strokeOpacity: 0.8 } }} />}
-        {showDrivers && MOCK_DRIVERS.map(d => <Marker key={d.id} position={d.position} icon={{ url: makeMarker("🚕", C.dark), scaledSize: new window.google.maps.Size(40, 40) }} />)}
+        {showDrivers && nearbyDrivers.map(d => (
+          <Marker key={d.id} position={d.location} icon={{ url: makeMarker("🚕", C.dark), scaledSize: new window.google.maps.Size(40, 40) }} />
+        ))}
       </GoogleMap>
     </div>
   );
@@ -115,7 +137,10 @@ function WelcomeScreen({ onSelect }) {
     <div style={{ minHeight: "100vh", background: C.dark, fontFamily: "'Cairo',sans-serif", direction: "rtl", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ fontSize: 72, marginBottom: 12 }}>🚕</div>
       <div style={{ fontSize: 32, fontWeight: 900, color: "#fff", marginBottom: 6 }}>TaxiDZ</div>
-      <div style={{ fontSize: 14, color: "#ffffff77", marginBottom: 48 }}>تاكسي الجزائر 🇩🇿 — فاوض على سعرك</div>
+      <div style={{ fontSize: 14, color: "#ffffff77", marginBottom: 8 }}>تاكسي الجزائر 🇩🇿</div>
+      <div style={{ fontSize: 12, color: "#ffffff55", marginBottom: 48, background: "#ffffff11", padding: "6px 14px", borderRadius: 20 }}>
+        40 دج + 30 دج/كم
+      </div>
       <div style={{ width: "100%", maxWidth: 340, display: "flex", flexDirection: "column", gap: 14 }}>
         <button onClick={() => onSelect("passenger")} style={{ background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 20, padding: "20px 24px", color: "#fff", fontFamily: "inherit", cursor: "pointer", display: "flex", alignItems: "center", gap: 16 }}>
           <span style={{ fontSize: 40 }}>🧑</span>
@@ -139,7 +164,6 @@ function AuthForm({ role, onSuccess, onBack }) {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
   const isPassenger = role === "passenger";
   const accent = isPassenger ? C.green : C.orange;
   const accentDark = isPassenger ? C.greenDark : "#ea580c";
@@ -150,7 +174,6 @@ function AuthForm({ role, onSuccess, onBack }) {
     "auth/user-not-found": "الحساب غير موجود — أنشئ حساباً جديداً",
     "auth/weak-password": "كلمة المرور قصيرة (6 أحرف على الأقل)",
     "auth/invalid-credential": "البريد أو كلمة المرور غير صحيحة",
-    "auth/invalid-email": "البريد الإلكتروني غير صحيح",
     "auth/network-request-failed": "تحقق من اتصالك بالإنترنت",
     "auth/too-many-requests": "محاولات كثيرة — انتظر قليلاً",
   }[code] || "حدث خطأ، حاول مرة أخرى");
@@ -166,8 +189,7 @@ function AuthForm({ role, onSuccess, onBack }) {
       const phoneFormatted = isPassenger ? (phone.startsWith("+") ? phone : `+213${phone.replace(/^0/, "")}`) : "";
       try {
         await setDoc(doc(db, role === "driver" ? "drivers" : "passengers", cred.user.uid), {
-          uid: cred.user.uid, email,
-          name: name || email.split("@")[0],
+          uid: cred.user.uid, email, name: name || email.split("@")[0],
           phone: phoneFormatted, role,
           status: role === "driver" ? "pending" : "active",
           verificationStatus: role === "driver" ? "none" : null,
@@ -188,7 +210,6 @@ function AuthForm({ role, onSuccess, onBack }) {
     setLoading(true); setError("");
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
-      // ===== التحقق من الدور =====
       try {
         const rightCol = isPassenger ? "passengers" : "drivers";
         const wrongCol = isPassenger ? "drivers" : "passengers";
@@ -197,13 +218,11 @@ function AuthForm({ role, onSuccess, onBack }) {
           const wrongSnap = await getDoc(doc(db, wrongCol, cred.user.uid));
           await signOut(auth);
           setError(wrongSnap.exists()
-            ? isPassenger
-              ? "⚠️ هذا الحساب مسجل كسائق — ادخل من بوابة السائق"
+            ? isPassenger ? "⚠️ هذا الحساب مسجل كسائق — ادخل من بوابة السائق"
               : "⚠️ هذا الحساب مسجل كراكب — ادخل من بوابة الراكب"
             : "الحساب غير موجود — أنشئ حساباً جديداً"
           );
-          setLoading(false);
-          return;
+          setLoading(false); return;
         }
         if (isPassenger) {
           const data = snap.data();
@@ -242,8 +261,7 @@ function AuthForm({ role, onSuccess, onBack }) {
           {mode === "register" && isPassenger && (
             <div style={{ display: "flex", gap: 8 }}>
               <div style={{ background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 14, padding: "14px 12px", fontSize: 14, color: C.greenDark, fontWeight: 700, whiteSpace: "nowrap" }}>🇩🇿 +213</div>
-              <input value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ""))}
-                placeholder="0XXXXXXXXX" type="tel" maxLength={10}
+              <input value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ""))} placeholder="0XXXXXXXXX" type="tel" maxLength={10}
                 style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", direction: "ltr", textAlign: "left" }} />
             </div>
           )}
@@ -275,15 +293,14 @@ function PassengerApp({ onLogout, user }) {
   const [suggestedPrice, setSuggestedPrice] = useState(MIN_PRICE);
   const [offerPrice, setOfferPrice] = useState(MIN_PRICE);
   const [booking, setBooking] = useState(null);
-  const [drivers, setDrivers] = useState(MOCK_DRIVERS.map(d => ({ ...d, status: "pending", offerPrice: null })));
-  const [timer, setTimer] = useState(0);
-  const [phase, setPhase] = useState(0);
-  const [noDrivers, setNoDrivers] = useState(false);
+  const [bookingId, setBookingId] = useState(null);
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const [done, setDone] = useState(false);
   const [rating, setRating] = useState(0);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [noDrivers, setNoDrivers] = useState(false);
+  const [timer, setTimer] = useState(0);
   const originRef = useRef(null);
   const destRef = useRef(null);
 
@@ -298,6 +315,21 @@ function PassengerApp({ onLogout, user }) {
     }
   }, [rideType, distanceKm]);
 
+  // الاستماع لقبول السائق
+  useEffect(() => {
+    if (!bookingId || screen !== "searching") return;
+    const unsub = onSnapshot(doc(db, "bookings", bookingId), snap => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (data.status === "accepted" && data.driverInfo) {
+        setSelectedDriver(data.driverInfo);
+        setScreen("found");
+      }
+    });
+    return () => unsub();
+  }, [bookingId, screen]);
+
+  // عداد الوقت
   useEffect(() => {
     if (screen !== "searching") return;
     const t = setInterval(() => setTimer(p => p + 1), 1000);
@@ -305,13 +337,8 @@ function PassengerApp({ onLogout, user }) {
   }, [screen]);
 
   useEffect(() => {
-    if (screen !== "searching") return;
-    if (timer === 3) setPhase(1);
-    if (timer === 5) setDrivers(p => p.map((d, i) => i === 0 ? { ...d, status: "accepted", offerPrice: booking?.price } : d));
-    if (timer === 8) setDrivers(p => p.map((d, i) => i === 1 ? { ...d, status: "accepted", offerPrice: booking?.price } : d));
-    if (timer === 11) setDrivers(p => p.map((d, i) => i === 2 ? { ...d, status: "accepted", offerPrice: booking?.price } : d));
-    if (timer === 15) { if (!drivers.some(d => d.status === "accepted")) setNoDrivers(true); }
-  }, [timer, screen, booking, drivers]);
+    if (screen === "searching" && timer === 60) setNoDrivers(true);
+  }, [timer, screen]);
 
   useEffect(() => {
     if (screen !== "ride" || done) return;
@@ -373,11 +400,37 @@ function PassengerApp({ onLogout, user }) {
     }
   };
 
-  const startSearch = (price) => {
-    setBooking({ originPlace, destPlace, originText, destText, rideType, price, distanceKm, passengerPhone, passengerName });
-    setDrivers(MOCK_DRIVERS.map(d => ({ ...d, status: "pending", offerPrice: null })));
-    setTimer(0); setPhase(0); setNoDrivers(false);
+  // إرسال الطلب إلى Firestore
+  const startSearch = async (price) => {
+    setTimer(0); setNoDrivers(false);
+    const originLatLng = getLatLng(originPlace);
+    const destLatLng = getLatLng(destPlace);
+    try {
+      const ref = await addDoc(collection(db, "bookings"), {
+        passengerId: user.uid,
+        passengerName, passengerPhone,
+        originText, destText,
+        originLat: originLatLng.lat, originLng: originLatLng.lng,
+        destLat: destLatLng.lat, destLng: destLatLng.lng,
+        rideType, price, distanceKm,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+      setBookingId(ref.id);
+      setBooking({ originPlace, destPlace, originText, destText, rideType, price, distanceKm, passengerPhone, passengerName });
+    } catch (e) {
+      console.log("Booking error:", e);
+      // Fallback للمحاكاة
+      setBooking({ originPlace, destPlace, originText, destText, rideType, price, distanceKm, passengerPhone, passengerName });
+    }
     setScreen("searching");
+  };
+
+  const cancelBooking = async () => {
+    if (bookingId) {
+      try { await updateDoc(doc(db, "bookings", bookingId), { status: "cancelled" }); } catch (e) { console.log(e); }
+    }
+    setBookingId(null); setScreen("home");
   };
 
   // HOME
@@ -400,6 +453,13 @@ function PassengerApp({ onLogout, user }) {
         </div>
         <button onClick={() => setScreen("booking")} style={{ width: "100%", marginTop: 12, background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 16, padding: "16px", color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>🚀 ابحث عن سيارة</button>
       </div>
+      <div style={{ margin: "0 20px", background: `linear-gradient(135deg,${C.dark},#2d1b69)`, borderRadius: 20, padding: "18px 20px", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 13, opacity: 0.7 }}>نظام التسعير</div>
+          <div style={{ fontSize: 17, fontWeight: 800, marginTop: 2 }}>40 دج + 30 دج/كم 🤝</div>
+        </div>
+        <div style={{ fontSize: 48 }}>💰</div>
+      </div>
     </div>
   );
 
@@ -407,7 +467,7 @@ function PassengerApp({ onLogout, user }) {
   if (screen === "booking") return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl", paddingBottom: 30 }}>
       <div style={{ display: "flex", alignItems: "center", padding: "48px 20px 12px", gap: 12 }}>
-        <button onClick={() => setScreen("home")} style={{ width: 40, height: 40, borderRadius: 12, background: C.card, border: `1px solid ${C.border}`, cursor: "pointer", fontSize: 18 }}>←</button>
+        <BackBtn onBack={() => setScreen("home")} />
         <div style={{ fontWeight: 800, fontSize: 18, color: C.text }}>تفاصيل الرحلة</div>
       </div>
       <TaxiMap origin={originPlace} destination={destPlace} showDrivers={false} />
@@ -442,7 +502,10 @@ function PassengerApp({ onLogout, user }) {
               <span style={{ fontSize: 22 }}>{t.icon}</span>
               <div><div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>{t.label}</div><div style={{ fontSize: 11, color: C.textMuted }}>⏱ {t.time}</div></div>
             </div>
-            <div style={{ fontWeight: 900, fontSize: 16, color: rideType === t.id ? C.greenDark : C.text }}>{calcPrice(distanceKm, t.multiplier)} دج</div>
+            <div style={{ textAlign: "left" }}>
+              <div style={{ fontWeight: 900, fontSize: 16, color: rideType === t.id ? C.greenDark : C.text }}>{calcPrice(distanceKm, t.multiplier)} دج</div>
+              {distanceKm > 0 && <div style={{ fontSize: 10, color: C.textMuted }}>40 + {distanceKm.toFixed(1)}×{Math.round(PRICE_PER_KM * t.multiplier)}</div>}
+            </div>
           </div>
         ))}
         <button onClick={() => { if (originPlace && destPlace) setScreen("offer"); }}
@@ -457,32 +520,39 @@ function PassengerApp({ onLogout, user }) {
   if (screen === "offer") return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl", paddingBottom: 40 }}>
       <div style={{ display: "flex", alignItems: "center", padding: "48px 20px 16px", gap: 12 }}>
-        <button onClick={() => setScreen("booking")} style={{ width: 40, height: 40, borderRadius: 12, background: C.card, border: `1px solid ${C.border}`, cursor: "pointer", fontSize: 18 }}>←</button>
+        <BackBtn onBack={() => setScreen("booking")} />
         <div>
           <div style={{ fontWeight: 800, fontSize: 18, color: C.text }}>عرض السعر 💰</div>
-          <div style={{ fontSize: 12, color: C.textMuted }}>{distanceKm.toFixed(1)} كم × {PRICE_PER_KM} دج = {suggestedPrice} دج</div>
+          <div style={{ fontSize: 12, color: C.textMuted }}>40 + {distanceKm.toFixed(1)} كم × {PRICE_PER_KM} دج = {suggestedPrice} دج</div>
         </div>
       </div>
+
       <div style={{ margin: "0 20px 14px", background: C.card, borderRadius: 24, padding: 24, boxShadow: C.shadow, textAlign: "center" }}>
         <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>سعرك المقترح</div>
-        <div style={{ fontSize: 64, fontWeight: 900, color: offerPrice >= suggestedPrice ? C.green : C.orange, lineHeight: 1 }}>{offerPrice}</div>
+        <div style={{ fontSize: 64, fontWeight: 900, color: offerPrice > suggestedPrice ? C.blue : C.green, lineHeight: 1 }}>{offerPrice}</div>
         <div style={{ fontSize: 18, color: C.textMuted, marginBottom: 20 }}>دينار جزائري</div>
-        <input type="range" min={MIN_PRICE} max={Math.round(suggestedPrice * 2)} step={10} value={offerPrice}
+
+        {/* الراكب لا يستطيع اقتراح سعر أقل من المحسوب */}
+        <input type="range" min={suggestedPrice} max={Math.round(suggestedPrice * 2)} step={10} value={offerPrice}
           onChange={e => setOfferPrice(Number(e.target.value))}
           style={{ width: "100%", accentColor: C.green, cursor: "pointer", marginBottom: 8, height: 6 }} />
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.textLight }}>
-          <span>{MIN_PRICE} دج</span>
-          <span style={{ color: C.green, fontWeight: 700 }}>محسوب: {suggestedPrice} دج</span>
+          <span style={{ color: C.green, fontWeight: 700 }}>الحد الأدنى: {suggestedPrice} دج</span>
           <span>{Math.round(suggestedPrice * 2)} دج</span>
         </div>
+
+        <div style={{ background: C.greenLight, borderRadius: 12, padding: "8px 14px", marginTop: 12, fontSize: 12, color: C.greenDark }}>
+          ℹ️ يمكنك رفع السعر لزيادة فرصة القبول
+        </div>
       </div>
+
       <div style={{ margin: "0 20px 14px", background: C.card, borderRadius: 20, padding: 18, boxShadow: C.shadow }}>
         <div style={{ fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>اقتراحات سريعة</div>
         <div style={{ display: "flex", gap: 8 }}>
           {[
-            { label: "الحد الأدنى", value: MIN_PRICE, color: C.blue },
-            { label: "المحسوب ⭐", value: suggestedPrice, color: C.green },
-            { label: "+30% 🔥", value: Math.round(suggestedPrice * 1.3), color: C.orange },
+            { label: "السعر المحسوب ⭐", value: suggestedPrice, color: C.green },
+            { label: "زيادة 20% 🔥", value: Math.round(suggestedPrice * 1.2), color: C.orange },
+            { label: "زيادة 50% 💎", value: Math.round(suggestedPrice * 1.5), color: C.blue },
           ].map((s, i) => (
             <button key={i} onClick={() => setOfferPrice(s.value)}
               style={{ flex: 1, padding: "10px 4px", borderRadius: 12, border: `2px solid ${offerPrice === s.value ? s.color : C.border}`, background: offerPrice === s.value ? s.color + "15" : C.bg, cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}>
@@ -492,6 +562,7 @@ function PassengerApp({ onLogout, user }) {
           ))}
         </div>
       </div>
+
       <div style={{ margin: "0 20px" }}>
         <button onClick={() => startSearch(offerPrice)}
           style={{ width: "100%", background: `linear-gradient(135deg,${C.dark},#2d1b69)`, border: "none", borderRadius: 16, padding: 18, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 17, cursor: "pointer" }}>
@@ -506,51 +577,35 @@ function PassengerApp({ onLogout, user }) {
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl", paddingBottom: 40 }}>
       <TaxiMap origin={booking?.originPlace} destination={booking?.destPlace} showDrivers={true} />
       <div style={{ padding: "14px 20px 0" }}>
-        <div style={{ fontWeight: 800, fontSize: 18, color: C.text }}>{phase === 0 ? "📡 جارٍ إرسال عرضك..." : "📨 ردود السائقين"}</div>
+        <div style={{ fontWeight: 800, fontSize: 18, color: C.text }}>📡 جارٍ البحث عن سائق...</div>
         <div style={{ fontSize: 13, color: C.textMuted }}>عرضك: {booking?.price} دج · {booking?.distanceKm?.toFixed(1)} كم · ⏱ {timer}ث</div>
       </div>
-      {phase === 0 && (
-        <div style={{ margin: "20px auto", width: 100, height: 100, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {[0,1,2].map(i => <div key={i} style={{ position: "absolute", width: 30+i*25, height: 30+i*25, borderRadius: "50%", border: `2px solid ${C.green}`, animation: "pg 1.5s ease-out infinite", animationDelay: `${i*0.4}s` }} />)}
-          <div style={{ fontSize: 32, zIndex: 1 }}>🚕</div>
-          <style>{`@keyframes pg{0%{transform:scale(0.8);opacity:0.6}100%{transform:scale(1.5);opacity:0}}`}</style>
-        </div>
-      )}
+      <div style={{ margin: "20px auto", width: 100, height: 100, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {[0,1,2].map(i => <div key={i} style={{ position: "absolute", width: 30+i*25, height: 30+i*25, borderRadius: "50%", border: `2px solid ${C.green}`, animation: "pg 1.5s ease-out infinite", animationDelay: `${i*0.4}s` }} />)}
+        <div style={{ fontSize: 32, zIndex: 1 }}>🚕</div>
+        <style>{`@keyframes pg{0%{transform:scale(0.8);opacity:0.6}100%{transform:scale(1.5);opacity:0}}`}</style>
+      </div>
+      <div style={{ margin: "0 20px", background: C.card, borderRadius: 20, padding: 16, boxShadow: C.shadow, textAlign: "center" }}>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 8 }}>تم إرسال طلبك لجميع السائقين المتاحين</div>
+        <div style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>عرضك: {booking?.price} دج</div>
+      </div>
       {noDrivers && (
         <div style={{ margin: "14px 20px", background: C.orangeLight, borderRadius: 20, padding: 20, border: `1px solid ${C.orange}44`, textAlign: "center" }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>😔</div>
           <div style={{ fontWeight: 800, color: C.orange, fontSize: 16, marginBottom: 8 }}>لم يقبل أي سائق عرضك</div>
           <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 16 }}>يمكنك زيادة السعر لجذب السائقين</div>
           <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={() => { setOfferPrice(Math.round((booking?.price || MIN_PRICE) * 1.2)); setScreen("offer"); }}
+            <button onClick={() => { setOfferPrice(Math.round((booking?.price || suggestedPrice) * 1.2)); setScreen("offer"); }}
               style={{ flex: 1, background: `linear-gradient(135deg,${C.orange},#ea580c)`, border: "none", borderRadius: 14, padding: "12px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>💰 زيادة السعر</button>
-            <button onClick={() => setScreen("home")}
+            <button onClick={cancelBooking}
               style={{ flex: 1, background: C.redLight, border: "none", borderRadius: 14, padding: "12px", color: C.red, fontFamily: "inherit", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>❌ إلغاء</button>
           </div>
         </div>
       )}
-      {phase === 1 && !noDrivers && (
-        <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {drivers.map(d => (
-            <div key={d.id} style={{ background: C.card, borderRadius: 18, padding: 16, boxShadow: C.shadow, border: d.status === "accepted" ? `2px solid ${C.green}` : `1px solid ${C.border}`, opacity: d.status === "pending" ? 0.5 : 1, transition: "all 0.4s" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.dark, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{d.avatar}</div>
-                  <div><div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>{d.name}</div><div style={{ fontSize: 12, color: C.textMuted }}>⭐ {d.rating} · {d.car}</div></div>
-                </div>
-                <div>
-                  {d.status === "pending" && <span style={{ color: C.textLight, fontSize: 12 }}>ينتظر...</span>}
-                  {d.status === "accepted" && <div style={{ fontWeight: 900, fontSize: 18, color: C.green }}>{d.offerPrice} دج ✅</div>}
-                </div>
-              </div>
-              {d.status === "accepted" && (
-                <button onClick={() => { setSelectedDriver(d); setScreen("found"); }}
-                  style={{ width: "100%", marginTop: 10, background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 12, padding: 12, color: "#fff", fontFamily: "inherit", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                  ✅ اختيار هذا السائق
-                </button>
-              )}
-            </div>
-          ))}
+      {!noDrivers && (
+        <div style={{ margin: "14px 20px" }}>
+          <button onClick={cancelBooking}
+            style={{ width: "100%", background: C.redLight, border: "none", borderRadius: 14, padding: "12px", color: C.red, fontFamily: "inherit", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>❌ إلغاء الطلب</button>
         </div>
       )}
     </div>
@@ -568,30 +623,41 @@ function PassengerApp({ onLogout, user }) {
         </div>
         <div style={{ background: C.bg, borderRadius: 16, padding: 16, marginBottom: 14 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
-            <div style={{ width: 52, height: 52, borderRadius: "50%", background: C.dark, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>{selectedDriver?.avatar}</div>
+            <div style={{ width: 52, height: 52, borderRadius: "50%", background: C.dark, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>👨‍✈️</div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 16, color: C.text }}>{selectedDriver?.name}</div>
-              <div style={{ fontSize: 12, color: C.textMuted }}>⭐ {selectedDriver?.rating} · {selectedDriver?.car}</div>
-              <div style={{ fontSize: 11, color: C.textLight }}>{selectedDriver?.plate}</div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: C.text }}>{selectedDriver?.name || "السائق"}</div>
+              <div style={{ fontSize: 12, color: C.textMuted }}>⭐ {selectedDriver?.rating || "جديد"} · {selectedDriver?.carBrand} {selectedDriver?.carModel}</div>
+              <div style={{ fontSize: 11, color: C.textLight }}>{selectedDriver?.plateNumber}</div>
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <div style={{ flex: 1, background: C.greenLight, borderRadius: 12, padding: 10, textAlign: "center" }}>
-              <div style={{ fontWeight: 900, fontSize: 20, color: C.greenDark }}>{selectedDriver?.offerPrice} دج</div>
+              <div style={{ fontWeight: 900, fontSize: 20, color: C.greenDark }}>{booking?.price} دج</div>
               <div style={{ fontSize: 11, color: C.green }}>السعر المتفق</div>
             </div>
             <div style={{ flex: 1, background: C.blueLight, borderRadius: 12, padding: 10, textAlign: "center" }}>
-              <div style={{ fontWeight: 900, fontSize: 20, color: C.blue }}>~3</div>
-              <div style={{ fontSize: 11, color: C.blue }}>دقائق</div>
+              <div style={{ fontWeight: 900, fontSize: 20, color: C.blue }}>{booking?.distanceKm?.toFixed(1)} كم</div>
+              <div style={{ fontSize: 11, color: C.blue }}>المسافة</div>
             </div>
           </div>
         </div>
+        {/* زر الاتصال بالسائق */}
+        {selectedDriver?.phone && (
+          <a href={`tel:${selectedDriver.phone}`} style={{ display: "flex", alignItems: "center", gap: 10, background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, textDecoration: "none" }}>
+            <span style={{ fontSize: 22 }}>📞</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: C.textMuted }}>رقم هاتف السائق</div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: C.green, direction: "ltr" }}>{selectedDriver.phone}</div>
+            </div>
+            <div style={{ background: C.green, borderRadius: 8, padding: "6px 12px", fontSize: 12, color: "#fff", fontWeight: 700 }}>اتصل ☎️</div>
+          </a>
+        )}
         <div style={{ background: C.dark, borderRadius: 14, padding: 14, marginBottom: 14, textAlign: "center" }}>
           <div style={{ fontSize: 11, color: "#ffffff88", marginBottom: 6 }}>رمز التحقق — أعطه للسائق</div>
-          <div style={{ fontSize: 34, fontWeight: 900, color: "#fff", letterSpacing: 8 }}>4782</div>
+          <div style={{ fontSize: 34, fontWeight: 900, color: "#fff", letterSpacing: 8 }}>{Math.floor(1000 + Math.random() * 9000)}</div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => setScreen("home")} style={{ flex: 1, background: C.redLight, border: "none", borderRadius: 12, padding: 14, color: C.red, fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>❌ إلغاء</button>
+          <button onClick={cancelBooking} style={{ flex: 1, background: C.redLight, border: "none", borderRadius: 12, padding: 14, color: C.red, fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>❌ إلغاء</button>
           <button onClick={() => { setElapsed(0); setDone(false); setScreen("ride"); }} style={{ flex: 2, background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 12, padding: 14, color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>📱 تتبع الرحلة</button>
         </div>
       </div>
@@ -612,10 +678,10 @@ function PassengerApp({ onLogout, user }) {
             {[1,2,3,4,5].map(s => <div key={s} onClick={() => setRating(s)} style={{ fontSize: 34, cursor: "pointer", opacity: s <= rating ? 1 : 0.25 }}>⭐</div>)}
           </div>
           <div style={{ background: C.greenLight, borderRadius: 14, padding: 14, marginBottom: 14 }}>
-            <div style={{ fontSize: 26, fontWeight: 900, color: C.greenDark }}>{selectedDriver?.offerPrice} دج</div>
+            <div style={{ fontSize: 26, fontWeight: 900, color: C.greenDark }}>{booking?.price} دج</div>
             <div style={{ fontSize: 13, color: C.green }}>{booking?.distanceKm?.toFixed(1)} كم</div>
           </div>
-          <button onClick={() => { setScreen("home"); setRating(0); setDistanceKm(0); setSuggestedPrice(MIN_PRICE); }}
+          <button onClick={() => { setScreen("home"); setRating(0); setDistanceKm(0); setSuggestedPrice(MIN_PRICE); setBookingId(null); }}
             style={{ width: "100%", background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 14, padding: 16, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>✅ إنهاء</button>
         </div>
       </div>
@@ -635,10 +701,10 @@ function PassengerApp({ onLogout, user }) {
             </div>
             <div style={{ background: C.dark, borderRadius: 12, padding: "8px 14px", textAlign: "center" }}>
               <div style={{ fontSize: 10, color: "#ffffff88" }}>السعر</div>
-              <div style={{ fontWeight: 800, color: "#fff" }}>{selectedDriver?.offerPrice} دج</div>
+              <div style={{ fontWeight: 800, color: "#fff" }}>{booking?.price} دج</div>
             </div>
           </div>
-          <button onClick={() => setDone(true)} style={{ width: "100%", background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 14, padding: 16, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>🏁 محاكاة الوصول</button>
+          <button onClick={() => setDone(true)} style={{ width: "100%", background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 14, padding: 16, color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>🏁 وصلت</button>
         </div>
       </div>
     );
@@ -688,19 +754,13 @@ export default function App() {
 
   if (loadError) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl" }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 48, marginBottom: 12 }}>⚠️</div>
-        <div style={{ fontWeight: 800, fontSize: 18, color: C.text }}>خطأ في تحميل الخريطة</div>
-      </div>
+      <div style={{ textAlign: "center" }}><div style={{ fontSize: 48, marginBottom: 12 }}>⚠️</div><div style={{ fontWeight: 800, fontSize: 18, color: C.text }}>خطأ في تحميل الخريطة</div></div>
     </div>
   );
 
   if (!isLoaded) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.bg, fontFamily: "'Cairo',sans-serif" }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 48, marginBottom: 8 }}>🗺️</div>
-        <div style={{ fontWeight: 700, color: C.text }}>جارٍ تحميل التطبيق...</div>
-      </div>
+      <div style={{ textAlign: "center" }}><div style={{ fontSize: 48, marginBottom: 8 }}>🗺️</div><div style={{ fontWeight: 700, color: C.text }}>جارٍ تحميل التطبيق...</div></div>
     </div>
   );
 
