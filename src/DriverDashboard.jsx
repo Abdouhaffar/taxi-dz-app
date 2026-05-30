@@ -384,23 +384,6 @@ export default function DriverDashboard({ user, onLogout }) {
   const [acceptedBooking, setAcceptedBooking] = useState(null);
 
   // تحديث حالة الاتصال وموقع السائق
-  // حفظ OneSignal Player ID عند أول تشغيل
-  useEffect(() => {
-    if (!user?.uid || status !== "approved") return;
-    try {
-      if (window.OneSignal) {
-        window.OneSignal.getUserId(async (playerId) => {
-          if (playerId) {
-            await setDoc(doc(db, "drivers", user.uid), {
-              oneSignalPlayerId: playerId,
-            }, { merge: true });
-            console.log("Player ID saved:", playerId);
-          }
-        });
-      }
-    } catch (e) { console.log("OneSignal:", e); }
-  }, [user?.uid, status]);
-
   const toggleOnline = async () => {
     const newStatus = !online;
     setOnline(newStatus);
