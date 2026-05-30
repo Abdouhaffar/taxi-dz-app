@@ -542,8 +542,7 @@ function PassengerApp({ onLogout, user }) {
           include_player_ids: nearbyPlayerIds,
           headings: { ar: "🚕 طلب جديد قريب منك!", en: "🚕 New Nearby Ride!" },
           contents: {
-            ar: "💰 " + price + " دج · " + km.toFixed(1) + " كم · " + rideTypeName + "
-📍 " + (origin || "").substring(0, 40),
+            ar: "💰 " + price + " دج · " + km.toFixed(1) + " كم · " + rideTypeName + " | 📍 " + (origin || "").substring(0, 40),
             en: "💰 " + price + " DZD · " + km.toFixed(1) + " km",
           },
           data: { type: "new_booking", price, distanceKm: km },
