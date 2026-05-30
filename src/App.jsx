@@ -281,6 +281,72 @@ function AuthForm({ role, onSuccess, onBack }) {
   );
 }
 
+// ===== LIVE TRACKING MAP =====
+function LiveTrackingMap({ passengerLocation, driverLocation, destination, mode = "pickup", height = 260 }) {
+  const mapRef = useRef(null);
+  const [directions, setDirections] = useState(null);
+  const onLoad = useCallback(map => { mapRef.current = map; }, []);
+
+  const makeMarker = (emoji, color) => "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44'><circle cx='22' cy='22' r='20' fill='${color}' stroke='white' stroke-width='3'/><text x='22' y='29' text-anchor='middle' font-size='20'>${emoji}</text></svg>`
+  );
+
+  // رسم المسار من السائق إلى الراكب
+  useEffect(() => {
+    if (!driverLocation || !passengerLocation || !window.google) return;
+    new window.google.maps.DirectionsService().route(
+      {
+        origin: driverLocation,
+        destination: mode === "ride" && destination ? destination : passengerLocation,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+      },
+      (result, status) => { if (status === "OK") setDirections(result); }
+    );
+  }, [driverLocation, passengerLocation, destination, mode]);
+
+  // تحريك الخريطة لتتبع السائق
+  useEffect(() => {
+    if (!driverLocation || !mapRef.current) return;
+    mapRef.current.panTo(driverLocation);
+  }, [driverLocation]);
+
+  const center = driverLocation || passengerLocation || ALGERIA_CENTER;
+
+  return (
+    <div style={{ margin: "0 20px", borderRadius: 20, overflow: "hidden", position: "relative" }}>
+      <GoogleMap
+        mapContainerStyle={{ width: "100%", height: `${height}px` }}
+        center={center} zoom={15} onLoad={onLoad}
+        options={{ styles: MAP_STYLE, disableDefaultUI: true, zoomControl: true }}
+      >
+        {/* موقع الراكب */}
+        {passengerLocation && (
+          <Marker position={passengerLocation} icon={{ url: makeMarker("📍", C.green), scaledSize: new window.google.maps.Size(44, 44) }} />
+        )}
+        {/* موقع السائق (يتحرك) */}
+        {driverLocation && (
+          <Marker position={driverLocation} icon={{ url: makeMarker("🚕", C.orange), scaledSize: new window.google.maps.Size(44, 44) }} />
+        )}
+        {/* الوجهة النهائية */}
+        {destination && mode === "ride" && (
+          <Marker position={destination} icon={{ url: makeMarker("🏁", C.blue), scaledSize: new window.google.maps.Size(44, 44) }} />
+        )}
+        {/* المسار */}
+        {directions && (
+          <DirectionsRenderer directions={directions}
+            options={{ polylineOptions: { strokeColor: C.orange, strokeWeight: 4, strokeOpacity: 0.8 }, suppressMarkers: true }} />
+        )}
+      </GoogleMap>
+      {/* شارة الحالة */}
+      <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.7)", borderRadius: 20, padding: "6px 14px", display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, animation: "pulse 1.5s infinite" }} />
+        <span style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>{mode === "pickup" ? "السائق في طريقه إليك" : "رحلة جارية"}</span>
+      </div>
+      <style>{`@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.3)}}`}</style>
+    </div>
+  );
+}
+
 // ===== PASSENGER APP =====
 function PassengerApp({ onLogout, user }) {
   const [screen, setScreen] = useState("home");
@@ -295,6 +361,8 @@ function PassengerApp({ onLogout, user }) {
   const [booking, setBooking] = useState(null);
   const [bookingId, setBookingId] = useState(null);
   const [selectedDriver, setSelectedDriver] = useState(null);
+  const [driverLocation, setDriverLocation] = useState(null);
+  const [eta, setEta] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const [done, setDone] = useState(false);
   const [rating, setRating] = useState(0);
@@ -328,6 +396,27 @@ function PassengerApp({ onLogout, user }) {
     });
     return () => unsub();
   }, [bookingId, screen]);
+
+  // تتبع موقع السائق في الوقت الحقيقي
+  useEffect(() => {
+    if (!bookingId || (screen !== "found" && screen !== "ride")) return;
+    const unsub = onSnapshot(doc(db, "bookings", bookingId), snap => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (data.driverCurrentLocation) {
+        setDriverLocation(data.driverCurrentLocation);
+        // حساب وقت الوصول التقريبي
+        if (data.driverCurrentLocation && originPlace) {
+          const { lat: dLat, lng: dLng } = data.driverCurrentLocation;
+          const { lat: pLat, lng: pLng } = getLatLng(originPlace);
+          const dist = getDistanceKm(dLat, dLng, pLat, pLng);
+          const minutes = Math.max(1, Math.round(dist / 0.5)); // 30 كم/ساعة في المدينة
+          setEta(minutes);
+        }
+      }
+    });
+    return () => unsub();
+  }, [bookingId, screen, originPlace]);
 
   // عداد الوقت
   useEffect(() => {
@@ -401,6 +490,71 @@ function PassengerApp({ onLogout, user }) {
   };
 
   // إرسال الطلب إلى Firestore
+  // حساب المسافة بين نقطتين
+  const distanceBetween = (lat1, lng1, lat2, lng2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) ** 2 + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLng/2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
+
+  // إرسال إشعار OneSignal فقط للسائقين القريبين (1 كم)
+  const sendDriverNotification = async (price, origin, dest, km, passengerLat, passengerLng) => {
+    try {
+      // جلب السائقين المتصلين من Firestore
+      const { getDocs, collection: col, query: q, where } = await import("firebase/firestore");
+      const driversSnap = await getDocs(q(col(db, "drivers"),
+        where("isOnline", "==", true),
+        where("verificationStatus", "==", "approved")
+      ));
+
+      // تصفية السائقين القريبين (1 كم)
+      const nearbyPlayerIds = [];
+      driversSnap.docs.forEach(d => {
+        const driverData = d.data();
+        if (driverData.location && driverData.oneSignalPlayerId) {
+          const dist = distanceBetween(
+            passengerLat, passengerLng,
+            driverData.location.lat, driverData.location.lng
+          );
+          if (dist <= 1.0) {
+            nearbyPlayerIds.push(driverData.oneSignalPlayerId);
+          }
+        }
+      });
+
+      console.log("سائقون قريبون:", nearbyPlayerIds.length);
+      if (nearbyPlayerIds.length === 0) {
+        console.log("لا يوجد سائقون في محيط 1 كم");
+        return;
+      }
+
+      const rideTypeName = RIDE_TYPES.find(t => t.id === rideType)?.label || "اقتصادي";
+      await fetch("https://onesignal.com/api/v1/notifications", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Basic d4272ae1-f52d-4cc2-b3d4-9c5aa0653189",
+        },
+        body: JSON.stringify({
+          app_id: "f9e7686d-1859-497d-a3e1-c758e3b19de6",
+          include_player_ids: nearbyPlayerIds,
+          headings: { ar: "🚕 طلب جديد قريب منك!", en: "🚕 New Nearby Ride!" },
+          contents: {
+            ar: "💰 " + price + " دج · " + km.toFixed(1) + " كم · " + rideTypeName + "
+📍 " + (origin || "").substring(0, 40),
+            en: "💰 " + price + " DZD · " + km.toFixed(1) + " km",
+          },
+          data: { type: "new_booking", price, distanceKm: km },
+          priority: 10,
+          ttl: 60,
+        }),
+      });
+      console.log("✅ تم إرسال الإشعار لـ " + nearbyPlayerIds.length + " سائق");
+    } catch (e) { console.log("Notification error:", e); }
+  };
+
   const startSearch = async (price) => {
     setTimer(0); setNoDrivers(false);
     const originLatLng = getLatLng(originPlace);
@@ -418,6 +572,7 @@ function PassengerApp({ onLogout, user }) {
       });
       setBookingId(ref.id);
       setBooking({ originPlace, destPlace, originText, destText, rideType, price, distanceKm, passengerPhone, passengerName });
+      await sendDriverNotification(price, originText, destText, distanceKm, originLatLng.lat, originLatLng.lng);
     } catch (e) {
       console.log("Booking error:", e);
       // Fallback للمحاكاة
@@ -614,12 +769,23 @@ function PassengerApp({ onLogout, user }) {
   // FOUND
   if (screen === "found") return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl" }}>
-      <TaxiMap origin={booking?.originPlace} destination={booking?.destPlace} showDrivers={false} />
+      {/* خريطة تظهر موقع السائق وهو يتجه نحو الراكب */}
+      <LiveTrackingMap
+        passengerLocation={originPlace ? getLatLng(originPlace) : null}
+        driverLocation={driverLocation}
+        destination={null}
+        mode="pickup"
+      />
       <div style={{ margin: "14px 20px", background: C.card, borderRadius: 24, padding: 22, boxShadow: C.shadow }}>
         <div style={{ textAlign: "center", marginBottom: 18 }}>
           <div style={{ fontSize: 44 }}>🎉</div>
           <div style={{ fontWeight: 900, fontSize: 20, color: C.text }}>تم قبول طلبك!</div>
           <div style={{ fontSize: 13, color: C.textMuted }}>السائق في طريقه إليك</div>
+          {eta && (
+            <div style={{ background: C.greenLight, borderRadius: 12, padding: "8px 16px", marginTop: 8, display: "inline-block" }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: C.greenDark }}>⏱ ~{eta} دقيقة للوصول</span>
+            </div>
+          )}
         </div>
         <div style={{ background: C.bg, borderRadius: 16, padding: 16, marginBottom: 14 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
@@ -688,7 +854,12 @@ function PassengerApp({ onLogout, user }) {
     );
     return (
       <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl" }}>
-        <TaxiMap origin={booking?.originPlace} destination={booking?.destPlace} showDrivers={false} />
+        <LiveTrackingMap
+          passengerLocation={originPlace ? getLatLng(originPlace) : null}
+          driverLocation={driverLocation}
+          destination={destPlace ? getLatLng(destPlace) : null}
+          mode="ride"
+        />
         <div style={{ margin: "14px 20px", background: C.card, borderRadius: 24, padding: 20, boxShadow: C.shadow }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
             <div style={{ background: C.greenLight, borderRadius: 12, padding: "8px 14px" }}>
