@@ -338,6 +338,153 @@ function DriverVerification({ uid, userEmail }) {
   );
 }
 
+// ===== DRIVER TRACKING SCREEN (التوجه نحو الراكب) =====
+function DriverTrackingScreen({ booking, driverLocation, onStartRide, onEndRide }) {
+  const passengerLocation = booking.originLat && booking.originLng
+    ? { lat: booking.originLat, lng: booking.originLng }
+    : null;
+
+  const getDistKm = (lat1, lng1, lat2, lng2) => {
+    const R = 6371;
+    const dLat = (lat2-lat1)*Math.PI/180, dLng = (lng2-lng1)*Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  };
+
+  const distToPassenger = driverLocation && passengerLocation
+    ? getDistKm(driverLocation.lat, driverLocation.lng, passengerLocation.lat, passengerLocation.lng)
+    : null;
+  const etaMinutes = distToPassenger ? Math.max(1, Math.round(distToPassenger / 0.5)) : null;
+
+  return (
+    <div style={{ direction: "rtl", fontFamily: "'Cairo',sans-serif" }}>
+      {/* خريطة تظهر موقع الراكب */}
+      <div style={{ margin: "16px 20px", borderRadius: 20, overflow: "hidden", border: `2px solid ${C.orange}` }}>
+        <div style={{ background: C.card, padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>🗺️ توجه نحو الراكب</div>
+          {etaMinutes && <div style={{ background: `${C.orange}22`, borderRadius: 20, padding: "4px 12px", fontSize: 13, color: C.orange, fontWeight: 700 }}>⏱ ~{etaMinutes} دق</div>}
+        </div>
+        {/* خريطة ثابتة مع إحداثيات */}
+        <div style={{ background: "#1a2332", height: 200, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8 }}>
+          {passengerLocation ? (
+            <>
+              <div style={{ fontSize: 48 }}>📍</div>
+              <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>موقع الراكب</div>
+              <div style={{ color: C.textMuted, fontSize: 12, direction: "ltr" }}>
+                {passengerLocation.lat.toFixed(4)}, {passengerLocation.lng.toFixed(4)}
+              </div>
+              {distToPassenger && (
+                <div style={{ background: `${C.green}22`, borderRadius: 20, padding: "4px 14px", color: C.green, fontSize: 13, fontWeight: 700 }}>
+                  {distToPassenger < 1 ? `${Math.round(distToPassenger * 1000)} م` : `${distToPassenger.toFixed(1)} كم`} منك
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ color: C.textMuted, fontSize: 13 }}>جارٍ تحديد موقع الراكب...</div>
+          )}
+        </div>
+      </div>
+
+      {/* معلومات الراكب */}
+      <div style={{ margin: "0 20px 14px", background: C.card, borderRadius: 18, padding: 16, border: `1px solid ${C.orange}44` }}>
+        <div style={{ fontWeight: 800, fontSize: 14, color: C.orange, marginBottom: 10 }}>🚶 معلومات الراكب</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>👤 {booking.passengerName}</div>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>📍 {booking.originText}</div>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 12 }}>🏁 {booking.destText}</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <div style={{ flex: 1, background: `${C.green}22`, borderRadius: 10, padding: "8px", textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: C.green }}>{booking.price} دج</div>
+            <div style={{ fontSize: 10, color: C.textMuted }}>السعر</div>
+          </div>
+          <div style={{ flex: 1, background: `${C.blue}22`, borderRadius: 10, padding: "8px", textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: C.blue }}>{booking.distanceKm?.toFixed(1)} كم</div>
+            <div style={{ fontSize: 10, color: C.textMuted }}>المسافة</div>
+          </div>
+        </div>
+        <a href={`tel:${booking.passengerPhone}`} style={{ display: "flex", alignItems: "center", gap: 10, background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 12, padding: "12px 14px", marginBottom: 10, textDecoration: "none" }}>
+          <span style={{ fontSize: 22 }}>📞</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: C.textMuted }}>اتصل بالراكب</div>
+            <div style={{ fontSize: 16, fontWeight: 900, color: C.green, direction: "ltr" }}>{booking.passengerPhone}</div>
+          </div>
+          <div style={{ background: C.green, borderRadius: 8, padding: "6px 12px", fontSize: 12, color: "#fff", fontWeight: 700 }}>☎️</div>
+        </a>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onEndRide} style={{ flex: 1, background: C.redLight, border: `1px solid ${C.red}44`, borderRadius: 10, padding: "12px", color: C.red, fontFamily: "inherit", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>❌ إلغاء</button>
+          <button onClick={onStartRide} style={{ flex: 2, background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 10, padding: "12px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>✅ وصلت — بدء الرحلة</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== DRIVER RIDE SCREEN (أثناء الرحلة) =====
+function DriverRideScreen({ booking, driverLocation, onEndRide }) {
+  const destLocation = booking.destLat && booking.destLng
+    ? { lat: booking.destLat, lng: booking.destLng }
+    : null;
+
+  const getDistKm = (lat1, lng1, lat2, lng2) => {
+    const R = 6371;
+    const dLat = (lat2-lat1)*Math.PI/180, dLng = (lng2-lng1)*Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  };
+
+  const distToDest = driverLocation && destLocation
+    ? getDistKm(driverLocation.lat, driverLocation.lng, destLocation.lat, destLocation.lng)
+    : null;
+
+  return (
+    <div style={{ direction: "rtl", fontFamily: "'Cairo',sans-serif" }}>
+      <div style={{ margin: "16px 20px", background: C.card, borderRadius: 20, padding: 20, border: `2px solid ${C.green}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: C.green }}>🚗 الرحلة جارية</div>
+          {distToDest && (
+            <div style={{ background: `${C.blue}22`, borderRadius: 20, padding: "4px 12px", fontSize: 13, color: C.blue, fontWeight: 700 }}>
+              {distToDest < 1 ? `${Math.round(distToDest*1000)} م` : `${distToDest.toFixed(1)} كم`} للوجهة
+            </div>
+          )}
+        </div>
+
+        {/* الوجهة */}
+        <div style={{ background: "#1a2332", borderRadius: 14, padding: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>الوجهة النهائية 🏁</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{booking.destText}</div>
+          {destLocation && (
+            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, direction: "ltr" }}>
+              {destLocation.lat.toFixed(4)}, {destLocation.lng.toFixed(4)}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <div style={{ flex: 1, background: `${C.green}22`, borderRadius: 10, padding: "8px", textAlign: "center" }}>
+            <div style={{ fontSize: 20, fontWeight: 900, color: C.green }}>{booking.price} دج</div>
+            <div style={{ fontSize: 10, color: C.textMuted }}>السعر</div>
+          </div>
+          <div style={{ flex: 1, background: `${C.orange}22`, borderRadius: 10, padding: "8px", textAlign: "center" }}>
+            <div style={{ fontSize: 20, fontWeight: 900, color: C.orange }}>🟢</div>
+            <div style={{ fontSize: 10, color: C.textMuted }}>GPS نشط</div>
+          </div>
+        </div>
+
+        <a href={`tel:${booking.passengerPhone}`} style={{ display: "flex", alignItems: "center", gap: 10, background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 12, padding: "10px 14px", marginBottom: 10, textDecoration: "none" }}>
+          <span style={{ fontSize: 20 }}>📞</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: C.textMuted }}>الراكب</div>
+            <div style={{ fontSize: 14, fontWeight: 900, color: C.green, direction: "ltr" }}>{booking.passengerPhone}</div>
+          </div>
+        </a>
+
+        <button onClick={onEndRide} style={{ width: "100%", background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 12, padding: "14px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", fontSize: 15 }}>
+          🏁 إنهاء الرحلة
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PendingView({ onLogout }) {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -382,8 +529,28 @@ export default function DriverDashboard({ user, onLogout }) {
   const [tab, setTab] = useState("home");
   const [bookings, setBookings] = useState([]);
   const [acceptedBooking, setAcceptedBooking] = useState(null);
+  const [driverScreen, setDriverScreen] = useState("dashboard"); // dashboard | pickup | ride
+  const [driverCurrentLocation, setDriverCurrentLocation] = useState(null);
+  const locationWatchRef = { current: null };
 
   // تحديث حالة الاتصال وموقع السائق
+  // حفظ OneSignal Player ID عند أول تشغيل
+  useEffect(() => {
+    if (!user?.uid || status !== "approved") return;
+    try {
+      if (window.OneSignal) {
+        window.OneSignal.getUserId(async (playerId) => {
+          if (playerId) {
+            await setDoc(doc(db, "drivers", user.uid), {
+              oneSignalPlayerId: playerId,
+            }, { merge: true });
+            console.log("Player ID saved:", playerId);
+          }
+        });
+      }
+    } catch (e) { console.log("OneSignal:", e); }
+  }, [user?.uid, status]);
+
   const toggleOnline = async () => {
     const newStatus = !online;
     setOnline(newStatus);
@@ -411,6 +578,38 @@ export default function DriverDashboard({ user, onLogout }) {
     return () => unsub();
   }, [online, user?.uid]);
 
+  // بدء تتبع موقع السائق
+  const startLocationTracking = (bookingId) => {
+    if (!navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setDriverCurrentLocation(loc);
+        // تحديث موقع السائق في Firestore كل ثوانٍ
+        try {
+          await updateDoc(doc(db, "bookings", bookingId), {
+            driverCurrentLocation: loc,
+            driverLocationUpdatedAt: serverTimestamp(),
+          });
+          // تحديث موقع السائق في ملف drivers أيضاً
+          if (user?.uid) {
+            await setDoc(doc(db, "drivers", user.uid), { location: loc }, { merge: true });
+          }
+        } catch (e) { console.log("Location update:", e); }
+      },
+      (err) => console.log("GPS error:", err),
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 5000 }
+    );
+    locationWatchRef.current = watchId;
+  };
+
+  const stopLocationTracking = () => {
+    if (locationWatchRef.current) {
+      navigator.geolocation.clearWatch(locationWatchRef.current);
+      locationWatchRef.current = null;
+    }
+  };
+
   // قبول الطلب
   const acceptBooking = async (booking) => {
     try {
@@ -429,7 +628,10 @@ export default function DriverDashboard({ user, onLogout }) {
         acceptedAt: serverTimestamp(),
       });
       setAcceptedBooking(booking);
+      setDriverScreen("pickup");
       setBookings(p => p.filter(b => b.id !== booking.id));
+      // ابدأ تتبع موقع السائق فوراً
+      startLocationTracking(booking.id);
     } catch (e) { console.log("Accept error:", e); }
   };
 
@@ -506,32 +708,29 @@ export default function DriverDashboard({ user, onLogout }) {
               ))}
             </div>
 
-            {/* رحلة مقبولة */}
-            {acceptedBooking && (
-              <div style={{ margin: "16px 20px", background: C.card, borderRadius: 18, padding: 16, border: `2px solid ${C.green}` }}>
-                <div style={{ fontWeight: 800, fontSize: 15, color: C.green, marginBottom: 10 }}>✅ رحلة جارية</div>
-                <div style={{ fontSize: 14, color: C.text, marginBottom: 4 }}>
-                  👤 {acceptedBooking.passengerName} · 📞 {acceptedBooking.passengerPhone}
-                </div>
-                <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 8 }}>
-                  📍 {acceptedBooking.originText} → 🏁 {acceptedBooking.destText}
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-                  <div style={{ background: `${C.green}22`, borderRadius: 10, padding: "6px 12px", fontSize: 15, fontWeight: 900, color: C.green }}>{acceptedBooking.price} دج</div>
-                  <div style={{ background: `${C.blue}22`, borderRadius: 10, padding: "6px 12px", fontSize: 13, color: C.blue }}>{acceptedBooking.distanceKm?.toFixed(1)} كم</div>
-                </div>
-                <a href={`tel:${acceptedBooking.passengerPhone}`} style={{ display: "flex", alignItems: "center", gap: 10, background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 12, padding: "12px 14px", textDecoration: "none" }}>
-                  <span style={{ fontSize: 22 }}>📞</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: C.textMuted }}>رقم هاتف الراكب</div>
-                    <div style={{ fontSize: 16, fontWeight: 900, color: C.green, direction: "ltr" }}>{acceptedBooking.passengerPhone}</div>
-                  </div>
-                  <div style={{ background: C.green, borderRadius: 8, padding: "6px 12px", fontSize: 12, color: "#fff", fontWeight: 700 }}>☎️ اتصل</div>
-                </a>
-                <button onClick={() => setAcceptedBooking(null)} style={{ width: "100%", marginTop: 10, background: C.redLight, border: `1px solid ${C.red}44`, borderRadius: 10, padding: "10px", color: C.red, fontFamily: "inherit", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
-                  🏁 إنهاء الرحلة
-                </button>
-              </div>
+            {/* شاشة التوجه نحو الراكب */}
+            {acceptedBooking && driverScreen === "pickup" && (
+              <DriverTrackingScreen
+                booking={acceptedBooking}
+                driverLocation={driverCurrentLocation}
+                onStartRide={() => setDriverScreen("ride")}
+                onEndRide={() => {
+                  stopLocationTracking();
+                  setAcceptedBooking(null);
+                  setDriverScreen("dashboard");
+                }}
+              />
+            )}
+            {acceptedBooking && driverScreen === "ride" && (
+              <DriverRideScreen
+                booking={acceptedBooking}
+                driverLocation={driverCurrentLocation}
+                onEndRide={() => {
+                  stopLocationTracking();
+                  setAcceptedBooking(null);
+                  setDriverScreen("dashboard");
+                }}
+              />
             )}
 
             {/* الطلبات الجديدة من Firestore */}
