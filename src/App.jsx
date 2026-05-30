@@ -401,6 +401,71 @@ function PassengerApp({ onLogout, user }) {
   };
 
   // إرسال الطلب إلى Firestore
+  // حساب المسافة بين نقطتين
+  const distanceBetween = (lat1, lng1, lat2, lng2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) ** 2 + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLng/2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
+
+  // إرسال إشعار OneSignal فقط للسائقين القريبين (1 كم)
+  const sendDriverNotification = async (price, origin, dest, km, passengerLat, passengerLng) => {
+    try {
+      // جلب السائقين المتصلين من Firestore
+      const { getDocs, collection: col, query: q, where } = await import("firebase/firestore");
+      const driversSnap = await getDocs(q(col(db, "drivers"),
+        where("isOnline", "==", true),
+        where("verificationStatus", "==", "approved")
+      ));
+
+      // تصفية السائقين القريبين (1 كم)
+      const nearbyPlayerIds = [];
+      driversSnap.docs.forEach(d => {
+        const driverData = d.data();
+        if (driverData.location && driverData.oneSignalPlayerId) {
+          const dist = distanceBetween(
+            passengerLat, passengerLng,
+            driverData.location.lat, driverData.location.lng
+          );
+          if (dist <= 1.0) {
+            nearbyPlayerIds.push(driverData.oneSignalPlayerId);
+          }
+        }
+      });
+
+      console.log("سائقون قريبون:", nearbyPlayerIds.length);
+      if (nearbyPlayerIds.length === 0) {
+        console.log("لا يوجد سائقون في محيط 1 كم");
+        return;
+      }
+
+      const rideTypeName = RIDE_TYPES.find(t => t.id === rideType)?.label || "اقتصادي";
+      await fetch("https://onesignal.com/api/v1/notifications", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Basic d4272ae1-f52d-4cc2-b3d4-9c5aa0653189",
+        },
+        body: JSON.stringify({
+          app_id: "f9e7686d-1859-497d-a3e1-c758e3b19de6",
+          include_player_ids: nearbyPlayerIds,
+          headings: { ar: "🚕 طلب جديد قريب منك!", en: "🚕 New Nearby Ride!" },
+          contents: {
+            ar: "💰 " + price + " دج · " + km.toFixed(1) + " كم · " + rideTypeName + "
+📍 " + (origin || "").substring(0, 40),
+            en: "💰 " + price + " DZD · " + km.toFixed(1) + " km",
+          },
+          data: { type: "new_booking", price, distanceKm: km },
+          priority: 10,
+          ttl: 60,
+        }),
+      });
+      console.log("✅ تم إرسال الإشعار لـ " + nearbyPlayerIds.length + " سائق");
+    } catch (e) { console.log("Notification error:", e); }
+  };
+
   const startSearch = async (price) => {
     setTimer(0); setNoDrivers(false);
     const originLatLng = getLatLng(originPlace);
@@ -418,6 +483,7 @@ function PassengerApp({ onLogout, user }) {
       });
       setBookingId(ref.id);
       setBooking({ originPlace, destPlace, originText, destText, rideType, price, distanceKm, passengerPhone, passengerName });
+      await sendDriverNotification(price, originText, destText, distanceKm, originLatLng.lat, originLatLng.lng);
     } catch (e) {
       console.log("Booking error:", e);
       // Fallback للمحاكاة
