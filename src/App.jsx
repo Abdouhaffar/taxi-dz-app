@@ -942,6 +942,6 @@ export default function App() {
       {screen === "auth" && <AuthForm role={role} onSuccess={handleAuthSuccess} onBack={() => { setRole(null); setScreen("welcome"); }} />}
       {screen === "app" && role === "passenger" && <PassengerApp onLogout={handleLogout} user={user} />}
       {screen === "app" && role === "driver" && <DriverDashboard user={user} onLogout={handleLogout} />}
-    </div>
+    </>
   );
 }
