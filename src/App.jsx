@@ -4,7 +4,8 @@ import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   signOut, onAuthStateChanged, updateProfile
 } from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp, addDoc, collection, onSnapshot,  useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } from "@react-google-maps/api";
+import { doc, setDoc, getDoc, serverTimestamp, addDoc, collection, onSnapshot, updateDoc } from "firebase/firestore";
+import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } from "@react-google-maps/api";
 import DriverDashboard from "./DriverDashboard";
 
 const LIBRARIES = ["places"];
