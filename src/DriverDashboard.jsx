@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { doc, onSnapshot, updateDoc, setDoc, serverTimestamp, collection, query, where } from "firebase/firestore";
+import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer } from "@react-google-maps/api";
 import { db } from "./firebase";
 
 const C = {
@@ -12,6 +13,7 @@ const C = {
   text: "#ffffff", textMuted: "#94a3b8", textLight: "#64748b",
 };
 
+const LIBRARIES = ["places"];
 const PRICE_PER_KM = 30;
 const BASE_PRICE = 40;
 const MIN_PRICE = 100;
@@ -19,6 +21,13 @@ const calcPrice = (km) => {
   if (!km || km <= 0) return MIN_PRICE;
   const price = Math.round(BASE_PRICE + km * PRICE_PER_KM);
   return km < 2 ? Math.max(price, MIN_PRICE) : price;
+};
+
+const getDistKm = (lat1, lng1, lat2, lng2) => {
+  const R = 6371;
+  const dLat = (lat2-lat1)*Math.PI/180, dLng = (lng2-lng1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 };
 
 const STEPS = [
@@ -48,29 +57,22 @@ const WILAYAS = [
   "65 - عين وسارة","66 - بئر العاتر","67 - القنطرة",
   "68 - العريشة","69 - قصر البخاري",
 ];
-
-const CAR_BRANDS = [
-  "RENAULT","PEUGEOT","TOYOTA","HYUNDAI","KIA","VOLKSWAGEN",
-  "DACIA","FORD","NISSAN","MERCEDES","BMW","SUZUKI","MITSUBISHI",
-  "SEAT","OPEL","CITROEN","FIAT","HONDA","MAZDA","CHEVROLET",
-  "أخرى (أدخل يدوياً)",
-];
-
+const CAR_BRANDS = ["RENAULT","PEUGEOT","TOYOTA","HYUNDAI","KIA","VOLKSWAGEN","DACIA","FORD","NISSAN","MERCEDES","BMW","SUZUKI","MITSUBISHI","SEAT","OPEL","CITROEN","FIAT","HONDA","MAZDA","CHEVROLET","أخرى (أدخل يدوياً)"];
 const CAR_MODELS = {
   RENAULT:["Clio","Symbol","Logan","Megane","Kangoo","Fluence","Captur"],
   PEUGEOT:["206","207","208","301","308","405","406","Partner"],
   TOYOTA:["Corolla","Yaris","Camry","RAV4","Land Cruiser","Hilux"],
   HYUNDAI:["i10","i20","i30","Accent","Elantra","Tucson"],
   KIA:["Picanto","Rio","Cerato","Sportage","Sorento"],
-  VOLKSWAGEN:["Golf","Polo","Passat","Tiguan","Jetta","Caddy"],
+  VOLKSWAGEN:["Golf","Polo","Passat","Tiguan","Jetta"],
   DACIA:["Logan","Sandero","Duster","Dokker","Lodgy"],
   FORD:["Fiesta","Focus","Fusion","Mondeo","Transit"],
   NISSAN:["Micra","Sunny","Almera","Tiida","Qashqai"],
   MERCEDES:["C200","E200","A180","Sprinter","Vito"],
   BMW:["316i","318i","320i","520i","X1"],
   SUZUKI:["Alto","Swift","Vitara","Jimny"],
-  MITSUBISHI:["Lancer","Colt","Galant","Outlander","L200"],
-  SEAT:["Ibiza","Leon","Altea","Toledo"],
+  MITSUBISHI:["Lancer","Colt","Galant","Outlander"],
+  SEAT:["Ibiza","Leon","Altea"],
   OPEL:["Corsa","Astra","Vectra","Zafira"],
   CITROEN:["C3","C4","C5","Berlingo"],
   FIAT:["Punto","Bravo","Tipo","Doblo"],
@@ -79,7 +81,6 @@ const CAR_MODELS = {
   CHEVROLET:["Aveo","Cruze","Captiva","Spark"],
   "أخرى (أدخل يدوياً)":[],
 };
-
 const YEARS = Array.from({length:30},(_,i)=>String(2024-i));
 const COLORS = ["أبيض","أسود","رمادي","فضي","أحمر","أزرق","أخضر","بيج","بني","برتقالي","بنفسجي","ذهبي","أصفر"];
 
@@ -103,14 +104,13 @@ function useDriverStatus(uid) {
   return { status, data, loading };
 }
 
-// ===== HELPERS =====
+// ===== FIELDS =====
 function SelectField({ label, value, onChange, options, placeholder, required = true }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 6, fontWeight: 600 }}>{label} {required && "*"}</div>
       <div style={{ position: "relative" }}>
-        <select value={value} onChange={e => onChange(e.target.value)}
-          style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: "inherit", fontSize: 14, color: value ? C.text : C.textLight, outline: "none", cursor: "pointer", appearance: "none", direction: "rtl" }}>
+        <select value={value} onChange={e => onChange(e.target.value)} style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: "inherit", fontSize: 14, color: value ? C.text : C.textLight, outline: "none", cursor: "pointer", appearance: "none", direction: "rtl" }}>
           <option value="" disabled>{placeholder}</option>
           {options.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
@@ -124,8 +124,7 @@ function InputField({ label, value, onChange, placeholder, type = "text", dir = 
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 6, fontWeight: 600 }}>{label} {required && "*"}</div>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", direction: dir, textAlign: dir === "ltr" ? "left" : "right" }} />
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", direction: dir, textAlign: dir === "ltr" ? "left" : "right" }} />
     </div>
   );
 }
@@ -142,11 +141,9 @@ const compressToBase64 = (file, maxWidth = 800) => new Promise((resolve, reject)
       canvas.getContext("2d").drawImage(img, 0, 0, width, height);
       resolve(canvas.toDataURL("image/jpeg", 0.7));
     };
-    img.onerror = reject;
-    img.src = ev.target.result;
+    img.onerror = reject; img.src = ev.target.result;
   };
-  reader.onerror = reject;
-  reader.readAsDataURL(file);
+  reader.onerror = reject; reader.readAsDataURL(file);
 });
 
 function PhotoUpload({ label, preview, onSelect, required = true }) {
@@ -180,157 +177,101 @@ function DriverVerification({ uid, userEmail }) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [gender, setGender] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [driverType, setDriverType] = useState("تاكسي");
-  const [wilaya, setWilaya] = useState("");
-  const [daira, setDaira] = useState("");
-  const [hasLicense, setHasLicense] = useState(false);
-  const [hasCar, setHasCar] = useState(false);
-  const [carYear, setCarYear] = useState("");
-  const [carBrand, setCarBrand] = useState("");
-  const [carBrandManual, setCarBrandManual] = useState("");
-  const [carModel, setCarModel] = useState("");
-  const [carModelManual, setCarModelManual] = useState("");
-  const [carColor, setCarColor] = useState("");
-  const [plateNumber, setPlateNumber] = useState("");
-  const [ownerConfirm, setOwnerConfirm] = useState("");
-  const [selfieB64, setSelfieB64] = useState(null);
-  const [carFrontB64, setCarFrontB64] = useState(null);
-  const [carSideB64, setCarSideB64] = useState(null);
-  const [grayCardB64, setGrayCardB64] = useState(null);
-  const [licenseB64, setLicenseB64] = useState(null);
-
+  const [gender, setGender] = useState(""); const [firstName, setFirstName] = useState(""); const [lastName, setLastName] = useState("");
+  const [birthDate, setBirthDate] = useState(""); const [driverType, setDriverType] = useState("تاكسي");
+  const [wilaya, setWilaya] = useState(""); const [daira, setDaira] = useState("");
+  const [hasLicense, setHasLicense] = useState(false); const [hasCar, setHasCar] = useState(false);
+  const [carYear, setCarYear] = useState(""); const [carBrand, setCarBrand] = useState(""); const [carBrandManual, setCarBrandManual] = useState("");
+  const [carModel, setCarModel] = useState(""); const [carModelManual, setCarModelManual] = useState("");
+  const [carColor, setCarColor] = useState(""); const [plateNumber, setPlateNumber] = useState(""); const [ownerConfirm, setOwnerConfirm] = useState("");
+  const [selfieB64, setSelfieB64] = useState(null); const [carFrontB64, setCarFrontB64] = useState(null);
+  const [carSideB64, setCarSideB64] = useState(null); const [grayCardB64, setGrayCardB64] = useState(null); const [licenseB64, setLicenseB64] = useState(null);
   const isManualBrand = carBrand === "أخرى (أدخل يدوياً)";
   const finalBrand = isManualBrand ? carBrandManual : carBrand;
   const isManualModel = isManualBrand || carModel === "أخرى";
   const finalModel = isManualModel ? carModelManual : carModel;
-
   const handlePhoto = async (e, setter) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { setError("الصورة أكبر من 5MB"); return; }
-    setError("");
-    try { setter(await compressToBase64(file)); } catch { setError("خطأ في معالجة الصورة"); }
+    const file = e.target.files[0]; if (!file) return;
+    if (file.size > 5*1024*1024) { setError("الصورة أكبر من 5MB"); return; }
+    setError(""); try { setter(await compressToBase64(file)); } catch { setError("خطأ في الصورة"); }
   };
-
   const validateStep = () => {
-    if (step === 0 && (!gender || !firstName || !lastName || !birthDate || !wilaya)) { setError("يرجى إكمال جميع الحقول ⚠️"); return false; }
-    if (step === 1 && (!carYear || !finalBrand || !finalModel || !carColor || !plateNumber || !ownerConfirm)) { setError("يرجى إكمال جميع بيانات السيارة ⚠️"); return false; }
-    if (step === 2 && (!selfieB64 || !carFrontB64 || !carSideB64 || !grayCardB64)) { setError("يرجى رفع جميع الصور الإلزامية ⚠️"); return false; }
+    if (step===0 && (!gender||!firstName||!lastName||!birthDate||!wilaya)) { setError("يرجى إكمال جميع الحقول ⚠️"); return false; }
+    if (step===1 && (!carYear||!finalBrand||!finalModel||!carColor||!plateNumber||!ownerConfirm)) { setError("يرجى إكمال بيانات السيارة ⚠️"); return false; }
+    if (step===2 && (!selfieB64||!carFrontB64||!carSideB64||!grayCardB64)) { setError("يرجى رفع الصور الإلزامية ⚠️"); return false; }
     return true;
   };
-
   const handleSubmit = async () => {
     if (!validateStep()) return;
     setSaving(true); setError("");
     try {
-      await setDoc(doc(db, "drivers", uid), {
-        uid, email: userEmail || "",
-        verificationStatus: "pending",
-        name: `${firstName} ${lastName}`,
-        firstName, lastName, gender, birthDate,
-        driverType, wilaya, daira,
-        carYear, carBrand: finalBrand, carModel: finalModel, carColor,
-        plateNumber: plateNumber.trim().toUpperCase(),
-        ownerConfirm, hasLicense, hasCar,
-        selfieUrl: selfieB64, carFrontUrl: carFrontB64,
-        carSideUrl: carSideB64, grayCardUrl: grayCardB64,
-        licenseUrl: licenseB64 || null,
-        submittedAt: serverTimestamp(),
-        rejectionReason: null, role: "driver",
-        isOnline: false, location: null,
-      }, { merge: true });
-    } catch (err) { setError("خطأ: " + (err.message || "حاول مرة أخرى")); }
+      await setDoc(doc(db,"drivers",uid), { uid, email:userEmail||"", verificationStatus:"pending", name:`${firstName} ${lastName}`, firstName, lastName, gender, birthDate, driverType, wilaya, daira, carYear, carBrand:finalBrand, carModel:finalModel, carColor, plateNumber:plateNumber.trim().toUpperCase(), ownerConfirm, hasLicense, hasCar, selfieUrl:selfieB64, carFrontUrl:carFrontB64, carSideUrl:carSideB64, grayCardUrl:grayCardB64, licenseUrl:licenseB64||null, submittedAt:serverTimestamp(), rejectionReason:null, role:"driver", isOnline:false, location:null }, { merge:true });
+    } catch(err) { setError("خطأ: "+(err.message||"حاول مرة أخرى")); }
     setSaving(false);
   };
-
-  const modelOptions = carBrand && !isManualBrand ? [...(CAR_MODELS[carBrand] || []), "أخرى"] : [];
-
+  const modelOptions = carBrand && !isManualBrand ? [...(CAR_MODELS[carBrand]||[]),"أخرى"] : [];
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl" }}>
-      <div style={{ background: C.card, padding: "48px 20px 20px", borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>توثيق حساب السائق</div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: C.text, marginBottom: 16 }}>{STEPS[step].icon} {STEPS[step].label}</div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {STEPS.map((s, i) => <div key={s.id} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.orange : C.border, transition: "all 0.3s" }} />)}
-        </div>
-        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>الخطوة {step + 1} من {STEPS.length}</div>
+    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Cairo',sans-serif", direction:"rtl" }}>
+      <div style={{ background:C.card, padding:"48px 20px 20px", borderBottom:`1px solid ${C.border}` }}>
+        <div style={{ fontSize:13, color:C.textMuted, marginBottom:4 }}>توثيق حساب السائق</div>
+        <div style={{ fontSize:20, fontWeight:900, color:C.text, marginBottom:16 }}>{STEPS[step].icon} {STEPS[step].label}</div>
+        <div style={{ display:"flex", gap:6 }}>{STEPS.map((s,i)=><div key={s.id} style={{ flex:1, height:4, borderRadius:2, background:i<=step?C.orange:C.border, transition:"all 0.3s" }} />)}</div>
+        <div style={{ fontSize:12, color:C.textMuted, marginTop:8 }}>الخطوة {step+1} من {STEPS.length}</div>
       </div>
-      <div style={{ padding: "20px 20px 120px" }}>
-        {step === 0 && (
-          <>
-            <SelectField label="الجنس" value={gender} onChange={setGender} placeholder="اختر الجنس" options={["ذكر","أنثى"]} />
-            <InputField label="الاسم" value={firstName} onChange={setFirstName} placeholder="أدخل اسمك" />
-            <InputField label="اللقب" value={lastName} onChange={setLastName} placeholder="أدخل لقبك" />
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 6, fontWeight: 600 }}>تاريخ الميلاد *</div>
-              <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", direction: "ltr" }} />
-            </div>
-            <SelectField label="نوع السائق" value={driverType} onChange={setDriverType} placeholder="اختر النوع" options={["تاكسي","سيارة خاصة","حافلة صغيرة"]} />
-            <SelectField label="الولاية" value={wilaya} onChange={setWilaya} placeholder="اختر ولايتك" options={WILAYAS} />
-            <InputField label="الدائرة / البلدية" value={daira} onChange={setDaira} placeholder="أدخل الدائرة" required={false} />
-            <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 14, border: `1px solid ${C.border}` }}>
-              {[{label:"لديّ سيارة خاصة",value:hasCar,set:setHasCar},{label:"لديّ رخصة سياقة سارية (أكثر من سنتين)",value:hasLicense,set:setHasLicense}].map((item,i) => (
-                <div key={i} onClick={() => item.set(!item.value)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", cursor: "pointer", borderBottom: i===0?`1px solid ${C.border}`:"none" }}>
-                  <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${item.value?C.orange:C.border}`, background: item.value?C.orange:"transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    {item.value && <span style={{ color: "#fff", fontSize: 13, fontWeight: 900 }}>✓</span>}
-                  </div>
-                  <span style={{ fontSize: 13, color: C.text }}>{item.label}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-        {step === 1 && (
-          <>
-            <SelectField label="سنة الصنع" value={carYear} onChange={setCarYear} placeholder="اختر السنة" options={YEARS} />
-            <SelectField label="الماركة" value={carBrand} onChange={v => { setCarBrand(v); setCarModel(""); setCarModelManual(""); setCarBrandManual(""); }} placeholder="اختر الماركة" options={CAR_BRANDS} />
-            {isManualBrand && <InputField label="أدخل الماركة يدوياً" value={carBrandManual} onChange={setCarBrandManual} placeholder="مثال: LADA..." dir="ltr" />}
-            {!isManualBrand && carBrand && <SelectField label="الموديل" value={carModel} onChange={setCarModel} placeholder="اختر الموديل" options={modelOptions} />}
-            {(isManualBrand || carModel === "أخرى") && <InputField label="أدخل الموديل يدوياً" value={carModelManual} onChange={setCarModelManual} placeholder="مثال: 206 Plus..." dir="ltr" />}
-            <SelectField label="اللون" value={carColor} onChange={setCarColor} placeholder="اختر اللون" options={COLORS} />
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 6, fontWeight: 600 }}>رقم اللوحة *</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 10, padding: "12px 14px", fontSize: 14, color: C.green, fontWeight: 700, whiteSpace: "nowrap" }}>🇩🇿 DZ</div>
-                <input value={plateNumber} onChange={e => setPlateNumber(e.target.value.toUpperCase())} placeholder="213-01-DZ" maxLength={15} style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "13px 16px", fontFamily: "inherit", fontSize: 15, color: C.text, outline: "none", direction: "ltr", textAlign: "left", fontWeight: 700 }} />
+      <div style={{ padding:"20px 20px 120px" }}>
+        {step===0 && (<>
+          <SelectField label="الجنس" value={gender} onChange={setGender} placeholder="اختر الجنس" options={["ذكر","أنثى"]} />
+          <InputField label="الاسم" value={firstName} onChange={setFirstName} placeholder="أدخل اسمك" />
+          <InputField label="اللقب" value={lastName} onChange={setLastName} placeholder="أدخل لقبك" />
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:13, color:C.textMuted, marginBottom:6, fontWeight:600 }}>تاريخ الميلاد *</div>
+            <input type="date" value={birthDate} onChange={e=>setBirthDate(e.target.value)} style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:12, padding:"13px 16px", fontFamily:"inherit", fontSize:14, color:C.text, outline:"none", direction:"ltr" }} />
+          </div>
+          <SelectField label="نوع السائق" value={driverType} onChange={setDriverType} placeholder="اختر" options={["تاكسي","سيارة خاصة","حافلة صغيرة"]} />
+          <SelectField label="الولاية" value={wilaya} onChange={setWilaya} placeholder="اختر ولايتك" options={WILAYAS} />
+          <InputField label="الدائرة / البلدية" value={daira} onChange={setDaira} placeholder="أدخل الدائرة" required={false} />
+          <div style={{ background:C.card, borderRadius:14, padding:16, marginBottom:14, border:`1px solid ${C.border}` }}>
+            {[{label:"لديّ سيارة خاصة",value:hasCar,set:setHasCar},{label:"لديّ رخصة سياقة سارية (أكثر من سنتين)",value:hasLicense,set:setHasLicense}].map((item,i)=>(
+              <div key={i} onClick={()=>item.set(!item.value)} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", cursor:"pointer", borderBottom:i===0?`1px solid ${C.border}`:"none" }}>
+                <div style={{ width:22, height:22, borderRadius:6, border:`2px solid ${item.value?C.orange:C.border}`, background:item.value?C.orange:"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{item.value&&<span style={{ color:"#fff", fontSize:13, fontWeight:900 }}>✓</span>}</div>
+                <span style={{ fontSize:13, color:C.text }}>{item.label}</span>
               </div>
+            ))}
+          </div>
+        </>)}
+        {step===1 && (<>
+          <SelectField label="سنة الصنع" value={carYear} onChange={setCarYear} placeholder="اختر السنة" options={YEARS} />
+          <SelectField label="الماركة" value={carBrand} onChange={v=>{setCarBrand(v);setCarModel("");setCarModelManual("");setCarBrandManual("");}} placeholder="اختر الماركة" options={CAR_BRANDS} />
+          {isManualBrand && <InputField label="أدخل الماركة يدوياً" value={carBrandManual} onChange={setCarBrandManual} placeholder="مثال: LADA..." dir="ltr" />}
+          {!isManualBrand && carBrand && <SelectField label="الموديل" value={carModel} onChange={setCarModel} placeholder="اختر الموديل" options={modelOptions} />}
+          {(isManualBrand||carModel==="أخرى") && <InputField label="أدخل الموديل يدوياً" value={carModelManual} onChange={setCarModelManual} placeholder="مثال: 206 Plus..." dir="ltr" />}
+          <SelectField label="اللون" value={carColor} onChange={setCarColor} placeholder="اختر اللون" options={COLORS} />
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:13, color:C.textMuted, marginBottom:6, fontWeight:600 }}>رقم اللوحة *</div>
+            <div style={{ display:"flex", gap:8 }}>
+              <div style={{ background:C.greenLight, border:`1px solid ${C.green}44`, borderRadius:10, padding:"12px 14px", fontSize:14, color:C.green, fontWeight:700, whiteSpace:"nowrap" }}>🇩🇿 DZ</div>
+              <input value={plateNumber} onChange={e=>setPlateNumber(e.target.value.toUpperCase())} placeholder="213-01-DZ" maxLength={15} style={{ flex:1, background:C.bg, border:`1px solid ${C.border}`, borderRadius:12, padding:"13px 16px", fontFamily:"inherit", fontSize:15, color:C.text, outline:"none", direction:"ltr", textAlign:"left", fontWeight:700 }} />
             </div>
-            <SelectField label="هل تملك إذن باستخدام السيارة؟" value={ownerConfirm} onChange={setOwnerConfirm} placeholder="اختر" options={["نعم، أنا المالك","نعم، لديّ إذن المالك"]} />
-            {finalBrand && finalModel && carYear && (
-              <div style={{ background: C.greenLight, borderRadius: 12, padding: "10px 14px", border: `1px solid ${C.green}44`, marginTop: 8 }}>
-                <div style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>✅ {finalBrand} {finalModel} {carYear} · {carColor}</div>
-              </div>
-            )}
-          </>
-        )}
-        {step === 2 && (
-          <>
-            <div style={{ background: "#3b82f615", borderRadius: 12, padding: "10px 14px", marginBottom: 16, border: `1px solid ${C.blue}44` }}>
-              <div style={{ fontSize: 12, color: C.blue, fontWeight: 600 }}>📌 تأكد من وضوح الصور قبل الرفع</div>
-            </div>
-            <PhotoUpload label="🤳 صورة شخصية (سيلفي)" preview={selfieB64} onSelect={e => handlePhoto(e, setSelfieB64)} required />
-            <PhotoUpload label="🚗 صورة السيارة من الأمام" preview={carFrontB64} onSelect={e => handlePhoto(e, setCarFrontB64)} required />
-            <PhotoUpload label="🚗 صورة السيارة من الجانب" preview={carSideB64} onSelect={e => handlePhoto(e, setCarSideB64)} required />
-            <PhotoUpload label="📄 البطاقة الرمادية" preview={grayCardB64} onSelect={e => handlePhoto(e, setGrayCardB64)} required />
-            <PhotoUpload label="🪪 رخصة السياقة" preview={licenseB64} onSelect={e => handlePhoto(e, setLicenseB64)} required={false} />
-          </>
-        )}
-        {error && <div style={{ background: C.redLight, borderRadius: 12, padding: "12px 16px", color: C.red, fontSize: 13, marginBottom: 16, border: `1px solid ${C.red}44`, textAlign: "center" }}>{error}</div>}
-        <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-          {step > 0 && (
-            <button onClick={() => { setStep(s => s-1); setError(""); }} style={{ flex: 1, background: C.border, border: "none", borderRadius: 14, padding: "14px", color: C.text, fontFamily: "inherit", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>← السابق</button>
-          )}
-          {step < STEPS.length-1 ? (
-            <button onClick={() => { if(validateStep()){setError("");setStep(s=>s+1);} }} style={{ flex: 2, background: `linear-gradient(135deg,${C.orange},${C.orangeDark})`, border: "none", borderRadius: 14, padding: "14px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", fontSize: 15 }}>التالي →</button>
-          ) : (
-            <button onClick={handleSubmit} disabled={saving} style={{ flex: 2, background: saving?C.border:`linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 14, padding: "14px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: saving?"default":"pointer", fontSize: 15, opacity: saving?0.7:1, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-              {saving ? <><span style={{ width:16,height:16,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite" }} />جارٍ الحفظ...</> : "✅ إرسال للمراجعة"}
-            </button>
-          )}
+          </div>
+          <SelectField label="هل تملك إذن باستخدام السيارة؟" value={ownerConfirm} onChange={setOwnerConfirm} placeholder="اختر" options={["نعم، أنا المالك","نعم، لديّ إذن المالك"]} />
+          {finalBrand&&finalModel&&carYear&&<div style={{ background:C.greenLight, borderRadius:12, padding:"10px 14px", border:`1px solid ${C.green}44` }}><div style={{ fontSize:12, color:C.green, fontWeight:700 }}>✅ {finalBrand} {finalModel} {carYear} · {carColor}</div></div>}
+        </>)}
+        {step===2 && (<>
+          <div style={{ background:"#3b82f615", borderRadius:12, padding:"10px 14px", marginBottom:16, border:`1px solid ${C.blue}44` }}><div style={{ fontSize:12, color:C.blue, fontWeight:600 }}>📌 تأكد من وضوح الصور قبل الرفع</div></div>
+          <PhotoUpload label="🤳 صورة شخصية (سيلفي)" preview={selfieB64} onSelect={e=>handlePhoto(e,setSelfieB64)} required />
+          <PhotoUpload label="🚗 صورة السيارة من الأمام" preview={carFrontB64} onSelect={e=>handlePhoto(e,setCarFrontB64)} required />
+          <PhotoUpload label="🚗 صورة السيارة من الجانب" preview={carSideB64} onSelect={e=>handlePhoto(e,setCarSideB64)} required />
+          <PhotoUpload label="📄 البطاقة الرمادية" preview={grayCardB64} onSelect={e=>handlePhoto(e,setGrayCardB64)} required />
+          <PhotoUpload label="🪪 رخصة السياقة" preview={licenseB64} onSelect={e=>handlePhoto(e,setLicenseB64)} required={false} />
+        </>)}
+        {error && <div style={{ background:C.redLight, borderRadius:12, padding:"12px 16px", color:C.red, fontSize:13, marginBottom:16, border:`1px solid ${C.red}44`, textAlign:"center" }}>{error}</div>}
+        <div style={{ display:"flex", gap:10, marginTop:8 }}>
+          {step>0 && <button onClick={()=>{setStep(s=>s-1);setError("");}} style={{ flex:1, background:C.border, border:"none", borderRadius:14, padding:"14px", color:C.text, fontFamily:"inherit", fontWeight:700, cursor:"pointer", fontSize:14 }}>← السابق</button>}
+          {step<STEPS.length-1
+            ? <button onClick={()=>{if(validateStep()){setError("");setStep(s=>s+1);}}} style={{ flex:2, background:`linear-gradient(135deg,${C.orange},${C.orangeDark})`, border:"none", borderRadius:14, padding:"14px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:15 }}>التالي →</button>
+            : <button onClick={handleSubmit} disabled={saving} style={{ flex:2, background:saving?C.border:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:14, padding:"14px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:saving?"default":"pointer", fontSize:15, opacity:saving?0.7:1, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                {saving?<><span style={{ width:16,height:16,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite" }} />جارٍ الحفظ...</>:"✅ إرسال للمراجعة"}
+              </button>}
         </div>
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -338,167 +279,15 @@ function DriverVerification({ uid, userEmail }) {
   );
 }
 
-// ===== DRIVER TRACKING SCREEN (التوجه نحو الراكب) =====
-function DriverTrackingScreen({ booking, driverLocation, onStartRide, onEndRide }) {
-  const passengerLocation = booking.originLat && booking.originLng
-    ? { lat: booking.originLat, lng: booking.originLng }
-    : null;
-
-  const getDistKm = (lat1, lng1, lat2, lng2) => {
-    const R = 6371;
-    const dLat = (lat2-lat1)*Math.PI/180, dLng = (lng2-lng1)*Math.PI/180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
-    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-  };
-
-  const distToPassenger = driverLocation && passengerLocation
-    ? getDistKm(driverLocation.lat, driverLocation.lng, passengerLocation.lat, passengerLocation.lng)
-    : null;
-  const etaMinutes = distToPassenger ? Math.max(1, Math.round(distToPassenger / 0.5)) : null;
-
-  return (
-    <div style={{ direction: "rtl", fontFamily: "'Cairo',sans-serif" }}>
-      {/* خريطة تظهر موقع الراكب */}
-      <div style={{ margin: "16px 20px", borderRadius: 20, overflow: "hidden", border: `2px solid ${C.orange}` }}>
-        <div style={{ background: C.card, padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>🗺️ توجه نحو الراكب</div>
-          {etaMinutes && <div style={{ background: `${C.orange}22`, borderRadius: 20, padding: "4px 12px", fontSize: 13, color: C.orange, fontWeight: 700 }}>⏱ ~{etaMinutes} دق</div>}
-        </div>
-        {/* خريطة ثابتة مع إحداثيات */}
-        <div style={{ background: "#1a2332", height: 200, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8 }}>
-          {passengerLocation ? (
-            <>
-              <div style={{ fontSize: 48 }}>📍</div>
-              <div style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>موقع الراكب</div>
-              <div style={{ color: C.textMuted, fontSize: 12, direction: "ltr" }}>
-                {passengerLocation.lat.toFixed(4)}, {passengerLocation.lng.toFixed(4)}
-              </div>
-              {distToPassenger && (
-                <div style={{ background: `${C.green}22`, borderRadius: 20, padding: "4px 14px", color: C.green, fontSize: 13, fontWeight: 700 }}>
-                  {distToPassenger < 1 ? `${Math.round(distToPassenger * 1000)} م` : `${distToPassenger.toFixed(1)} كم`} منك
-                </div>
-              )}
-            </>
-          ) : (
-            <div style={{ color: C.textMuted, fontSize: 13 }}>جارٍ تحديد موقع الراكب...</div>
-          )}
-        </div>
-      </div>
-
-      {/* معلومات الراكب */}
-      <div style={{ margin: "0 20px 14px", background: C.card, borderRadius: 18, padding: 16, border: `1px solid ${C.orange}44` }}>
-        <div style={{ fontWeight: 800, fontSize: 14, color: C.orange, marginBottom: 10 }}>🚶 معلومات الراكب</div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>👤 {booking.passengerName}</div>
-        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>📍 {booking.originText}</div>
-        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 12 }}>🏁 {booking.destText}</div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <div style={{ flex: 1, background: `${C.green}22`, borderRadius: 10, padding: "8px", textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: C.green }}>{booking.price} دج</div>
-            <div style={{ fontSize: 10, color: C.textMuted }}>السعر</div>
-          </div>
-          <div style={{ flex: 1, background: `${C.blue}22`, borderRadius: 10, padding: "8px", textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: C.blue }}>{booking.distanceKm?.toFixed(1)} كم</div>
-            <div style={{ fontSize: 10, color: C.textMuted }}>المسافة</div>
-          </div>
-        </div>
-        <a href={`tel:${booking.passengerPhone}`} style={{ display: "flex", alignItems: "center", gap: 10, background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 12, padding: "12px 14px", marginBottom: 10, textDecoration: "none" }}>
-          <span style={{ fontSize: 22 }}>📞</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, color: C.textMuted }}>اتصل بالراكب</div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: C.green, direction: "ltr" }}>{booking.passengerPhone}</div>
-          </div>
-          <div style={{ background: C.green, borderRadius: 8, padding: "6px 12px", fontSize: 12, color: "#fff", fontWeight: 700 }}>☎️</div>
-        </a>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={onEndRide} style={{ flex: 1, background: C.redLight, border: `1px solid ${C.red}44`, borderRadius: 10, padding: "12px", color: C.red, fontFamily: "inherit", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>❌ إلغاء</button>
-          <button onClick={onStartRide} style={{ flex: 2, background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 10, padding: "12px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>✅ وصلت — بدء الرحلة</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ===== DRIVER RIDE SCREEN (أثناء الرحلة) =====
-function DriverRideScreen({ booking, driverLocation, onEndRide }) {
-  const destLocation = booking.destLat && booking.destLng
-    ? { lat: booking.destLat, lng: booking.destLng }
-    : null;
-
-  const getDistKm = (lat1, lng1, lat2, lng2) => {
-    const R = 6371;
-    const dLat = (lat2-lat1)*Math.PI/180, dLng = (lng2-lng1)*Math.PI/180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
-    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-  };
-
-  const distToDest = driverLocation && destLocation
-    ? getDistKm(driverLocation.lat, driverLocation.lng, destLocation.lat, destLocation.lng)
-    : null;
-
-  return (
-    <div style={{ direction: "rtl", fontFamily: "'Cairo',sans-serif" }}>
-      <div style={{ margin: "16px 20px", background: C.card, borderRadius: 20, padding: 20, border: `2px solid ${C.green}` }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div style={{ fontWeight: 800, fontSize: 15, color: C.green }}>🚗 الرحلة جارية</div>
-          {distToDest && (
-            <div style={{ background: `${C.blue}22`, borderRadius: 20, padding: "4px 12px", fontSize: 13, color: C.blue, fontWeight: 700 }}>
-              {distToDest < 1 ? `${Math.round(distToDest*1000)} م` : `${distToDest.toFixed(1)} كم`} للوجهة
-            </div>
-          )}
-        </div>
-
-        {/* الوجهة */}
-        <div style={{ background: "#1a2332", borderRadius: 14, padding: 14, marginBottom: 14 }}>
-          <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>الوجهة النهائية 🏁</div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{booking.destText}</div>
-          {destLocation && (
-            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, direction: "ltr" }}>
-              {destLocation.lat.toFixed(4)}, {destLocation.lng.toFixed(4)}
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          <div style={{ flex: 1, background: `${C.green}22`, borderRadius: 10, padding: "8px", textAlign: "center" }}>
-            <div style={{ fontSize: 20, fontWeight: 900, color: C.green }}>{booking.price} دج</div>
-            <div style={{ fontSize: 10, color: C.textMuted }}>السعر</div>
-          </div>
-          <div style={{ flex: 1, background: `${C.orange}22`, borderRadius: 10, padding: "8px", textAlign: "center" }}>
-            <div style={{ fontSize: 20, fontWeight: 900, color: C.orange }}>🟢</div>
-            <div style={{ fontSize: 10, color: C.textMuted }}>GPS نشط</div>
-          </div>
-        </div>
-
-        <a href={`tel:${booking.passengerPhone}`} style={{ display: "flex", alignItems: "center", gap: 10, background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 12, padding: "10px 14px", marginBottom: 10, textDecoration: "none" }}>
-          <span style={{ fontSize: 20 }}>📞</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, color: C.textMuted }}>الراكب</div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: C.green, direction: "ltr" }}>{booking.passengerPhone}</div>
-          </div>
-        </a>
-
-        <button onClick={onEndRide} style={{ width: "100%", background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 12, padding: "14px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", fontSize: 15 }}>
-          🏁 إنهاء الرحلة
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function PendingView({ onLogout }) {
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ background: C.card, borderRadius: 24, padding: 40, textAlign: "center", maxWidth: 360, width: "100%", border: `1px solid ${C.border}` }}>
-        <div style={{ fontSize: 72, marginBottom: 20 }}>⏳</div>
-        <div style={{ fontWeight: 900, fontSize: 22, color: C.text, marginBottom: 12 }}>طلبك قيد المراجعة</div>
-        <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.8, marginBottom: 20 }}>
-          تم إرسال بياناتك للأدمن.<br />سيتم إشعارك فور الموافقة.<br />
-          <span style={{ color: C.orange, fontWeight: 700 }}>عادةً 24-48 ساعة</span>
-        </div>
-        <div style={{ background: C.greenLight, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.green}44`, marginBottom: 20 }}>
-          <div style={{ fontSize: 13, color: C.green }}>✅ ستتمكن من استقبال الطلبات فور التوثيق</div>
-        </div>
-        <button onClick={onLogout} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 20px", color: C.textMuted, fontFamily: "inherit", cursor: "pointer", fontSize: 13 }}>🚪 تسجيل الخروج</button>
+    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Cairo',sans-serif", direction:"rtl", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div style={{ background:C.card, borderRadius:24, padding:40, textAlign:"center", maxWidth:360, width:"100%", border:`1px solid ${C.border}` }}>
+        <div style={{ fontSize:72, marginBottom:20 }}>⏳</div>
+        <div style={{ fontWeight:900, fontSize:22, color:C.text, marginBottom:12 }}>طلبك قيد المراجعة</div>
+        <div style={{ fontSize:14, color:C.textMuted, lineHeight:1.8, marginBottom:20 }}>تم إرسال بياناتك للأدمن.<br/>سيتم إشعارك فور الموافقة.<br/><span style={{ color:C.orange, fontWeight:700 }}>عادةً 24-48 ساعة</span></div>
+        <div style={{ background:C.greenLight, borderRadius:12, padding:"12px 16px", border:`1px solid ${C.green}44`, marginBottom:20 }}><div style={{ fontSize:13, color:C.green }}>✅ ستتمكن من استقبال الطلبات فور التوثيق</div></div>
+        <button onClick={onLogout} style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 20px", color:C.textMuted, fontFamily:"inherit", cursor:"pointer", fontSize:13 }}>🚪 تسجيل الخروج</button>
       </div>
     </div>
   );
@@ -506,318 +295,370 @@ function PendingView({ onLogout }) {
 
 function RejectedView({ data, onRetry }) {
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ background: C.card, borderRadius: 24, padding: 32, textAlign: "center", maxWidth: 360, width: "100%", border: `1px solid ${C.red}44` }}>
-        <div style={{ fontSize: 64, marginBottom: 16 }}>❌</div>
-        <div style={{ fontWeight: 900, fontSize: 20, color: C.red, marginBottom: 12 }}>تم رفض التوثيق</div>
-        {data?.rejectionReason && (
-          <div style={{ background: C.redLight, borderRadius: 12, padding: "14px", marginBottom: 20, textAlign: "right", border: `1px solid ${C.red}44` }}>
-            <div style={{ fontSize: 12, color: C.red, marginBottom: 4, fontWeight: 700 }}>سبب الرفض:</div>
-            <div style={{ fontSize: 14, color: C.text }}>{data.rejectionReason}</div>
-          </div>
-        )}
-        <button onClick={onRetry} style={{ width: "100%", background: `linear-gradient(135deg,${C.orange},${C.orangeDark})`, border: "none", borderRadius: 14, padding: "14px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", fontSize: 15 }}>🔄 إعادة التوثيق</button>
+    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Cairo',sans-serif", direction:"rtl", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div style={{ background:C.card, borderRadius:24, padding:32, textAlign:"center", maxWidth:360, width:"100%", border:`1px solid ${C.red}44` }}>
+        <div style={{ fontSize:64, marginBottom:16 }}>❌</div>
+        <div style={{ fontWeight:900, fontSize:20, color:C.red, marginBottom:12 }}>تم رفض التوثيق</div>
+        {data?.rejectionReason && <div style={{ background:C.redLight, borderRadius:12, padding:"14px", marginBottom:20, textAlign:"right", border:`1px solid ${C.red}44` }}><div style={{ fontSize:12, color:C.red, marginBottom:4, fontWeight:700 }}>سبب الرفض:</div><div style={{ fontSize:14, color:C.text }}>{data.rejectionReason}</div></div>}
+        <button onClick={onRetry} style={{ width:"100%", background:`linear-gradient(135deg,${C.orange},${C.orangeDark})`, border:"none", borderRadius:14, padding:"14px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:15 }}>🔄 إعادة التوثيق</button>
       </div>
+    </div>
+  );
+}
+
+// ===== GPS MAP للسائق =====
+function DriverGPSMap({ driverLocation, passengerLocation, destLocation, mode }) {
+  const [directions, setDirections] = useState(null);
+  const mapRef = useRef(null);
+  const makeMarker = (emoji, color) => "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44'><circle cx='22' cy='22' r='20' fill='${color}' stroke='white' stroke-width='3'/><text x='22' y='29' text-anchor='middle' font-size='20'>${emoji}</text></svg>`
+  );
+  const target = mode === "pickup" ? passengerLocation : destLocation;
+  useEffect(() => {
+    if (!driverLocation || !target || !window.google) { setDirections(null); return; }
+    new window.google.maps.DirectionsService().route(
+      { origin: driverLocation, destination: target, travelMode: "DRIVING" },
+      (result, status) => { if (status === "OK") setDirections(result); }
+    );
+  }, [driverLocation, target]);
+  useEffect(() => {
+    if (driverLocation && mapRef.current) mapRef.current.panTo(driverLocation);
+  }, [driverLocation]);
+  return (
+    <div style={{ margin:"0 20px", borderRadius:16, overflow:"hidden", border:`2px solid ${mode==="pickup"?C.orange:C.green}` }}>
+      <div style={{ background:C.card, padding:"8px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <span style={{ fontSize:13, fontWeight:700, color:C.text }}>{mode==="pickup"?"🗺️ التوجه نحو الراكب":"🗺️ التوجه نحو الوجهة"}</span>
+        {driverLocation && target && (
+          <span style={{ fontSize:12, color:mode==="pickup"?C.orange:C.green, fontWeight:700 }}>
+            {getDistKm(driverLocation.lat,driverLocation.lng,target.lat,target.lng).toFixed(1)} كم
+          </span>
+        )}
+      </div>
+      <GoogleMap
+        mapContainerStyle={{ width:"100%", height:"220px" }}
+        center={driverLocation || passengerLocation || {lat:36.737,lng:3.086}}
+        zoom={15}
+        onLoad={map => mapRef.current = map}
+        options={{ disableDefaultUI:true, zoomControl:true }}
+      >
+        {driverLocation && <Marker position={driverLocation} icon={{ url:makeMarker("🚕",C.dark), scaledSize:new window.google.maps.Size(44,44) }} />}
+        {passengerLocation && mode==="pickup" && <Marker position={passengerLocation} icon={{ url:makeMarker("📍",C.green), scaledSize:new window.google.maps.Size(44,44) }} />}
+        {destLocation && mode==="ride" && <Marker position={destLocation} icon={{ url:makeMarker("🏁",C.blue), scaledSize:new window.google.maps.Size(44,44) }} />}
+        {directions && <DirectionsRenderer directions={directions} options={{ polylineOptions:{ strokeColor:mode==="pickup"?C.orange:C.green, strokeWeight:5, strokeOpacity:0.85 }, suppressMarkers:true }} />}
+      </GoogleMap>
     </div>
   );
 }
 
 // ===== MAIN DASHBOARD =====
 export default function DriverDashboard({ user, onLogout }) {
+  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_KEY||"", libraries:LIBRARIES, language:"ar", region:"DZ" });
   const { status, data, loading } = useDriverStatus(user?.uid);
   const [online, setOnline] = useState(false);
   const [tab, setTab] = useState("home");
   const [bookings, setBookings] = useState([]);
   const [acceptedBooking, setAcceptedBooking] = useState(null);
-  const [driverScreen, setDriverScreen] = useState("dashboard"); // dashboard | pickup | ride
-  const [driverCurrentLocation, setDriverCurrentLocation] = useState(null);
-  const locationWatchRef = { current: null };
+  const [driverScreen, setDriverScreen] = useState("dashboard");
+  const [driverLocation, setDriverLocation] = useState(null);
+  const watchIdRef = useRef(null);
 
-  // تحديث حالة الاتصال وموقع السائق
-  // حفظ OneSignal Player ID عند أول تشغيل
+  // ===== تفعيل الاتصال تلقائياً عند الدخول =====
   useEffect(() => {
-    if (!user?.uid || status !== "approved") return;
-    try {
-      if (window.OneSignal) {
-        window.OneSignal.getUserId(async (playerId) => {
-          if (playerId) {
-            await setDoc(doc(db, "drivers", user.uid), {
-              oneSignalPlayerId: playerId,
-            }, { merge: true });
-            console.log("Player ID saved:", playerId);
+    if (status !== "approved" || !user?.uid) return;
+    const goOnline = async () => {
+      setOnline(true);
+      navigator.geolocation?.getCurrentPosition(async pos => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setDriverLocation(loc);
+        try {
+          await setDoc(doc(db, "drivers", user.uid), { isOnline: true, location: loc }, { merge: true });
+          // حفظ OneSignal Player ID
+          if (window.OneSignal) {
+            window.OneSignal.getUserId?.(async (playerId) => {
+              if (playerId) await setDoc(doc(db, "drivers", user.uid), { oneSignalPlayerId: playerId }, { merge: true });
+            });
           }
-        });
-      }
-    } catch (e) { console.log("OneSignal:", e); }
-  }, [user?.uid, status]);
+        } catch (e) { console.log(e); }
+      });
+    };
+    goOnline();
+    // إيقاف الاتصال عند الخروج
+    return () => {
+      if (user?.uid) setDoc(doc(db, "drivers", user.uid), { isOnline: false }, { merge: true }).catch(()=>{});
+    };
+  }, [status, user?.uid]);
 
+  // تتبع GPS مستمر
+  const startTracking = (bookingId) => {
+    if (!navigator.geolocation) return;
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setDriverLocation(loc);
+        try {
+          await updateDoc(doc(db, "bookings", bookingId), { driverCurrentLocation: loc, driverLocationUpdatedAt: serverTimestamp() });
+          await setDoc(doc(db, "drivers", user.uid), { location: loc }, { merge: true });
+        } catch (e) { console.log(e); }
+      },
+      err => console.log("GPS:", err),
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 }
+    );
+  };
+  const stopTracking = () => {
+    if (watchIdRef.current) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
+  };
+
+  // تفعيل/إيقاف الاتصال يدوياً
   const toggleOnline = async () => {
     const newStatus = !online;
     setOnline(newStatus);
-    if (user?.uid) {
-      try {
-        navigator.geolocation?.getCurrentPosition(async pos => {
-          await setDoc(doc(db, "drivers", user.uid), {
-            isOnline: newStatus,
-            location: newStatus ? { lat: pos.coords.latitude, lng: pos.coords.longitude } : null,
-          }, { merge: true });
-        }, async () => {
-          await setDoc(doc(db, "drivers", user.uid), { isOnline: newStatus }, { merge: true });
-        });
-      } catch (e) { console.log(e); }
-    }
+    try {
+      navigator.geolocation?.getCurrentPosition(async pos => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        if (newStatus) setDriverLocation(loc);
+        await setDoc(doc(db, "drivers", user.uid), { isOnline: newStatus, location: newStatus ? loc : null }, { merge: true });
+      }, async () => {
+        await setDoc(doc(db, "drivers", user.uid), { isOnline: newStatus }, { merge: true });
+      });
+    } catch (e) { console.log(e); }
   };
 
-  // الاستماع للطلبات الجديدة من Firestore
+  // الاستماع للطلبات — pending فقط (الطلبات الملغاة تختفي تلقائياً)
   useEffect(() => {
     if (!online || !user?.uid) { setBookings([]); return; }
     const q = query(collection(db, "bookings"), where("status", "==", "pending"));
     const unsub = onSnapshot(q, snap => {
-      setBookings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const now = Date.now();
+      const fresh = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(b => {
+          // فقط الطلبات الحديثة (آخر 10 دقائق)
+          const created = b.createdAt?.toMillis?.() || 0;
+          return (now - created) < 10 * 60 * 1000;
+        });
+      setBookings(fresh);
     });
     return () => unsub();
   }, [online, user?.uid]);
-
-  // بدء تتبع موقع السائق
-  const startLocationTracking = (bookingId) => {
-    if (!navigator.geolocation) return;
-    const watchId = navigator.geolocation.watchPosition(
-      async (pos) => {
-        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setDriverCurrentLocation(loc);
-        // تحديث موقع السائق في Firestore كل ثوانٍ
-        try {
-          await updateDoc(doc(db, "bookings", bookingId), {
-            driverCurrentLocation: loc,
-            driverLocationUpdatedAt: serverTimestamp(),
-          });
-          // تحديث موقع السائق في ملف drivers أيضاً
-          if (user?.uid) {
-            await setDoc(doc(db, "drivers", user.uid), { location: loc }, { merge: true });
-          }
-        } catch (e) { console.log("Location update:", e); }
-      },
-      (err) => console.log("GPS error:", err),
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 5000 }
-    );
-    locationWatchRef.current = watchId;
-  };
-
-  const stopLocationTracking = () => {
-    if (locationWatchRef.current) {
-      navigator.geolocation.clearWatch(locationWatchRef.current);
-      locationWatchRef.current = null;
-    }
-  };
 
   // قبول الطلب
   const acceptBooking = async (booking) => {
     try {
       await updateDoc(doc(db, "bookings", booking.id), {
-        status: "accepted",
-        driverId: user.uid,
-        driverInfo: {
-          name: data?.name || "السائق",
-          phone: data?.phone || "",
-          carBrand: data?.carBrand || "",
-          carModel: data?.carModel || "",
-          plateNumber: data?.plateNumber || "",
-          rating: data?.rating || null,
-          selfieUrl: data?.selfieUrl || null,
-        },
+        status: "accepted", driverId: user.uid,
+        driverInfo: { name:data?.name||"السائق", phone:data?.phone||"", carBrand:data?.carBrand||"", carModel:data?.carModel||"", plateNumber:data?.plateNumber||"", rating:data?.rating||null, selfieUrl:data?.selfieUrl||null },
         acceptedAt: serverTimestamp(),
       });
       setAcceptedBooking(booking);
       setDriverScreen("pickup");
-      setBookings(p => p.filter(b => b.id !== booking.id));
-      // ابدأ تتبع موقع السائق فوراً
-      startLocationTracking(booking.id);
-    } catch (e) { console.log("Accept error:", e); }
+      setBookings([]);
+      startTracking(booking.id);
+    } catch (e) { console.log("Accept:", e); }
   };
 
-  // رفض الطلب (إخفاؤه فقط من قائمة السائق)
-  const rejectBooking = (id) => {
-    setBookings(p => p.filter(b => b.id !== id));
+  const rejectBooking = (id) => setBookings(p => p.filter(b => b.id !== id));
+
+  const endRide = async () => {
+    stopTracking();
+    if (acceptedBooking?.id) {
+      try { await updateDoc(doc(db, "bookings", acceptedBooking.id), { status: "completed", completedAt: serverTimestamp() }); } catch(e){}
+    }
+    setAcceptedBooking(null); setDriverScreen("dashboard");
   };
 
   const handleRetry = async () => {
-    try {
-      await setDoc(doc(db, "drivers", user.uid), {
-        verificationStatus: "none", submittedAt: null, rejectionReason: null,
-      }, { merge: true });
-    } catch (e) { console.log(e); }
+    try { await setDoc(doc(db,"drivers",user.uid), { verificationStatus:"none", submittedAt:null, rejectionReason:null }, { merge:true }); } catch(e){}
   };
 
   if (loading) return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cairo',sans-serif" }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>🔄</div>
-        <div style={{ color: C.textMuted, fontSize: 14 }}>جارٍ التحقق من الحساب...</div>
-      </div>
+    <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Cairo',sans-serif" }}>
+      <div style={{ textAlign:"center" }}><div style={{ fontSize:48, marginBottom:16 }}>🔄</div><div style={{ color:C.textMuted, fontSize:14 }}>جارٍ التحقق...</div></div>
     </div>
   );
+  if (status==="none") return <DriverVerification uid={user?.uid} userEmail={user?.email} />;
+  if (status==="rejected") return <RejectedView data={data} onRetry={handleRetry} />;
+  if (status==="pending") return <PendingView onLogout={onLogout} />;
 
-  if (status === "none") return <DriverVerification uid={user?.uid} userEmail={user?.email} />;
-  if (status === "rejected") return <RejectedView data={data} onRetry={handleRetry} />;
-  if (status === "pending") return <PendingView onLogout={onLogout} />;
+  const passengerLoc = acceptedBooking ? { lat: acceptedBooking.originLat, lng: acceptedBooking.originLng } : null;
+  const destLoc = acceptedBooking ? { lat: acceptedBooking.destLat, lng: acceptedBooking.destLng } : null;
+  const distToTarget = driverLocation && (driverScreen==="pickup" ? passengerLoc : destLoc)
+    ? getDistKm(driverLocation.lat, driverLocation.lng, (driverScreen==="pickup"?passengerLoc:destLoc).lat, (driverScreen==="pickup"?passengerLoc:destLoc).lng)
+    : null;
+  const eta = distToTarget ? Math.max(1, Math.round(distToTarget / 0.5)) : null;
 
   const stats = [
-    { label: "أرباح اليوم", value: "4,550 دج", icon: "💰", color: C.green },
-    { label: "رحلات اليوم", value: "3", icon: "🚕", color: C.blue },
-    { label: "التقييم", value: data?.rating || "جديد ⭐", icon: "🏆", color: C.yellow },
-    { label: "الطلبات الآن", value: bookings.length, icon: "🔔", color: C.orange },
+    { label:"أرباح اليوم", value:"4,550 دج", icon:"💰", color:C.green },
+    { label:"رحلات اليوم", value:"3", icon:"🚕", color:C.blue },
+    { label:"التقييم", value:data?.rating||"جديد ⭐", icon:"🏆", color:C.yellow },
+    { label:"الطلبات الآن", value:bookings.length, icon:"🔔", color:C.orange },
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo',sans-serif", direction: "rtl" }}>
+    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Cairo',sans-serif", direction:"rtl" }}>
       {/* Header */}
-      <div style={{ background: C.card, padding: "48px 20px 20px", borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <div style={{ width: 52, height: 52, borderRadius: "50%", background: `linear-gradient(135deg,${C.orange},${C.orangeDark})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, border: `3px solid ${C.border}`, overflow: "hidden" }}>
-              {data?.selfieUrl ? <img src={data.selfieUrl} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "👨‍✈️"}
+      <div style={{ background:C.card, padding:"48px 20px 16px", borderBottom:`1px solid ${C.border}` }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+            <div style={{ width:48, height:48, borderRadius:"50%", background:`linear-gradient(135deg,${C.orange},${C.orangeDark})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, border:`3px solid ${C.border}`, overflow:"hidden" }}>
+              {data?.selfieUrl?<img src={data.selfieUrl} alt="av" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:"👨‍✈️"}
             </div>
             <div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>{data?.name || user?.displayName || "سائق"}</div>
-              <div style={{ fontSize: 12, color: C.textMuted }}>{data?.carBrand} {data?.carModel} {data?.carYear}</div>
-              {data?.plateNumber && <div style={{ fontSize: 11, color: C.textLight, direction: "ltr", display: "inline-block" }}>🔢 {data.plateNumber}</div>}
+              <div style={{ fontSize:16, fontWeight:800, color:C.text }}>{data?.name||user?.displayName||"سائق"}</div>
+              <div style={{ fontSize:12, color:C.textMuted }}>{data?.carBrand} {data?.carModel} {data?.carYear}</div>
+              {data?.plateNumber&&<div style={{ fontSize:11, color:C.textLight, direction:"ltr", display:"inline-block" }}>🔢 {data.plateNumber}</div>}
             </div>
           </div>
-          <div onClick={toggleOnline} style={{ width: 56, height: 30, borderRadius: 15, background: online ? C.green : C.border, position: "relative", cursor: "pointer", transition: "all 0.3s" }}>
-            <div style={{ position: "absolute", top: 3, right: online ? 3 : "auto", left: online ? "auto" : 3, width: 24, height: 24, borderRadius: "50%", background: "#fff", transition: "all 0.3s", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }} />
+          <div onClick={toggleOnline} style={{ width:56, height:30, borderRadius:15, background:online?C.green:C.border, position:"relative", cursor:"pointer", transition:"all 0.3s" }}>
+            <div style={{ position:"absolute", top:3, right:online?3:"auto", left:online?"auto":3, width:24, height:24, borderRadius:"50%", background:"#fff", transition:"all 0.3s", boxShadow:"0 2px 4px rgba(0,0,0,0.2)" }} />
           </div>
         </div>
-        {online && (
-          <div style={{ background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 12, padding: "10px 14px", fontSize: 13, color: C.green, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, display: "inline-block", animation: "pulse 2s infinite" }} />
-            🟢 متصل — تلقّي الطلبات · {bookings.length} طلب متاح
-          </div>
-        )}
+        {online&&<div style={{ background:C.greenLight, border:`1px solid ${C.green}44`, borderRadius:10, padding:"8px 14px", fontSize:13, color:C.green, fontWeight:700, display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ width:8, height:8, borderRadius:"50%", background:C.green, display:"inline-block", animation:"pulse 2s infinite" }} />
+          🟢 متصل · {bookings.length} طلب متاح
+        </div>}
       </div>
 
-      <div style={{ paddingBottom: 100 }}>
-        {tab === "home" && (
-          <>
-            <div style={{ padding: "16px 20px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              {stats.map((s, i) => (
-                <div key={i} style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: 22, marginBottom: 6 }}>{s.icon}</div>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: s.color }}>{s.value}</div>
-                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>{s.label}</div>
+      <div style={{ paddingBottom:100 }}>
+        {tab==="home" && (<>
+          <div style={{ padding:"14px 20px 0", display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            {stats.map((s,i)=>(
+              <div key={i} style={{ background:C.card, borderRadius:16, padding:16, border:`1px solid ${C.border}` }}>
+                <div style={{ fontSize:22, marginBottom:6 }}>{s.icon}</div>
+                <div style={{ fontSize:18, fontWeight:900, color:s.color }}>{s.value}</div>
+                <div style={{ fontSize:11, color:C.textMuted, marginTop:4 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* شاشة التوجه للراكب */}
+          {acceptedBooking && driverScreen==="pickup" && isLoaded && (
+            <div style={{ margin:"14px 0" }}>
+              <DriverGPSMap driverLocation={driverLocation} passengerLocation={passengerLoc} destLocation={destLoc} mode="pickup" />
+              <div style={{ margin:"10px 20px", background:C.card, borderRadius:18, padding:16, border:`2px solid ${C.orange}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                  <div style={{ fontWeight:800, fontSize:14, color:C.orange }}>🚶 في طريقك للراكب</div>
+                  {eta&&<div style={{ background:`${C.orange}22`, borderRadius:20, padding:"4px 12px", fontSize:13, color:C.orange, fontWeight:700 }}>⏱ ~{eta} دق</div>}
+                </div>
+                <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:4 }}>👤 {acceptedBooking.passengerName}</div>
+                <div style={{ fontSize:12, color:C.textMuted, marginBottom:8 }}>📍 {acceptedBooking.originText}</div>
+                {distToTarget&&<div style={{ background:`${C.green}22`, borderRadius:10, padding:"6px 12px", fontSize:13, color:C.green, fontWeight:700, marginBottom:10, display:"inline-block" }}>
+                  {distToTarget<1?`${Math.round(distToTarget*1000)} م`:`${distToTarget.toFixed(1)} كم`} متبقية
+                </div>}
+                <a href={`tel:${acceptedBooking.passengerPhone}`} style={{ display:"flex", alignItems:"center", gap:10, background:C.greenLight, border:`1px solid ${C.green}44`, borderRadius:12, padding:"10px 14px", marginBottom:10, textDecoration:"none" }}>
+                  <span style={{ fontSize:20 }}>📞</span>
+                  <div style={{ flex:1 }}><div style={{ fontSize:11, color:C.textMuted }}>رقم الراكب</div><div style={{ fontSize:15, fontWeight:900, color:C.green, direction:"ltr" }}>{acceptedBooking.passengerPhone}</div></div>
+                  <div style={{ background:C.green, borderRadius:8, padding:"5px 10px", fontSize:12, color:"#fff", fontWeight:700 }}>☎️</div>
+                </a>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={endRide} style={{ flex:1, background:C.redLight, border:`1px solid ${C.red}44`, borderRadius:10, padding:"12px", color:C.red, fontFamily:"inherit", fontWeight:700, cursor:"pointer", fontSize:13 }}>❌ إلغاء</button>
+                  <button onClick={()=>setDriverScreen("ride")} style={{ flex:2, background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:10, padding:"12px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:13 }}>✅ وصلت — بدء الرحلة</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* شاشة الرحلة الجارية */}
+          {acceptedBooking && driverScreen==="ride" && isLoaded && (
+            <div style={{ margin:"14px 0" }}>
+              <DriverGPSMap driverLocation={driverLocation} passengerLocation={passengerLoc} destLocation={destLoc} mode="ride" />
+              <div style={{ margin:"10px 20px", background:C.card, borderRadius:18, padding:16, border:`2px solid ${C.green}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                  <div style={{ fontWeight:800, fontSize:14, color:C.green }}>🚗 الرحلة جارية</div>
+                  {distToTarget&&<div style={{ background:`${C.blue}22`, borderRadius:20, padding:"4px 12px", fontSize:13, color:C.blue, fontWeight:700 }}>
+                    {distToTarget<1?`${Math.round(distToTarget*1000)} م`:`${distToTarget.toFixed(1)} كم`} للوجهة
+                  </div>}
+                </div>
+                <div style={{ fontSize:13, color:C.textMuted, marginBottom:4 }}>🏁 {acceptedBooking.destText}</div>
+                <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+                  <div style={{ flex:1, background:`${C.green}22`, borderRadius:10, padding:"8px", textAlign:"center" }}>
+                    <div style={{ fontSize:18, fontWeight:900, color:C.green }}>{acceptedBooking.price} دج</div>
+                    <div style={{ fontSize:10, color:C.textMuted }}>السعر</div>
+                  </div>
+                  <div style={{ flex:1, background:`${C.orange}22`, borderRadius:10, padding:"8px", textAlign:"center" }}>
+                    <div style={{ fontSize:18, fontWeight:900, color:C.orange }}>🟢</div>
+                    <div style={{ fontSize:10, color:C.textMuted }}>GPS نشط</div>
+                  </div>
+                </div>
+                <button onClick={endRide} style={{ width:"100%", background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:12, padding:"14px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:15 }}>🏁 إنهاء الرحلة</button>
+              </div>
+            </div>
+          )}
+
+          {/* الطلبات الجديدة */}
+          {online && bookings.length>0 && !acceptedBooking && (
+            <div style={{ padding:"14px 20px 0" }}>
+              <div style={{ fontWeight:800, fontSize:15, color:C.text, marginBottom:12 }}>🔔 طلبات جديدة ({bookings.length})</div>
+              {bookings.map(r=>(
+                <div key={r.id} style={{ background:C.card, borderRadius:18, padding:16, marginBottom:10, border:`1px solid ${C.orange}44` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:14, color:C.text }}>{r.passengerName||"راكب"}</div>
+                      <div style={{ fontSize:12, color:C.textMuted, marginTop:2 }}>📍 {r.originText?.substring(0,30)}...</div>
+                      <div style={{ fontSize:12, color:C.textMuted }}>🏁 {r.destText?.substring(0,30)}...</div>
+                      <div style={{ fontSize:11, color:r.price>=calcPrice(r.distanceKm)?C.green:C.red, marginTop:4 }}>
+                        المعيار: {calcPrice(r.distanceKm)} دج {r.price>=calcPrice(r.distanceKm)?"✅":"⚠️"}
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"left" }}>
+                      <div style={{ fontSize:22, fontWeight:900, color:C.orange }}>{r.price} دج</div>
+                      <div style={{ fontSize:11, color:C.textMuted }}>{r.distanceKm?.toFixed(1)} كم</div>
+                    </div>
+                  </div>
+                  <a href={`tel:${r.passengerPhone}`} style={{ display:"flex", alignItems:"center", gap:10, background:C.greenLight, border:`1px solid ${C.green}44`, borderRadius:12, padding:"10px 14px", marginBottom:10, textDecoration:"none" }}>
+                    <span style={{ fontSize:20 }}>📞</span>
+                    <div style={{ flex:1 }}><div style={{ fontSize:11, color:C.textMuted }}>رقم الراكب</div><div style={{ fontSize:15, fontWeight:900, color:C.green, direction:"ltr" }}>{r.passengerPhone}</div></div>
+                    <div style={{ background:C.green, borderRadius:8, padding:"5px 10px", fontSize:12, color:"#fff", fontWeight:700 }}>☎️</div>
+                  </a>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button onClick={()=>rejectBooking(r.id)} style={{ flex:1, background:C.redLight, border:`1px solid ${C.red}44`, borderRadius:10, padding:"12px", color:C.red, fontFamily:"inherit", fontWeight:700, cursor:"pointer", fontSize:14 }}>❌ رفض</button>
+                    <button onClick={()=>acceptBooking(r)} style={{ flex:2, background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:10, padding:"12px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:14 }}>✅ قبول {r.price} دج</button>
+                  </div>
                 </div>
               ))}
             </div>
+          )}
 
-            {/* شاشة التوجه نحو الراكب */}
-            {acceptedBooking && driverScreen === "pickup" && (
-              <DriverTrackingScreen
-                booking={acceptedBooking}
-                driverLocation={driverCurrentLocation}
-                onStartRide={() => setDriverScreen("ride")}
-                onEndRide={() => {
-                  stopLocationTracking();
-                  setAcceptedBooking(null);
-                  setDriverScreen("dashboard");
-                }}
-              />
-            )}
-            {acceptedBooking && driverScreen === "ride" && (
-              <DriverRideScreen
-                booking={acceptedBooking}
-                driverLocation={driverCurrentLocation}
-                onEndRide={() => {
-                  stopLocationTracking();
-                  setAcceptedBooking(null);
-                  setDriverScreen("dashboard");
-                }}
-              />
-            )}
-
-            {/* الطلبات الجديدة من Firestore */}
-            {online && bookings.length > 0 && !acceptedBooking && (
-              <div style={{ padding: "16px 20px 0" }}>
-                <div style={{ fontWeight: 800, fontSize: 15, color: C.text, marginBottom: 12 }}>
-                  🔔 طلبات جديدة ({bookings.length})
-                </div>
-                {bookings.map(r => (
-                  <div key={r.id} style={{ background: C.card, borderRadius: 18, padding: 16, marginBottom: 10, border: `1px solid ${C.orange}44` }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>{r.passengerName || "راكب"}</div>
-                        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                          📍 {r.originText?.substring(0, 25)}...
-                        </div>
-                        <div style={{ fontSize: 12, color: C.textMuted }}>
-                          🏁 {r.destText?.substring(0, 25)}...
-                        </div>
-                        <div style={{ fontSize: 11, color: r.price >= calcPrice(r.distanceKm) ? C.green : C.red, marginTop: 4 }}>
-                          المعيار: {calcPrice(r.distanceKm)} دج {r.price >= calcPrice(r.distanceKm) ? "✅" : "⚠️ أقل من المعيار"}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "left" }}>
-                        <div style={{ fontSize: 22, fontWeight: 900, color: C.orange }}>{r.price} دج</div>
-                        <div style={{ fontSize: 11, color: C.textMuted }}>{r.distanceKm?.toFixed(1)} كم</div>
-                      </div>
-                    </div>
-                    <a href={`tel:${r.passengerPhone}`} style={{ display: "flex", alignItems: "center", gap: 10, background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 12, padding: "10px 14px", marginBottom: 10, textDecoration: "none" }}>
-                      <span style={{ fontSize: 20 }}>📞</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 11, color: C.textMuted }}>رقم هاتف الراكب</div>
-                        <div style={{ fontSize: 15, fontWeight: 900, color: C.green, direction: "ltr" }}>{r.passengerPhone}</div>
-                      </div>
-                      <div style={{ background: C.green, borderRadius: 8, padding: "5px 10px", fontSize: 12, color: "#fff", fontWeight: 700 }}>☎️ اتصل</div>
-                    </a>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => rejectBooking(r.id)} style={{ flex: 1, background: C.redLight, border: `1px solid ${C.red}44`, borderRadius: 10, padding: "12px", color: C.red, fontFamily: "inherit", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>❌ رفض</button>
-                      <button onClick={() => acceptBooking(r)} style={{ flex: 2, background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 10, padding: "12px", color: "#fff", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>✅ قبول {r.price} دج</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {online && bookings.length === 0 && !acceptedBooking && (
-              <div style={{ margin: "20px", background: C.card, borderRadius: 20, padding: 32, border: `1px solid ${C.border}`, textAlign: "center" }}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>🕐</div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: C.text, marginBottom: 8 }}>لا توجد طلبات حالياً</div>
-                <div style={{ fontSize: 13, color: C.textMuted }}>انتظر قليلاً... ستصلك طلبات قريباً</div>
-              </div>
-            )}
-
-            {!online && (
-              <div style={{ margin: "16px 20px", background: C.card, borderRadius: 20, padding: 32, border: `1px solid ${C.border}`, textAlign: "center" }}>
-                <div style={{ fontSize: 56, marginBottom: 16 }}>😴</div>
-                <div style={{ fontWeight: 700, fontSize: 18, color: C.text, marginBottom: 8 }}>أنت غير متصل</div>
-                <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 20 }}>فعّل الاتصال لاستقبال طلبات الركاب</div>
-                <button onClick={toggleOnline} style={{ background: `linear-gradient(135deg,${C.green},${C.greenDark})`, border: "none", borderRadius: 14, padding: "14px 40px", color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>🟢 تفعيل الاتصال</button>
-              </div>
-            )}
-          </>
-        )}
-
-        {tab === "profile" && (
-          <div style={{ padding: "20px 20px 100px" }}>
-            <div style={{ background: C.card, borderRadius: 20, padding: 28, border: `1px solid ${C.border}`, textAlign: "center", marginBottom: 16 }}>
-              <div style={{ width: 80, height: 80, borderRadius: "50%", background: `linear-gradient(135deg,${C.orange},${C.orangeDark})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, margin: "0 auto 16px", border: `4px solid ${C.border}`, overflow: "hidden" }}>
-                {data?.selfieUrl ? <img src={data.selfieUrl} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "👨‍✈️"}
-              </div>
-              <div style={{ fontWeight: 900, fontSize: 20, color: C.text, marginBottom: 4 }}>{data?.name || "سائق"}</div>
-              <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>{data?.email || user?.email}</div>
-              <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>🚗 {data?.carBrand} {data?.carModel} {data?.carYear} · {data?.carColor}</div>
-              <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>📍 {data?.wilaya}</div>
-              {data?.plateNumber && <div style={{ fontSize: 13, color: C.textLight, direction: "ltr", marginBottom: 12 }}>🔢 {data.plateNumber}</div>}
-              <div style={{ display: "inline-block", background: C.greenLight, color: C.green, padding: "6px 18px", borderRadius: 20, fontSize: 13, fontWeight: 800, border: `1px solid ${C.green}44` }}>✅ سائق معتمد</div>
+          {online && bookings.length===0 && !acceptedBooking && (
+            <div style={{ margin:"16px 20px", background:C.card, borderRadius:20, padding:32, border:`1px solid ${C.border}`, textAlign:"center" }}>
+              <div style={{ fontSize:48, marginBottom:12 }}>🕐</div>
+              <div style={{ fontWeight:700, fontSize:16, color:C.text, marginBottom:8 }}>لا توجد طلبات حالياً</div>
+              <div style={{ fontSize:13, color:C.textMuted }}>انتظر... ستصلك طلبات قريباً</div>
             </div>
-            <button onClick={onLogout} style={{ width: "100%", background: C.redLight, border: `1px solid ${C.red}44`, borderRadius: 16, padding: 16, color: C.red, fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>🚪 تسجيل الخروج</button>
+          )}
+
+          {!online && (
+            <div style={{ margin:"16px 20px", background:C.card, borderRadius:20, padding:32, border:`1px solid ${C.border}`, textAlign:"center" }}>
+              <div style={{ fontSize:56, marginBottom:16 }}>😴</div>
+              <div style={{ fontWeight:700, fontSize:18, color:C.text, marginBottom:8 }}>أنت غير متصل</div>
+              <div style={{ fontSize:13, color:C.textMuted, marginBottom:20 }}>فعّل الاتصال لاستقبال الطلبات</div>
+              <button onClick={toggleOnline} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:14, padding:"14px 40px", color:"#fff", fontFamily:"inherit", fontWeight:800, fontSize:15, cursor:"pointer" }}>🟢 تفعيل الاتصال</button>
+            </div>
+          )}
+        </>)}
+
+        {tab==="profile" && (
+          <div style={{ padding:"20px 20px 100px" }}>
+            <div style={{ background:C.card, borderRadius:20, padding:28, border:`1px solid ${C.border}`, textAlign:"center", marginBottom:16 }}>
+              <div style={{ width:80, height:80, borderRadius:"50%", background:`linear-gradient(135deg,${C.orange},${C.orangeDark})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, margin:"0 auto 16px", border:`4px solid ${C.border}`, overflow:"hidden" }}>
+                {data?.selfieUrl?<img src={data.selfieUrl} alt="av" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:"👨‍✈️"}
+              </div>
+              <div style={{ fontWeight:900, fontSize:20, color:C.text, marginBottom:4 }}>{data?.name||"سائق"}</div>
+              <div style={{ fontSize:13, color:C.textMuted, marginBottom:4 }}>{data?.email||user?.email}</div>
+              <div style={{ fontSize:13, color:C.textMuted, marginBottom:4 }}>🚗 {data?.carBrand} {data?.carModel} {data?.carYear} · {data?.carColor}</div>
+              <div style={{ fontSize:13, color:C.textMuted, marginBottom:4 }}>📍 {data?.wilaya}</div>
+              {data?.plateNumber&&<div style={{ fontSize:13, color:C.textLight, direction:"ltr", marginBottom:12 }}>🔢 {data.plateNumber}</div>}
+              <div style={{ display:"inline-block", background:C.greenLight, color:C.green, padding:"6px 18px", borderRadius:20, fontSize:13, fontWeight:800, border:`1px solid ${C.green}44` }}>✅ سائق معتمد</div>
+            </div>
+            <button onClick={onLogout} style={{ width:"100%", background:C.redLight, border:`1px solid ${C.red}44`, borderRadius:16, padding:16, color:C.red, fontFamily:"inherit", fontWeight:800, fontSize:15, cursor:"pointer" }}>🚪 تسجيل الخروج</button>
           </div>
         )}
       </div>
 
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: C.card, borderTop: `1px solid ${C.border}`, display: "flex", padding: "8px 0 20px", zIndex: 100 }}>
-        {[{ id: "home", label: "الرئيسية", icon: "🏠" }, { id: "profile", label: "حسابي", icon: "👤" }].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "8px 0" }}>
-            <div style={{ fontSize: 22, opacity: tab === t.id ? 1 : 0.4 }}>{t.icon}</div>
-            <div style={{ fontSize: 10, color: tab === t.id ? C.green : C.textLight, fontWeight: tab === t.id ? 700 : 400 }}>{t.label}</div>
+      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:430, background:C.card, borderTop:`1px solid ${C.border}`, display:"flex", padding:"8px 0 20px", zIndex:100 }}>
+        {[{id:"home",label:"الرئيسية",icon:"🏠"},{id:"profile",label:"حسابي",icon:"👤"}].map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{ flex:1, background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:4, padding:"8px 0" }}>
+            <div style={{ fontSize:22, opacity:tab===t.id?1:0.4 }}>{t.icon}</div>
+            <div style={{ fontSize:10, color:tab===t.id?C.green:C.textLight, fontWeight:tab===t.id?700:400 }}>{t.label}</div>
           </button>
         ))}
       </div>
