@@ -21,6 +21,12 @@ const getDistanceKm = (lat1, lng1, lat2, lng2) => {
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 };
 
+// فتح Google Maps للملاحة
+const openNavigation = (destLat, destLng) => {
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}&travelmode=driving&dir_action=navigate`;
+  window.open(url, "_blank");
+};
+
 const calcPrice = (km, multiplier=1.0) => {
   if (!km||km<=0) return MIN_PRICE;
   const price = Math.round((BASE_PRICE+km*PRICE_PER_KM)*multiplier);
@@ -678,6 +684,14 @@ function PassengerApp({ onLogout, user }) {
               <div style={{ fontWeight:800, color:"#fff" }}>{booking?.price} دج</div>
             </div>
           </div>
+          {/* زر تتبع مسار الرحلة للراكب */}
+          {destPlace && (
+            <button
+              onClick={() => { const d=getLatLng(destPlace); openNavigation(d.lat, d.lng); }}
+              style={{ width:"100%", background:`linear-gradient(135deg,#1a73e8,#0d47a1)`, border:"none", borderRadius:14, padding:14, color:"#fff", fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer", marginBottom:8, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+              <span style={{ fontSize:20 }}>🗺️</span> تتبع مسار الرحلة — Google Maps
+            </button>
+          )}
           <button onClick={()=>setDone(true)} style={{ width:"100%", background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:14, padding:16, color:"#fff", fontFamily:"inherit", fontWeight:800, fontSize:16, cursor:"pointer" }}>🏁 وصلت</button>
         </div>
       </div>
