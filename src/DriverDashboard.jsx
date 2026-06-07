@@ -30,13 +30,6 @@ const getDistKm = (lat1, lng1, lat2, lng2) => {
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 };
 
-// فتح Google Maps للملاحة
-const openNavigation = (destLat, destLng, label = "") => {
-  // يفتح Google Maps مع أفضل مسار وأقل زحمة
-  const url = `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}&travelmode=driving&dir_action=navigate`;
-  window.open(url, "_blank");
-};
-
 const STEPS = [
   { id: "info", label: "معلوماتك", icon: "👤" },
   { id: "vehicle", label: "السيارة", icon: "🚗" },
@@ -556,15 +549,9 @@ export default function DriverDashboard({ user, onLogout }) {
                   <div style={{ flex:1 }}><div style={{ fontSize:11, color:C.textMuted }}>رقم الراكب</div><div style={{ fontSize:15, fontWeight:900, color:C.green, direction:"ltr" }}>{acceptedBooking.passengerPhone}</div></div>
                   <div style={{ background:C.green, borderRadius:8, padding:"5px 10px", fontSize:12, color:"#fff", fontWeight:700 }}>☎️</div>
                 </a>
-                {/* زر انطلق — يفتح Google Maps للملاحة نحو الراكب */}
-                <button
-                  onClick={() => passengerLoc && openNavigation(passengerLoc.lat, passengerLoc.lng, acceptedBooking.passengerName)}
-                  style={{ width:"100%", background:`linear-gradient(135deg,#1a73e8,#0d47a1)`, border:"none", borderRadius:10, padding:"13px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:14, marginBottom:8, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-                  <span style={{ fontSize:20 }}>🗺️</span> انطلق — افتح Google Maps
-                </button>
                 <div style={{ display:"flex", gap:8 }}>
                   <button onClick={endRide} style={{ flex:1, background:C.redLight, border:`1px solid ${C.red}44`, borderRadius:10, padding:"12px", color:C.red, fontFamily:"inherit", fontWeight:700, cursor:"pointer", fontSize:13 }}>❌ إلغاء</button>
-                  <button onClick={()=>setDriverScreen("ride")} style={{ flex:2, background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:10, padding:"12px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:13 }}>✅ وصلت الراكب</button>
+                  <button onClick={()=>setDriverScreen("ride")} style={{ flex:2, background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:10, padding:"12px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:13 }}>✅ وصلت — بدء الرحلة</button>
                 </div>
               </div>
             </div>
@@ -592,13 +579,7 @@ export default function DriverDashboard({ user, onLogout }) {
                     <div style={{ fontSize:10, color:C.textMuted }}>GPS نشط</div>
                   </div>
                 </div>
-                {/* زر تتبع مسار الرحلة — يفتح Google Maps للوجهة */}
-        <button
-          onClick={() => destLoc && openNavigation(destLoc.lat, destLoc.lng, acceptedBooking.destText)}
-          style={{ width:"100%", background:`linear-gradient(135deg,#1a73e8,#0d47a1)`, border:"none", borderRadius:10, padding:"13px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:14, marginBottom:8, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-          <span style={{ fontSize:20 }}>🗺️</span> تتبع مسار الرحلة — Google Maps
-        </button>
-        <button onClick={endRide} style={{ width:"100%", background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:12, padding:"14px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:15 }}>🏁 إنهاء الرحلة</button>
+                <button onClick={endRide} style={{ width:"100%", background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:12, padding:"14px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:15 }}>🏁 إنهاء الرحلة</button>
               </div>
             </div>
           )}
