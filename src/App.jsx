@@ -132,22 +132,28 @@ function OTPAuth({ role, onSuccess, onBack }) {
     return ()=>clearInterval(t);
   }, [resendTimer]);
 
-  const setupRecaptcha = () => {
-    if (!window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-        size: "invisible",
-        callback: () => {},
-        "expired-callback": () => { window.recaptchaVerifier = null; },
-      });
-    }
-  };
-
   const sendOTP = async () => {
     const digits = phone.replace(/\D/g,"");
     if (digits.length<9) { setError("أدخل رقم هاتف صحيح (9 أرقام على الأقل)"); return; }
     setLoading(true); setError("");
     try {
-      setupRecaptcha();
+      // تنظيف القديم
+      if (window.recaptchaVerifier) {
+        try { window.recaptchaVerifier.clear(); } catch(x) {}
+        window.recaptchaVerifier = null;
+      }
+      // إنشاء reCAPTCHA جديد
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "normal",
+        callback: async () => {
+          // تم التحقق — أرسل OTP
+        },
+        "expired-callback": () => {
+          setError("انتهت صلاحية التحقق — أعد المحاولة");
+          if (window.recaptchaVerifier) { try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier = null; }
+        },
+      });
+      await window.recaptchaVerifier.render();
       const fullPhone = `+213${digits.replace(/^0/,"")}`;
       const result = await signInWithPhoneNumber(auth, fullPhone, window.recaptchaVerifier);
       setConfirmResult(result);
@@ -155,15 +161,18 @@ function OTPAuth({ role, onSuccess, onBack }) {
       setResendTimer(60);
       otpRefs[0].current?.focus();
     } catch(e) {
-      console.log("OTP Error:", e);
+      console.log("OTP Error:", e.code, e.message);
       if (window.recaptchaVerifier) { try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier = null; }
       const msgs = {
         "auth/invalid-phone-number": "رقم الهاتف غير صحيح",
-        "auth/too-many-requests": "طلبات كثيرة — انتظر قليلاً",
+        "auth/too-many-requests": "طلبات كثيرة — انتظر قليلاً ثم أعد المحاولة",
         "auth/captcha-check-failed": "خطأ في التحقق — أعد المحاولة",
-        "auth/network-request-failed": "تحقق من اتصالك",
+        "auth/network-request-failed": "تحقق من اتصالك بالإنترنت",
+        "auth/quota-exceeded": "تم تجاوز الحد اليومي — حاول غداً",
+        "auth/missing-phone-number": "أدخل رقم الهاتف",
+        "auth/invalid-app-credential": "خطأ في الإعداد — تحقق من Firebase",
       };
-      setError(msgs[e.code] || "خطأ في إرسال الرمز — حاول مرة أخرى");
+      setError(msgs[e.code] || `خطأ: ${e.code||e.message}`);
     }
     setLoading(false);
   };
@@ -252,7 +261,8 @@ function OTPAuth({ role, onSuccess, onBack }) {
         <div style={{ height:"100%", background:accent, width:step==="phone"?"33%":step==="otp"?"66%":"100%", transition:"width 0.4s ease", borderRadius:"0 4px 4px 0" }} />
       </div>
 
-      <div id="recaptcha-container" ref={recaptchaRef} style={{ position:"absolute" }} />
+      {/* reCAPTCHA يظهر هنا */}
+    <div id="recaptcha-container" style={{ display:"flex", justifyContent:"center", marginBottom:16 }} />
 
       <div style={{ padding:"32px 20px" }}>
 
