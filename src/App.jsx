@@ -17,6 +17,165 @@ const PRICE_PER_KM = 30;
 const BASE_PRICE = 40;
 const MIN_PRICE = 100;
 
+// ===== PASSWORD RESET =====
+const REPORT_REASONS_DRIVER = {
+  ar: ["سلوك غير لائق", "قيادة متهورة", "رفض الرحلة بعد القبول", "طلب مبالغ في السعر", "تحرش أو إزعاج", "سرقة أو احتيال", "أخرى"],
+  fr: ["Comportement inapproprié", "Conduite dangereuse", "Refus de trajet", "Prix excessif", "Harcèlement", "Vol ou escroquerie", "Autre"],
+  en: ["Inappropriate behavior", "Dangerous driving", "Trip refusal", "Excessive price", "Harassment", "Theft or fraud", "Other"],
+};
+
+const REPORT_REASONS_PASSENGER = {
+  ar: ["سلوك غير لائق", "إلغاء متكرر", "معلومات مزيفة", "تحرش أو إزعاج", "رفض الدفع", "أخرى"],
+  fr: ["Comportement inapproprié", "Annulations répétées", "Fausses informations", "Harcèlement", "Refus de paiement", "Autre"],
+  en: ["Inappropriate behavior", "Repeated cancellations", "Fake information", "Harassment", "Payment refusal", "Other"],
+};
+
+// ===== REPORT MODAL =====
+function ReportModal({ targetId, targetName, targetType, reporterId, reporterName, onClose, lang }) {
+  const isRTL = lang === "ar";
+  const reasons = targetType === "driver" ? REPORT_REASONS_DRIVER[lang] : REPORT_REASONS_PASSENGER[lang];
+  const [selected, setSelected] = useState("");
+  const [custom, setCustom] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      await addDoc(collection(db, "reports"), {
+        targetId, targetName, targetType,
+        reporterId, reporterName,
+        reason: selected === (lang==="ar"?"أخرى":lang==="fr"?"Autre":"Other") ? custom : selected,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+      setDone(true);
+    } catch(e) { console.log(e); }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.65)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:2000, backdropFilter:"blur(4px)" }}>
+      <div style={{ background:"#fff", borderRadius:"24px 24px 0 0", padding:"28px 24px 40px", width:"100%", maxWidth:430, fontFamily:"'Cairo',sans-serif", direction:isRTL?"rtl":"ltr" }}>
+        {done ? (
+          <div style={{ textAlign:"center", padding:"20px 0" }}>
+            <div style={{ fontSize:56, marginBottom:12 }}>✅</div>
+            <div style={{ fontWeight:900, fontSize:20, color:"#1a1a2e", marginBottom:8 }}>
+              {lang==="ar"?"تم إرسال التبليغ":lang==="fr"?"Signalement envoyé":"Report submitted"}
+            </div>
+            <div style={{ fontSize:13, color:"#64748b", marginBottom:20 }}>
+              {lang==="ar"?"سيتم مراجعته من قبل فريق الإدارة":lang==="fr"?"Il sera examiné par l'équipe":"It will be reviewed by our team"}
+            </div>
+            <button onClick={onClose} style={{ background:"linear-gradient(135deg,#00b37e,#007a55)", border:"none", borderRadius:14, padding:"12px 32px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:15 }}>
+              {lang==="ar"?"إغلاق":lang==="fr"?"Fermer":"Close"}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div style={{ textAlign:"center", marginBottom:20 }}>
+              <div style={{ fontSize:40, marginBottom:8 }}>🚨</div>
+              <div style={{ fontWeight:900, fontSize:18, color:"#1a1a2e" }}>
+                {lang==="ar"?`تبليغ عن ${targetName}`:lang==="fr"?`Signaler ${targetName}`:`Report ${targetName}`}
+              </div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+              {reasons.map((r,i) => (
+                <div key={i} onClick={()=>setSelected(r)}
+                  style={{ padding:"12px 16px", borderRadius:12, border:`2px solid ${selected===r?"#ef4444":"#e8e3db"}`, background:selected===r?"#fef2f2":"#f7f3ee", cursor:"pointer", fontSize:14, color:selected===r?"#ef4444":"#1a1a2e", fontWeight:selected===r?700:500, display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ width:18, height:18, borderRadius:"50%", border:`2px solid ${selected===r?"#ef4444":"#94a3b8"}`, background:selected===r?"#ef4444":"transparent", flexShrink:0 }} />
+                  {r}
+                </div>
+              ))}
+            </div>
+            {selected===(lang==="ar"?"أخرى":lang==="fr"?"Autre":"Other") && (
+              <textarea value={custom} onChange={e=>setCustom(e.target.value)}
+                placeholder={lang==="ar"?"اكتب سبب التبليغ...":lang==="fr"?"Décrivez le problème...":"Describe the issue..."}
+                rows={3} style={{ width:"100%", background:"#f7f3ee", border:"1px solid #e8e3db", borderRadius:12, padding:"12px 16px", fontFamily:"inherit", fontSize:14, color:"#1a1a2e", outline:"none", resize:"none", direction:isRTL?"rtl":"ltr", marginBottom:12 }} />
+            )}
+            <div style={{ display:"flex", gap:10, marginTop:8 }}>
+              <button onClick={onClose} style={{ flex:1, background:"#f7f3ee", border:"1px solid #e8e3db", borderRadius:14, padding:14, color:"#64748b", fontFamily:"inherit", fontWeight:600, cursor:"pointer" }}>
+                {lang==="ar"?"إلغاء":lang==="fr"?"Annuler":"Cancel"}
+              </button>
+              <button onClick={handleSubmit} disabled={!selected||saving||(selected===(lang==="ar"?"أخرى":lang==="fr"?"Autre":"Other")&&!custom.trim())}
+                style={{ flex:2, background:selected?"linear-gradient(135deg,#ef4444,#dc2626)":"#e2ddd8", border:"none", borderRadius:14, padding:14, color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:selected?"pointer":"default", fontSize:15 }}>
+                {saving?"...":(lang==="ar"?"🚨 إرسال التبليغ":lang==="fr"?"🚨 Signaler":"🚨 Report")}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===== PASSWORD RESET MODAL =====
+function PasswordResetModal({ onClose, lang }) {
+  const isRTL = lang === "ar";
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleReset = async () => {
+    if (!email) { setError(lang==="ar"?"أدخل بريدك الإلكتروني":"Saisissez votre email"); return; }
+    setLoading(true); setError("");
+    try {
+      const { sendPasswordResetEmail } = await import("firebase/auth");
+      await sendPasswordResetEmail(auth, email);
+      setSent(true);
+    } catch(e) {
+      setError(lang==="ar"?"البريد غير موجود — تحقق من الكتابة":"Email introuvable");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000, backdropFilter:"blur(4px)", padding:20 }}>
+      <div style={{ background:"#fff", borderRadius:24, padding:28, width:"100%", maxWidth:380, fontFamily:"'Cairo',sans-serif", direction:isRTL?"rtl":"ltr" }}>
+        {sent ? (
+          <div style={{ textAlign:"center", padding:"10px 0" }}>
+            <div style={{ fontSize:56, marginBottom:12 }}>📧</div>
+            <div style={{ fontWeight:900, fontSize:18, color:"#1a1a2e", marginBottom:8 }}>
+              {lang==="ar"?"تم إرسال رابط الاسترجاع!":lang==="fr"?"Lien envoyé!":"Reset link sent!"}
+            </div>
+            <div style={{ fontSize:13, color:"#64748b", marginBottom:20, lineHeight:1.6 }}>
+              {lang==="ar"?"تحقق من بريدك الإلكتروني واضغط على الرابط لإعادة تعيين كلمة المرور":lang==="fr"?"Vérifiez votre email et cliquez sur le lien":"Check your email and click the link to reset your password"}
+            </div>
+            <button onClick={onClose} style={{ background:"linear-gradient(135deg,#00b37e,#007a55)", border:"none", borderRadius:14, padding:"12px 32px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:15 }}>
+              {lang==="ar"?"موافق":lang==="fr"?"OK":"OK"}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div style={{ textAlign:"center", marginBottom:20 }}>
+              <div style={{ fontSize:48, marginBottom:8 }}>🔐</div>
+              <div style={{ fontWeight:900, fontSize:18, color:"#1a1a2e" }}>
+                {lang==="ar"?"نسيت كلمة المرور؟":lang==="fr"?"Mot de passe oublié?":"Forgot password?"}
+              </div>
+              <div style={{ fontSize:13, color:"#64748b", marginTop:6 }}>
+                {lang==="ar"?"أدخل بريدك وسنرسل لك رابط الاسترجاع":lang==="fr"?"Entrez votre email pour recevoir un lien":"Enter your email to receive a reset link"}
+              </div>
+            </div>
+            <input value={email} onChange={e=>setEmail(e.target.value)} placeholder={lang==="ar"?"البريد الإلكتروني":"Email"} type="email"
+              style={{ width:"100%", background:"#f7f3ee", border:"1px solid #e8e3db", borderRadius:14, padding:"14px 16px", fontFamily:"inherit", fontSize:14, color:"#1a1a2e", outline:"none", direction:"ltr", textAlign:"left", marginBottom:12 }} />
+            {error && <div style={{ background:"#fef2f2", borderRadius:12, padding:"10px 14px", fontSize:13, color:"#ef4444", marginBottom:12 }}>{error}</div>}
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={onClose} style={{ flex:1, background:"#f7f3ee", border:"1px solid #e8e3db", borderRadius:14, padding:14, color:"#64748b", fontFamily:"inherit", fontWeight:600, cursor:"pointer" }}>
+                {lang==="ar"?"إلغاء":lang==="fr"?"Annuler":"Cancel"}
+              </button>
+              <button onClick={handleReset} disabled={loading}
+                style={{ flex:2, background:`linear-gradient(135deg,#3b82f6,#1d4ed8)`, border:"none", borderRadius:14, padding:14, color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer", fontSize:14, opacity:loading?0.7:1 }}>
+                {loading?"...":(lang==="ar"?"📧 إرسال الرابط":lang==="fr"?"📧 Envoyer":"📧 Send link")}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ===== TRANSLATIONS =====
 const T = {
   ar: {
@@ -236,6 +395,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showReset, setShowReset] = useState(false);
   const isPassenger = role === "passenger";
   const accent = isPassenger ? C.green : C.orange;
   const accentDark = isPassenger ? C.greenDark : "#ea580c";
@@ -356,7 +516,13 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
             style={{ background:`linear-gradient(135deg,${accent},${accentDark})`, border:"none", borderRadius:16, padding:16, color:"#fff", fontFamily:"inherit", fontWeight:800, fontSize:16, cursor:"pointer", opacity:loading?0.7:1, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
             {loading ? <><span style={{ width:18,height:18,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite" }} />{t.loading}</> : (mode==="register"?t.createAccount:t.signIn)}
           </button>
+          {mode==="login" && (
+            <button onClick={()=>setShowReset(true)} style={{ background:"none", border:"none", color:C.blue, fontFamily:"inherit", fontSize:13, cursor:"pointer", fontWeight:600, textAlign:"center", marginTop:4 }}>
+              {lang==="ar"?"🔐 نسيت كلمة المرور؟":lang==="fr"?"🔐 Mot de passe oublié?":"🔐 Forgot password?"}
+            </button>
+          )}
         </div>
+        {showReset && <PasswordResetModal onClose={()=>setShowReset(false)} lang={lang} />}
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
@@ -548,6 +714,8 @@ function PassengerApp({ onLogout, user, lang }) {
   const [passengerGPS, setPassengerGPS] = useState(null);
   const [passengerData, setPassengerData] = useState(null);
   const [fcmToast, setFcmToast] = useState(null);
+  const [showReport, setShowReport] = useState(false);
+  const [showReset, setShowReset] = useState(false);
   const originRef = useRef(null); const destRef = useRef(null);
 
   const multiplier = RIDE_MULTIPLIERS[rideType]||1.0;
@@ -766,7 +934,13 @@ function PassengerApp({ onLogout, user, lang }) {
           <button onClick={()=>{setElapsed(0);setScreen("ride");}} style={{ flex:2, background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:12, padding:14, color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer" }}>{t.trackTrip}</button>
         </div>
       </div>
+      {showReport && selectedDriver && (
+        <ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />
+      )}
       <SOSButton passengerName={passengerName} bookingId={bookingId} />
+      <button onClick={()=>setShowReport(true)} style={{ position:"fixed", bottom:100, right:20, width:56, height:56, borderRadius:"50%", background:"#f97316", border:"none", color:"#fff", cursor:"pointer", fontSize:11, fontWeight:900, boxShadow:"0 4px 20px rgba(249,115,22,0.5)", zIndex:500, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1, fontFamily:"inherit" }}>
+        <span style={{ fontSize:18 }}>🚨</span><span style={{ fontSize:9 }}>{lang==="ar"?"بلّغ":lang==="fr"?"Sig.":"Rep."}</span>
+      </button>
     </div>
   );
 
@@ -800,7 +974,13 @@ function PassengerApp({ onLogout, user, lang }) {
           </button>}
           <button onClick={finishRide} style={{ width:"100%", background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:14, padding:14, color:"#fff", fontFamily:"inherit", fontWeight:800, fontSize:16, cursor:"pointer" }}>{t.arrived}</button>
         </div>
+        {showReport && selectedDriver && (
+          <ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />
+        )}
         <SOSButton passengerName={passengerName} bookingId={bookingId} />
+        <button onClick={()=>setShowReport(true)} style={{ position:"fixed", bottom:165, left:20, width:52, height:52, borderRadius:"50%", background:"#f97316", border:"none", color:"#fff", cursor:"pointer", fontSize:10, fontWeight:900, boxShadow:"0 4px 16px rgba(249,115,22,0.5)", zIndex:500, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1, fontFamily:"inherit" }}>
+          <span style={{ fontSize:16 }}>🚨</span><span style={{ fontSize:8 }}>{lang==="ar"?"بلّغ":lang==="fr"?"Sig.":"Rep."}</span>
+        </button>
       </div>
     );
   }
