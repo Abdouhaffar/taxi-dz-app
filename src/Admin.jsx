@@ -160,6 +160,7 @@ function Sidebar({ tab, setTab, admin, onLogout, counts }) {
     { id: "passengers", icon: "👥", label: "الركاب" },
     ...(isSuperAdmin ? [{ id: "admins", icon: "🛡️", label: "الأدمنات", badge: counts.pendingAdmins }] : []),
     { id: "reports", icon: "📈", label: "التقارير" },
+    { id: "complaints", icon: "🚨", label: "التبليغات", badge: counts.pendingReports },
     { id: "settings", icon: "⚙️", label: "الإعدادات" },
   ];
 
@@ -764,6 +765,122 @@ function SettingsPanel({ admin }) {
   );
 }
 
+// ===== COMPLAINTS PANEL =====
+function ComplaintsPanel({ reports, drivers, passengers, isSuperAdmin }) {
+  const [filter, setFilter] = useState("pending");
+  const [loading, setLoading] = useState(false);
+
+  const filtered = reports.filter(r => filter === "all" || r.status === filter);
+
+  const resolveReport = async (id) => {
+    try { await updateDoc(doc(db, "reports", id), { status: "resolved", resolvedAt: serverTimestamp() }); } catch(e) { console.log(e); }
+  };
+
+  const dismissReport = async (id) => {
+    try { await updateDoc(doc(db, "reports", id), { status: "dismissed", dismissedAt: serverTimestamp() }); } catch(e) { console.log(e); }
+  };
+
+  const deleteUser = async (targetId, targetType) => {
+    if (!window.confirm(`حذف هذا ${targetType === "driver" ? "السائق" : "الراكب"} نهائياً؟`)) return;
+    setLoading(true);
+    try {
+      await deleteDoc(doc(db, targetType === "driver" ? "drivers" : "passengers", targetId));
+      // حذف كل التبليغات المرتبطة
+      const relatedReports = reports.filter(r => r.targetId === targetId);
+      for (const r of relatedReports) await deleteDoc(doc(db, "reports", r.id));
+    } catch(e) { console.log(e); }
+    setLoading(false);
+  };
+
+  // إحصاء التبليغات لكل مستخدم
+  const reportCounts = {};
+  reports.forEach(r => { reportCounts[r.targetId] = (reportCounts[r.targetId] || 0) + 1; });
+
+  const statusColor = s => s === "pending" ? C.orange : s === "resolved" ? C.green : C.textMuted;
+  const statusLabel = s => s === "pending" ? "⏳ معلق" : s === "resolved" ? "✅ تمت المعالجة" : "🚫 مُهمل";
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}>🚨 التبليغات</div>
+        <div style={{ fontSize: 13, color: C.textMuted }}>{reports.length} تبليغ إجمالي · {reports.filter(r=>r.status==="pending").length} معلق</div>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {[
+          { id: "pending", label: `⏳ معلق (${reports.filter(r=>r.status==="pending").length})` },
+          { id: "resolved", label: `✅ معالج (${reports.filter(r=>r.status==="resolved").length})` },
+          { id: "dismissed", label: `🚫 مُهمل (${reports.filter(r=>r.status==="dismissed").length})` },
+          { id: "all", label: `الكل (${reports.length})` },
+        ].map(f => (
+          <button key={f.id} onClick={() => setFilter(f.id)}
+            style={{ background: filter === f.id ? C.blueGlow : C.card, border: `1px solid ${filter === f.id ? C.blue : C.border}`, borderRadius: 20, padding: "6px 14px", color: filter === f.id ? C.blueLight : C.textMuted, fontFamily: "inherit", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1.5fr 2fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase" }}>
+          <span>المُبلَّغ عنه</span><span>المُبلِّغ</span><span>السبب</span><span>الحالة</span><span>إجراء</span>
+        </div>
+        {filtered.length === 0 && <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>لا توجد تبليغات</div>}
+        {filtered.map(r => (
+          <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1.5fr 1.5fr 2fr 1fr 1fr", padding: "14px 16px", borderBottom: `1px solid ${C.border}`, alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{r.targetName}</div>
+              <div style={{ fontSize: 11, color: C.textMuted }}>{r.targetType === "driver" ? "🚕 سائق" : "👤 راكب"}</div>
+              {reportCounts[r.targetId] > 1 && (
+                <div style={{ background: `${C.red}22`, color: C.red, borderRadius: 10, padding: "2px 8px", fontSize: 10, fontWeight: 700, display: "inline-block", marginTop: 3 }}>
+                  🚨 {reportCounts[r.targetId]} تبليغات
+                </div>
+              )}
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: C.text }}>{r.reporterName}</div>
+              <div style={{ fontSize: 11, color: C.textMuted }}>{r.reporterType === "driver" ? "سائق" : "راكب"}</div>
+            </div>
+            <div style={{ fontSize: 12, color: C.text }}>{r.reason?.substring(0, 50)}{r.reason?.length > 50 ? "..." : ""}</div>
+            <div><Badge color={statusColor(r.status)}>{statusLabel(r.status)}</Badge></div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {r.status === "pending" && (<>
+                <Btn small color={C.green} onClick={() => resolveReport(r.id)}>✅ معالج</Btn>
+                <Btn small color={C.textMuted} outline onClick={() => dismissReport(r.id)}>🚫 تجاهل</Btn>
+              </>)}
+              {isSuperAdmin && reportCounts[r.targetId] >= 2 && (
+                <Btn small color={C.red} onClick={() => deleteUser(r.targetId, r.targetType)} disabled={loading}>🗑️ حذف</Btn>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* تحذير المستخدمين الأكثر تبليغاً */}
+      {Object.entries(reportCounts).filter(([,c]) => c >= 3).length > 0 && (
+        <div style={{ background: C.redGlow, border: `1px solid ${C.red}44`, borderRadius: 12, padding: 16, marginTop: 16 }}>
+          <div style={{ fontWeight: 700, color: C.red, marginBottom: 10, fontSize: 14 }}>⚠️ مستخدمون بتبليغات متعددة</div>
+          {Object.entries(reportCounts).filter(([,c]) => c >= 3).map(([id, count]) => {
+            const report = reports.find(r => r.targetId === id);
+            return (
+              <div key={id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{report?.targetName}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted }}>{report?.targetType === "driver" ? "🚕 سائق" : "👤 راكب"}</div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <Badge color={C.red}>{count} تبليغات 🚨</Badge>
+                  {isSuperAdmin && <Btn small color={C.red} onClick={() => deleteUser(id, report?.targetType)} disabled={loading}>🗑️ حذف</Btn>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ===== MAIN =====
 export default function AdminApp() {
   const [admin, setAdmin] = useState(null);
@@ -771,13 +888,15 @@ export default function AdminApp() {
   const [drivers, setDrivers] = useState([]);
   const [passengers, setPassengers] = useState([]);
   const [admins, setAdmins] = useState([]);
+  const [reports, setReports] = useState([]);
 
   useEffect(() => {
     if (!admin || !db) return;
     const u1 = onSnapshot(collection(db, "drivers"), snap => setDrivers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const u2 = onSnapshot(collection(db, "passengers"), snap => setPassengers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const u3 = admin.role === "super" ? onSnapshot(collection(db, "admins"), snap => setAdmins(snap.docs.map(d => ({ id: d.id, ...d.data() })))) : () => {};
-    return () => { u1(); u2(); u3(); };
+    const u4 = onSnapshot(collection(db, "reports"), snap => setReports(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return () => { u1(); u2(); u3(); u4(); };
   }, [admin]);
 
   if (!admin) return <AdminLogin onLogin={setAdmin} />;
@@ -785,6 +904,7 @@ export default function AdminApp() {
   const counts = {
     pendingDrivers: drivers.filter(d => d.verificationStatus === "pending" || !d.verificationStatus).length,
     pendingAdmins: admins.filter(a => !a.approved).length,
+    pendingReports: reports.filter(r => r.status === "pending").length,
   };
 
   return (
@@ -799,6 +919,7 @@ export default function AdminApp() {
         {tab === "passengers" && <PassengersPanel passengers={passengers} isSuperAdmin={admin.role === "super"} />}
         {tab === "admins" && admin.role === "super" && <AdminsPanel admins={admins} currentAdmin={admin} />}
         {tab === "reports" && <ReportsPanel drivers={drivers} passengers={passengers} />}
+        {tab === "complaints" && <ComplaintsPanel reports={reports} drivers={drivers} passengers={passengers} isSuperAdmin={admin.role === "super"} />}
         {tab === "settings" && <SettingsPanel admin={admin} />}
       </main>
     </div>
