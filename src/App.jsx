@@ -419,6 +419,8 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: name||email.split("@")[0] });
       const phoneF = isPassenger ? (phone.startsWith("+")?phone:`+213${phone.replace(/^0/,"")}`) : "";
+      // حفظ الدور أولاً في localStorage لمنع onAuthStateChanged من إعادة التوجيه
+      localStorage.setItem("taxidz_role", role);
       await setDoc(doc(db, role==="driver"?"drivers":"passengers", cred.user.uid), {
         uid:cred.user.uid, email, name:name||email.split("@")[0], phone:phoneF, role,
         status:role==="driver"?"pending":"active",
@@ -427,8 +429,10 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       });
       if (isPassenger) { localStorage.setItem("taxidz_phone",phoneF); localStorage.setItem("taxidz_name",name); }
       // FCM Token
-      const fcmToken = await requestNotificationPermission();
-      if (fcmToken) await setDoc(doc(db,role==="driver"?"drivers":"passengers",cred.user.uid),{fcmToken},{merge:true});
+      try {
+        const fcmToken = await requestNotificationPermission();
+        if (fcmToken) await setDoc(doc(db,role==="driver"?"drivers":"passengers",cred.user.uid),{fcmToken},{merge:true});
+      } catch(e) {}
       onSuccess(role);
     } catch(e) { setError(errMsg(e.code)); }
     setLoading(false);
@@ -457,9 +461,13 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
         if(d.phone) localStorage.setItem("taxidz_phone",d.phone);
         if(d.name) localStorage.setItem("taxidz_name",d.name);
       }
+      // حفظ الدور أولاً
+      localStorage.setItem("taxidz_role", role);
       // FCM Token
-      const fcmToken = await requestNotificationPermission();
-      if (fcmToken) await setDoc(doc(db,rightCol,cred.user.uid),{fcmToken},{merge:true});
+      try {
+        const fcmToken = await requestNotificationPermission();
+        if (fcmToken) await setDoc(doc(db,rightCol,cred.user.uid),{fcmToken},{merge:true});
+      } catch(e) {}
       onSuccess(role);
     } catch(e) { setError(errMsg(e.code)); }
     setLoading(false);
@@ -1001,17 +1009,36 @@ export default function App() {
     const u = onAuthStateChanged(auth, async u=>{
       if (u) {
         setUser(u);
+        // إذا الدور محفوظ — استخدمه مباشرة
         const savedRole = localStorage.getItem("taxidz_role");
-        if (savedRole) { setRole(savedRole); setScreen("app"); return; }
+        if (savedRole) {
+          setRole(savedRole);
+          setScreen("app");
+          return;
+        }
+        // مستخدم موجود بدون دور محفوظ — ابحث في Firestore
         try {
+          // انتظر لحظة للتأكد من حفظ Firestore
+          await new Promise(resolve => setTimeout(resolve, 800));
           const pSnap = await getDoc(doc(db,"passengers",u.uid));
-          if (pSnap.exists()) { localStorage.setItem("taxidz_role","passenger"); setRole("passenger"); setScreen("app"); return; }
+          if (pSnap.exists()) {
+            const d = pSnap.data();
+            if(d.name) localStorage.setItem("taxidz_name", d.name);
+            if(d.phone) localStorage.setItem("taxidz_phone", d.phone);
+            localStorage.setItem("taxidz_role","passenger");
+            setRole("passenger"); setScreen("app"); return;
+          }
           const dSnap = await getDoc(doc(db,"drivers",u.uid));
-          if (dSnap.exists()) { localStorage.setItem("taxidz_role","driver"); setRole("driver"); setScreen("app"); return; }
-        } catch(e){}
+          if (dSnap.exists()) {
+            localStorage.setItem("taxidz_role","driver");
+            setRole("driver"); setScreen("app"); return;
+          }
+        } catch(e){ console.log("Auth check:", e); }
+        // مستخدم جديد لم يكمل التسجيل
         setScreen("welcome");
       } else {
-        setUser(null); setRole(null); setScreen("welcome"); localStorage.removeItem("taxidz_role");
+        setUser(null); setRole(null); setScreen("welcome");
+        localStorage.removeItem("taxidz_role");
       }
     });
     return ()=>u();
@@ -1025,7 +1052,17 @@ export default function App() {
   };
 
   const handleAuthSuccess = async (r) => {
-    setRole(r); localStorage.setItem("taxidz_role",r); setScreen("app");
+    // نحفظ الدور أولاً قبل تغيير الشاشة لمنع race condition
+    localStorage.setItem("taxidz_role", r);
+    setRole(r);
+    // FCM Token للسائق
+    if (r === "driver" && auth.currentUser) {
+      try {
+        const token = await requestNotificationPermission();
+        if (token) await setDoc(doc(db, "drivers", auth.currentUser.uid), { fcmToken: token }, { merge: true });
+      } catch(e) {}
+    }
+    setScreen("app");
   };
 
   if (loadError) return <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:C.bg }}><div style={{ textAlign:"center" }}><div style={{ fontSize:48 }}>⚠️</div><div style={{ fontWeight:800, color:C.text }}>خطأ في الخريطة</div></div></div>;
