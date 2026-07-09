@@ -1,10 +1,24 @@
 import { useState, useEffect } from "react";
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, query, orderBy, addDoc } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, query, orderBy, addDoc } from "firebase/firestore";
+
+// Firebase مستقل لصفحة الإدارة
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+};
+
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 const SUPER_ADMIN_EMAIL = "abdouhaffar@gmail.com";
-const SUPER_ADMIN_CODE = "123456";
+const SUPER_ADMIN_CODE = "Daniel&layan@202526";
 
 const C = {
   bg: "#070b14",
@@ -76,18 +90,39 @@ function AdminLogin({ onLogin }) {
     if (!email || !code) { setError("أدخل البريد والرمز"); return; }
     setLoading(true); setError("");
     try {
-      if (email === SUPER_ADMIN_EMAIL && code === SUPER_ADMIN_CODE) {
-        onLogin({ email, role: "super", name: "عبد الواحد هفار" });
-        return;
+      // تسجيل دخول Firebase Auth الحقيقي
+      // للأدمن الرئيسي: البريد + كلمة المرور (الكود هو كلمة المرور)
+      // للأدمنات الثانويين: البريد + الكود المحفوظ في Firestore
+      if (email === SUPER_ADMIN_EMAIL) {
+        // الأدمن الرئيسي: يدخل بالبريد + كلمة المرور من Firebase Auth
+        try {
+          await signInWithEmailAndPassword(auth, email, code);
+          onLogin({ email, role: "super", name: "عبد الواحد هفار" });
+          setLoading(false);
+          return;
+        } catch(authErr) {
+          const msgs = {
+            "auth/wrong-password": "كلمة المرور خاطئة",
+            "auth/invalid-credential": "البريد أو كلمة المرور خاطئة",
+            "auth/user-not-found": "الحساب غير موجود في Firebase",
+            "auth/too-many-requests": "محاولات كثيرة — انتظر قليلاً",
+          };
+          setError(msgs[authErr.code] || `خطأ: ${authErr.code}`);
+          setLoading(false);
+          return;
+        }
       }
-      // Sub admin check
-      let found = false;
+      // أدمن ثانوي: تحقق من Firestore
       const unsub = onSnapshot(collection(db, "admins"), snap => {
+        let found = false;
         snap.docs.forEach(d => {
           const data = d.data();
           if (data.email === email && data.code === code && data.approved) {
             found = true;
-            onLogin({ email, role: "sub", name: data.name, id: d.id });
+            // تسجيل دخول Firebase Auth للأدمن الثانوي أيضاً
+            signInWithEmailAndPassword(auth, email, code)
+              .then(() => onLogin({ email, role: "sub", name: data.name, id: d.id }))
+              .catch(() => onLogin({ email, role: "sub", name: data.name, id: d.id }));
           }
         });
         if (!found) setError("البريد أو الرمز غير صحيح، أو لم يتم قبولك بعد");
@@ -95,7 +130,7 @@ function AdminLogin({ onLogin }) {
         setLoading(false);
       });
     } catch (e) {
-      setError("حدث خطأ"); setLoading(false);
+      setError("حدث خطأ غير متوقع"); setLoading(false);
     }
   };
 
