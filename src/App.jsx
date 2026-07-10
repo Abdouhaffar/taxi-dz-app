@@ -179,7 +179,7 @@ function PasswordResetModal({ onClose, lang }) {
 // ===== TRANSLATIONS =====
 const T = {
   ar: {
-    appTagline: "تاكسي الجزائر 🇩🇿 · فاوض على سعرك",
+    appTagline: "البُراق 🇩🇿 · فاوض على سعرك",
     pricing: "40 دج + 30 دج/كم",
     passenger: "راكب", passengerSub: "أبحث عن سيارة أجرة",
     driver: "سائق", driverSub: "أقدم خدمة النقل",
@@ -554,7 +554,7 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
       </div>
 
       <div style={{ fontSize:80, marginBottom:8, filter:"drop-shadow(0 8px 24px rgba(249,115,22,0.5))" }}>🚕</div>
-      <div style={{ fontSize:36, fontWeight:900, color:"#fff", marginBottom:4 }}>TaxiDZ</div>
+      <div style={{ fontSize:36, fontWeight:900, color:"#fff", marginBottom:4 }}>AL-BURAQ</div>
       <div style={{ fontSize:14, color:"#ffffff66", marginBottom:4 }}>{t.appTagline}</div>
       <div style={{ fontSize:12, color:"#ffffff44", marginBottom:48, background:"#ffffff0d", padding:"6px 16px", borderRadius:20, border:"1px solid #ffffff1a" }}>{t.pricing}</div>
 
@@ -568,7 +568,7 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
           <div style={{ textAlign:isRTL?"right":"left" }}><div style={{ fontWeight:800, fontSize:18 }}>{t.driver}</div><div style={{ fontSize:13, opacity:0.85 }}>{t.driverSub}</div></div>
         </button>
       </div>
-      <div style={{ position:"absolute", bottom:24, fontSize:12, color:"#ffffff33" }}>TaxiDZ v2.0 · الجزائر 🇩🇿</div>
+      <div style={{ position:"absolute", bottom:24, fontSize:12, color:"#ffffff33" }}>AL-BURAQ v2.0 · الجزائر 🇩🇿</div>
     </div>
   );
 }
