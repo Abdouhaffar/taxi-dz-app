@@ -400,15 +400,27 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   const accent = isPassenger ? C.green : C.orange;
   const accentDark = isPassenger ? C.greenDark : "#ea580c";
 
-  const errMsg = (code) => ({
-    "auth/email-already-in-use": lang==="ar"?"البريد مستخدم — جرّب تسجيل الدخول":"Email déjà utilisé",
-    "auth/wrong-password": lang==="ar"?"كلمة المرور خاطئة":"Mot de passe incorrect",
-    "auth/user-not-found": lang==="ar"?"الحساب غير موجود":"Compte introuvable",
-    "auth/weak-password": lang==="ar"?"كلمة المرور قصيرة (6+)":"Mot de passe trop court",
-    "auth/invalid-credential": lang==="ar"?"البريد أو كلمة المرور خاطئة":"Identifiants incorrects",
-    "auth/network-request-failed": lang==="ar"?"تحقق من الإنترنت":"Vérifiez votre connexion",
-    "auth/too-many-requests": lang==="ar"?"انتظر قليلاً":"Trop de tentatives",
-  }[code] || (lang==="ar"?"حدث خطأ":"Une erreur s'est produite"));
+  const errMsg = (code, message) => {
+    const msgs = {
+      "auth/email-already-in-use": lang==="ar"?"البريد مستخدم مسبقاً — جرّب تسجيل الدخول":"Email déjà utilisé — Essayez de vous connecter",
+      "auth/wrong-password": lang==="ar"?"كلمة المرور خاطئة":"Mot de passe incorrect",
+      "auth/user-not-found": lang==="ar"?"الحساب غير موجود — أنشئ حساباً جديداً":"Compte introuvable",
+      "auth/weak-password": lang==="ar"?"كلمة المرور قصيرة — 6 أحرف على الأقل":"Mot de passe trop court (6+ caractères)",
+      "auth/invalid-credential": lang==="ar"?"البريد أو كلمة المرور غير صحيحة":"Email ou mot de passe incorrect",
+      "auth/invalid-email": lang==="ar"?"صيغة البريد الإلكتروني غير صحيحة":"Format email invalide",
+      "auth/network-request-failed": lang==="ar"?"تحقق من اتصالك بالإنترنت":"Vérifiez votre connexion internet",
+      "auth/too-many-requests": lang==="ar"?"محاولات كثيرة — انتظر قليلاً ثم أعد المحاولة":"Trop de tentatives — Réessayez plus tard",
+      "auth/user-disabled": lang==="ar"?"هذا الحساب موقوف — تواصل مع الدعم":"Compte désactivé",
+      "auth/operation-not-allowed": lang==="ar"?"هذه الطريقة غير مفعّلة":"Méthode non autorisée",
+      "auth/popup-closed-by-user": lang==="ar"?"تم إغلاق نافذة التحقق":"Fenêtre fermée",
+      "permission-denied": lang==="ar"?"خطأ في صلاحيات قاعدة البيانات — تحقق من Firestore Rules":"Erreur de permissions Firestore",
+    };
+    const result = msgs[code];
+    if (result) return result;
+    // إظهار الكود الأصلي للمساعدة في التشخيص
+    console.error("Auth error:", code, message);
+    return lang==="ar"?`خطأ (${code||"غير معروف"})`:(`Erreur (${code||"inconnue"})`);
+  };
 
   const handleRegister = async () => {
     if (!email||!password) { setError(lang==="ar"?"أدخل البريد وكلمة المرور":"Saisissez email et mot de passe"); return; }
@@ -434,7 +446,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
         if (fcmToken) await setDoc(doc(db,role==="driver"?"drivers":"passengers",cred.user.uid),{fcmToken},{merge:true});
       } catch(e) {}
       onSuccess(role);
-    } catch(e) { setError(errMsg(e.code)); }
+    } catch(e) { setError(errMsg(e.code, e.message)); console.error("Register:", e); }
     setLoading(false);
   };
 
@@ -469,7 +481,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
         if (fcmToken) await setDoc(doc(db,rightCol,cred.user.uid),{fcmToken},{merge:true});
       } catch(e) {}
       onSuccess(role);
-    } catch(e) { setError(errMsg(e.code)); }
+    } catch(e) { setError(errMsg(e.code, e.message)); console.error("Login:", e); }
     setLoading(false);
   };
 
