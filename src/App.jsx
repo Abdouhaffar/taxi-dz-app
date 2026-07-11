@@ -553,10 +553,14 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
         ))}
       </div>
 
-      <div style={{ fontSize:80, marginBottom:8, filter:"drop-shadow(0 8px 24px rgba(249,115,22,0.5))" }}>🚕</div>
-      <div style={{ fontSize:36, fontWeight:900, color:"#fff", marginBottom:4 }}>AL-BURAQ</div>
-      <div style={{ fontSize:14, color:"#ffffff66", marginBottom:4 }}>{t.appTagline}</div>
-      <div style={{ fontSize:12, color:"#ffffff44", marginBottom:48, background:"#ffffff0d", padding:"6px 16px", borderRadius:20, border:"1px solid #ffffff1a" }}>{t.pricing}</div>
+      {/* شعار AL-BURAQ */}
+      <img src="/logo192.png" alt="AL-BURAQ"
+        style={{ width:180, height:180, objectFit:"contain", marginBottom:16, filter:"drop-shadow(0 8px 32px rgba(212,160,23,0.6))", animation:"logoPulse 3s ease-in-out infinite" }}
+        onError={e=>{ e.target.style.display="none"; }}
+      />
+      <div style={{ fontSize:36, fontWeight:900, color:"#fff", marginBottom:4, letterSpacing:2 }}>AL-BURAQ</div>
+      <div style={{ fontSize:14, color:"#d4a017", marginBottom:48, fontWeight:600 }}>{t.appTagline}</div>
+      <style>{`@keyframes logoPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 8px 32px rgba(212,160,23,0.6))}50%{transform:scale(1.04);filter:drop-shadow(0 12px 40px rgba(212,160,23,0.9))}}`}</style>
 
       <div style={{ width:"100%", maxWidth:340, display:"flex", flexDirection:"column", gap:14 }}>
         <button onClick={()=>onSelect("passenger")} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:20, padding:"20px 24px", color:"#fff", fontFamily:"inherit", cursor:"pointer", display:"flex", alignItems:"center", gap:16, boxShadow:"0 8px 24px rgba(0,179,126,0.35)" }}>
@@ -784,9 +788,14 @@ function PassengerApp({ onLogout, user, lang }) {
         </div>
         <button onClick={()=>setScreen("booking")} style={{ width:"100%", marginTop:12, background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:16, padding:"16px", color:"#fff", fontFamily:"inherit", fontWeight:800, fontSize:16, cursor:"pointer" }}>{t.searchCar}</button>
       </div>
-      <div style={{ margin:"0 20px", background:`linear-gradient(135deg,${C.dark},#2d1b69)`, borderRadius:20, padding:"16px 20px", color:"#fff", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <div><div style={{ fontSize:12, opacity:0.7 }}>{t.pricingSystem}</div><div style={{ fontSize:16, fontWeight:800, marginTop:2 }}>{t.pricingFormula}</div></div>
-        <div style={{ fontSize:40 }}>💰</div>
+      {/* شعار AL-BURAQ في الصفحة الرئيسية */}
+      <div style={{ margin:"0 20px", background:`linear-gradient(135deg,#0a0f1e,#1a2340)`, borderRadius:20, padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", border:"1px solid #d4a01733" }}>
+        <div>
+          <div style={{ fontSize:18, fontWeight:900, color:"#d4a017", letterSpacing:1 }}>AL-BURAQ</div>
+          <div style={{ fontSize:12, color:"#d4a01799", marginTop:2 }}>{t.pricingFormula}</div>
+        </div>
+        <img src="/logo192.png" alt="AL-BURAQ" style={{ width:60, height:60, objectFit:"contain", filter:"drop-shadow(0 4px 12px rgba(212,160,23,0.5))" }}
+          onError={e=>e.target.style.display="none"} />
       </div>
     </div>
   );
