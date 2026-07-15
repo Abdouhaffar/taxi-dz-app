@@ -180,6 +180,7 @@ function Sidebar({ tab, setTab, admin, onLogout, counts }) {
     ...(isSuperAdmin ? [{ id: "admins", icon: "🛡️", label: "الأدمنات", badge: counts.pendingAdmins }] : []),
     { id: "reports", icon: "📈", label: "التقارير" },
     { id: "complaints", icon: "🚨", label: "التبليغات", badge: counts.pendingReports },
+    { id: "subscriptions", icon: "💳", label: "الاشتراكات", badge: counts.pendingSubscriptions },
     { id: "settings", icon: "⚙️", label: "الإعدادات" },
   ];
 
@@ -900,6 +901,124 @@ function ComplaintsPanel({ reports, drivers, passengers, isSuperAdmin }) {
   );
 }
 
+// ===== SUBSCRIPTION PANEL =====
+function SubscriptionPanel({ drivers, isSuperAdmin }) {
+  const [loading, setLoading] = useState(false);
+
+  const pendingDrivers = drivers.filter(d => d.subscriptionRequest?.status === "pending");
+  const activeDrivers = drivers.filter(d => d.subscription?.status === "active" && d.subscription?.expiresAt?.toDate?.() > new Date());
+
+  const approveSubscription = async (driver) => {
+    setLoading(true);
+    try {
+      const req = driver.subscriptionRequest;
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + req.duration * 24 * 60 * 60 * 1000);
+      await updateDoc(doc(db, "drivers", driver.id), {
+        subscription: {
+          planId: req.planId,
+          planLabel: req.planLabel,
+          price: req.price,
+          duration: req.duration,
+          status: "active",
+          activatedAt: serverTimestamp(),
+          expiresAt: expiresAt,
+        },
+        "subscriptionRequest.status": "approved",
+      });
+    } catch(e) { console.log(e); }
+    setLoading(false);
+  };
+
+  const rejectSubscription = async (driverId) => {
+    try {
+      await updateDoc(doc(db, "drivers", driverId), {
+        "subscriptionRequest.status": "rejected",
+      });
+    } catch(e) { console.log(e); }
+  };
+
+  const toggleSubscriptionSystem = async (enabled) => {
+    try {
+      await setDoc(doc(db, "settings", "app"), { subscriptionEnabled: enabled }, { merge: true });
+      alert(enabled ? "✅ تم تفعيل نظام الاشتراكات!" : "⏸️ تم إيقاف نظام الاشتراكات");
+    } catch(e) { console.log(e); }
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20, display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}>💳 الاشتراكات</div>
+          <div style={{ fontSize: 13, color: C.textMuted }}>{pendingDrivers.length} طلب معلق · {activeDrivers.length} اشتراك نشط</div>
+        </div>
+        {isSuperAdmin && (
+          <div style={{ display:"flex", gap:8 }}>
+            <Btn small color={C.green} onClick={() => toggleSubscriptionSystem(true)}>🟢 تفعيل</Btn>
+            <Btn small color={C.textMuted} outline onClick={() => toggleSubscriptionSystem(false)}>⏸️ إيقاف</Btn>
+          </div>
+        )}
+      </div>
+
+      {/* طلبات معلقة */}
+      {pendingDrivers.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, color: C.orange, marginBottom: 10, fontSize: 14 }}>⏳ طلبات تنتظر الموافقة ({pendingDrivers.length})</div>
+          {pendingDrivers.map(driver => (
+            <div key={driver.id} style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 10, border: `1px solid ${C.orange}44` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: C.text, fontSize: 14 }}>{driver.name}</div>
+                  <div style={{ fontSize: 12, color: C.textMuted }}>{driver.phone}</div>
+                  <div style={{ fontSize: 12, color: C.textMuted }}>{driver.subscriptionRequest?.planLabel}</div>
+                </div>
+                <div style={{ textAlign:"left" }}>
+                  <div style={{ fontWeight: 900, fontSize: 20, color: C.orange }}>{driver.subscriptionRequest?.price} دج</div>
+                  <div style={{ fontSize: 11, color: C.textMuted }}>{driver.subscriptionRequest?.duration} يوم</div>
+                </div>
+              </div>
+              {/* صورة الإيصال */}
+              {driver.subscriptionRequest?.receipt && (
+                <div style={{ borderRadius: 12, overflow:"hidden", marginBottom: 12, maxHeight: 200 }}>
+                  <img src={driver.subscriptionRequest.receipt} alt="إيصال" style={{ width:"100%", objectFit:"cover", display:"block" }} />
+                </div>
+              )}
+              <div style={{ display:"flex", gap:8 }}>
+                <Btn color={C.red} outline onClick={() => rejectSubscription(driver.id)} disabled={loading}>❌ رفض</Btn>
+                <Btn color={C.green} onClick={() => approveSubscription(driver)} disabled={loading}>✅ تأكيد الاشتراك</Btn>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* الاشتراكات النشطة */}
+      <div style={{ fontWeight: 700, color: C.green, marginBottom: 10, fontSize: 14 }}>🟢 الاشتراكات النشطة ({activeDrivers.length})</div>
+      <div style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow:"hidden" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr 1fr 1fr", padding:"12px 16px", borderBottom:`1px solid ${C.border}`, fontSize:11, color:C.textMuted, fontWeight:700 }}>
+          <span>السائق</span><span>العرض</span><span>انتهاء</span><span>الحالة</span>
+        </div>
+        {activeDrivers.length === 0 && <div style={{ textAlign:"center", padding:30, color:C.textMuted }}>لا توجد اشتراكات نشطة</div>}
+        {activeDrivers.map(d => {
+          const exp = d.subscription?.expiresAt?.toDate?.();
+          const daysLeft = exp ? Math.ceil((exp - new Date()) / (1000*60*60*24)) : 0;
+          return (
+            <div key={d.id} style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr 1fr 1fr", padding:"12px 16px", borderBottom:`1px solid ${C.border}`, alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:C.text }}>{d.name}</div>
+                <div style={{ fontSize:11, color:C.textMuted }}>{d.wilaya}</div>
+              </div>
+              <div style={{ fontSize:12, color:C.text }}>{d.subscription?.planLabel}</div>
+              <div style={{ fontSize:12, color:daysLeft<=2?C.red:C.textMuted }}>{daysLeft} يوم</div>
+              <Badge color={C.green}>نشط ✅</Badge>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ===== MAIN =====
 export default function AdminApp() {
   const [admin, setAdmin] = useState(null);
@@ -924,6 +1043,7 @@ export default function AdminApp() {
     pendingDrivers: drivers.filter(d => d.verificationStatus === "pending" || !d.verificationStatus).length,
     pendingAdmins: admins.filter(a => !a.approved).length,
     pendingReports: reports.filter(r => r.status === "pending").length,
+    pendingSubscriptions: drivers.filter(d => d.subscriptionRequest?.status === "pending").length,
   };
 
   return (
@@ -939,6 +1059,7 @@ export default function AdminApp() {
         {tab === "admins" && admin.role === "super" && <AdminsPanel admins={admins} currentAdmin={admin} />}
         {tab === "reports" && <ReportsPanel drivers={drivers} passengers={passengers} />}
         {tab === "complaints" && <ComplaintsPanel reports={reports} drivers={drivers} passengers={passengers} isSuperAdmin={admin.role === "super"} />}
+        {tab === "subscriptions" && <SubscriptionPanel drivers={drivers} isSuperAdmin={admin.role === "super"} />}
         {tab === "settings" && <SettingsPanel admin={admin} />}
       </main>
     </div>
