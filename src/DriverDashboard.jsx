@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { doc, onSnapshot, updateDoc, setDoc, serverTimestamp, collection, query, where, addDoc, orderBy, getDocs, limit, increment } from "firebase/firestore";
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer } from "@react-google-maps/api";
@@ -163,6 +162,200 @@ function ChatBox({ bookingId, userId, userName, otherName, onClose }) {
         <button onClick={sendMsg} disabled={!text.trim()} style={{ width:46,height:46,borderRadius:"50%",background:text.trim()?`linear-gradient(135deg,${C.green},${C.greenDark})`:C.border,border:"none",cursor:text.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0 }}>➤</button>
       </div>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
+    </div>
+  );
+}
+
+// ===== SUBSCRIPTION SCREEN =====
+function SubscriptionScreen({ uid, driverData, subscriptionEnabled, onBack }) {
+  const [selected, setSelected] = useState(null);
+  const [step, setStep] = useState("choose"); // choose | confirm | pending
+  const [receipt, setReceipt] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const receiptRef = useRef(null);
+
+  const plans = [
+    { id:"daily", label:"العرض اليومي", price:100, duration:1, icon:"🌙", color:C.blue, desc:"24 ساعة كاملة" },
+    { id:"weekly", label:"العرض الأسبوعي", price:600, duration:7, icon:"📅", color:C.green, desc:"7 أيام · وفر 100 دج", badge:"الأكثر طلباً" },
+    { id:"monthly", label:"العرض الشهري", price:2200, duration:30, icon:"📆", color:C.gold, desc:"30 يوماً · وفر 800 دج", badge:"الأوفر" },
+  ];
+
+  const currentPlan = driverData?.subscription;
+  const isActive = currentPlan?.status === "active" && currentPlan?.expiresAt?.toDate?.() > new Date();
+  const daysLeft = isActive ? Math.ceil((currentPlan.expiresAt.toDate() - new Date()) / (1000*60*60*24)) : 0;
+
+  const handleReceiptUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setReceipt(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const submitRequest = async () => {
+    if (!selected || !receipt) return;
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "drivers", uid), {
+        subscriptionRequest: {
+          planId: selected.id,
+          planLabel: selected.label,
+          price: selected.price,
+          duration: selected.duration,
+          receipt,
+          status: "pending",
+          requestedAt: serverTimestamp(),
+        }
+      }, { merge: true });
+      setStep("pending");
+    } catch(e) { console.log(e); }
+    setSaving(false);
+  };
+
+  // إذا الاشتراكات معطّلة
+  if (!subscriptionEnabled) return (
+    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Cairo',sans-serif", direction:"rtl" }}>
+      <div style={{ display:"flex", alignItems:"center", padding:"48px 20px 16px", gap:12 }}>
+        <button onClick={onBack} style={{ width:40,height:40,borderRadius:12,background:C.card,border:`1px solid ${C.border}`,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",color:C.text }}>←</button>
+        <div style={{ fontWeight:800, fontSize:18, color:C.text }}>💳 الاشتراكات</div>
+      </div>
+      <div style={{ margin:"40px 20px", background:C.card, borderRadius:24, padding:40, border:`1px solid ${C.border}`, textAlign:"center" }}>
+        <div style={{ fontSize:72, marginBottom:20 }}>🎁</div>
+        <div style={{ fontWeight:900, fontSize:22, color:C.green, marginBottom:12 }}>التطبيق مجاني حالياً!</div>
+        <div style={{ fontSize:14, color:C.textMuted, lineHeight:1.8, marginBottom:20 }}>
+          استمتع بجميع مميزات AL-BURAQ مجاناً خلال فترة الإطلاق.<br/>
+          سيتم إشعارك عند تفعيل نظام الاشتراكات.
+        </div>
+        <div style={{ background:C.goldLight, borderRadius:16, padding:"16px 20px", border:`1px solid ${C.gold}44` }}>
+          <div style={{ fontSize:13, color:C.gold, fontWeight:700 }}>⭐ أنت من المستخدمين الأوائل</div>
+          <div style={{ fontSize:12, color:C.textMuted, marginTop:4 }}>ستحصل على مزايا خاصة عند تفعيل الاشتراكات</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Cairo',sans-serif", direction:"rtl", paddingBottom:40 }}>
+      <div style={{ display:"flex", alignItems:"center", padding:"48px 20px 16px", gap:12 }}>
+        <button onClick={onBack} style={{ width:40,height:40,borderRadius:12,background:C.card,border:`1px solid ${C.border}`,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",color:C.text }}>←</button>
+        <div style={{ fontWeight:800, fontSize:18, color:C.text }}>💳 الاشتراكات</div>
+      </div>
+
+      {/* الاشتراك الحالي */}
+      {isActive && (
+        <div style={{ margin:"0 20px 16px", background:`linear-gradient(135deg,${C.green},${C.greenDark})`, borderRadius:20, padding:20, color:"#fff" }}>
+          <div style={{ fontSize:13, opacity:0.8, marginBottom:4 }}>اشتراكك النشط</div>
+          <div style={{ fontSize:20, fontWeight:900, marginBottom:4 }}>{currentPlan.planLabel}</div>
+          <div style={{ fontSize:13, opacity:0.8 }}>⏳ يتبقى {daysLeft} يوم</div>
+        </div>
+      )}
+
+      {step === "choose" && (<>
+        <div style={{ padding:"0 20px", marginBottom:16 }}>
+          <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:12 }}>اختر عرضك</div>
+          {plans.map(plan=>(
+            <div key={plan.id} onClick={()=>setSelected(plan)}
+              style={{ background:C.card, borderRadius:20, padding:20, marginBottom:10, border:`2px solid ${selected?.id===plan.id?plan.color:C.border}`, cursor:"pointer", position:"relative", overflow:"hidden", transition:"all 0.2s" }}>
+              {plan.badge && <div style={{ position:"absolute", top:12, left:12, background:plan.color, color:"#fff", borderRadius:20, padding:"3px 10px", fontSize:11, fontWeight:700 }}>{plan.badge}</div>}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+                  <div style={{ width:48,height:48,borderRadius:14,background:`${plan.color}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24 }}>{plan.icon}</div>
+                  <div>
+                    <div style={{ fontWeight:800, fontSize:15, color:C.text }}>{plan.label}</div>
+                    <div style={{ fontSize:12, color:C.textMuted, marginTop:2 }}>{plan.desc}</div>
+                  </div>
+                </div>
+                <div style={{ textAlign:"left" }}>
+                  <div style={{ fontWeight:900, fontSize:22, color:plan.color }}>{plan.price} دج</div>
+                  <div style={{ fontSize:11, color:C.textMuted }}>{plan.duration} يوم</div>
+                </div>
+              </div>
+              {selected?.id===plan.id && <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background:plan.color, borderRadius:"20px 20px 0 0" }} />}
+            </div>
+          ))}
+        </div>
+
+        {/* معلومات الدفع */}
+        <div style={{ margin:"0 20px 16px", background:C.card, borderRadius:20, padding:20, border:`1px solid ${C.border}` }}>
+          <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:12 }}>💳 طريقة الدفع</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            <div style={{ background:`${C.blue}15`, borderRadius:14, padding:"14px 16px", border:`1px solid ${C.blue}33` }}>
+              <div style={{ fontWeight:700, color:C.blue, fontSize:13, marginBottom:4 }}>🏦 تحويل CCP / Baridimob</div>
+              <div style={{ fontSize:13, color:C.text, fontWeight:700 }}>رقم الحساب: <span style={{ direction:"ltr", display:"inline-block" }}>00799999999 — كلي 99</span></div>
+              <div style={{ fontSize:12, color:C.textMuted, marginTop:4 }}>الاسم: AL-BURAQ TAXI DZ</div>
+            </div>
+            <div style={{ background:`${C.green}15`, borderRadius:14, padding:"12px 16px", border:`1px solid ${C.green}33` }}>
+              <div style={{ fontSize:12, color:C.green, fontWeight:700 }}>📌 بعد التحويل أرسل إيصال الدفع للتفعيل</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding:"0 20px" }}>
+          <button onClick={()=>selected&&setStep("confirm")} disabled={!selected}
+            style={{ width:"100%", background:selected?`linear-gradient(135deg,${selected.color},${selected.color}cc)`:C.border, border:"none", borderRadius:16, padding:16, color:"#fff", fontFamily:"inherit", fontWeight:800, fontSize:16, cursor:selected?"pointer":"default" }}>
+            {selected?`اشترك في ${selected.label} — ${selected.price} دج`:"اختر عرضاً أولاً"}
+          </button>
+        </div>
+      </>)}
+
+      {step === "confirm" && selected && (
+        <div style={{ padding:"0 20px" }}>
+          <div style={{ background:C.card, borderRadius:20, padding:20, border:`1px solid ${C.border}`, marginBottom:16 }}>
+            <div style={{ fontWeight:800, fontSize:16, color:C.text, marginBottom:16 }}>تأكيد الاشتراك</div>
+            <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
+              <span style={{ color:C.textMuted }}>العرض</span>
+              <span style={{ color:C.text, fontWeight:700 }}>{selected.label}</span>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
+              <span style={{ color:C.textMuted }}>المبلغ</span>
+              <span style={{ color:selected.color, fontWeight:900, fontSize:18 }}>{selected.price} دج</span>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 0" }}>
+              <span style={{ color:C.textMuted }}>المدة</span>
+              <span style={{ color:C.text, fontWeight:700 }}>{selected.duration} يوم</span>
+            </div>
+          </div>
+
+          {/* رفع الإيصال */}
+          <div style={{ background:C.card, borderRadius:20, padding:20, border:`1px solid ${C.border}`, marginBottom:16 }}>
+            <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:12 }}>📸 إيصال الدفع</div>
+            <input type="file" accept="image/*" ref={receiptRef} onChange={handleReceiptUpload} style={{ display:"none" }} />
+            {receipt ? (
+              <div style={{ position:"relative", borderRadius:12, overflow:"hidden", border:`2px solid ${C.green}` }}>
+                <img src={receipt} alt="إيصال" style={{ width:"100%", maxHeight:200, objectFit:"cover", display:"block" }} />
+                <div style={{ position:"absolute", top:8, right:8, background:C.green, borderRadius:20, padding:"3px 10px", fontSize:11, color:"#fff", fontWeight:700 }}>✅ تم الرفع</div>
+                <button onClick={()=>receiptRef.current?.click()} style={{ position:"absolute", bottom:8, left:8, background:C.card, border:"none", borderRadius:8, padding:"6px 12px", color:C.text, fontFamily:"inherit", cursor:"pointer", fontSize:12, fontWeight:700 }}>🔄 تغيير</button>
+              </div>
+            ) : (
+              <div onClick={()=>receiptRef.current?.click()} style={{ height:140, borderRadius:12, border:`2px dashed ${C.border}`, background:C.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, cursor:"pointer" }}>
+                <span style={{ fontSize:36 }}>📷</span>
+                <span style={{ fontSize:13, color:C.textMuted, fontWeight:600 }}>اضغط لرفع صورة الإيصال</span>
+                <span style={{ fontSize:11, color:C.textLight }}>JPG, PNG</span>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display:"flex", gap:10 }}>
+            <button onClick={()=>setStep("choose")} style={{ flex:1, background:C.border, border:"none", borderRadius:14, padding:14, color:C.text, fontFamily:"inherit", fontWeight:600, cursor:"pointer" }}>← رجوع</button>
+            <button onClick={submitRequest} disabled={!receipt||saving}
+              style={{ flex:2, background:receipt?`linear-gradient(135deg,${selected.color},${selected.color}cc)`:C.border, border:"none", borderRadius:14, padding:14, color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:receipt?"pointer":"default", fontSize:15 }}>
+              {saving?"جارٍ الإرسال...":"✅ إرسال طلب الاشتراك"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === "pending" && (
+        <div style={{ margin:"40px 20px", background:C.card, borderRadius:24, padding:40, border:`1px solid ${C.border}`, textAlign:"center" }}>
+          <div style={{ fontSize:64, marginBottom:16 }}>⏳</div>
+          <div style={{ fontWeight:900, fontSize:20, color:C.text, marginBottom:12 }}>طلبك قيد المراجعة</div>
+          <div style={{ fontSize:13, color:C.textMuted, lineHeight:1.8, marginBottom:20 }}>
+            سيتم مراجعة إيصال الدفع وتفعيل اشتراكك خلال<br/>
+            <span style={{ color:C.orange, fontWeight:700 }}>24 ساعة كحد أقصى</span>
+          </div>
+          <button onClick={onBack} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`, border:"none", borderRadius:14, padding:"12px 32px", color:"#fff", fontFamily:"inherit", fontWeight:800, cursor:"pointer" }}>🏠 العودة للرئيسية</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -513,6 +706,7 @@ export default function DriverDashboard({ user, onLogout }) {
   const [showChangeVehicle,setShowChangeVehicle]=useState(false);
   const [showChat,setShowChat]=useState(false);
   const [showEarnings,setShowEarnings]=useState(false);
+  const [showSubscription,setShowSubscription]=useState(false);
   const watchIdRef=useRef(null);
 
   // تفعيل الاتصال تلقائياً
@@ -577,6 +771,7 @@ export default function DriverDashboard({ user, onLogout }) {
   if(status==="pending") return <PendingView onLogout={onLogout} />;
   if(showChangeVehicle) return <DriverVerificationForm uid={user?.uid} userEmail={user?.email} existingData={data} onDone={()=>setShowChangeVehicle(false)} isUpdate={true} />;
   if(showEarnings) return <EarningsScreen uid={user?.uid} driverData={data} onBack={()=>setShowEarnings(false)} />;
+  if(showSubscription) return <SubscriptionScreen uid={user?.uid} driverData={data} subscriptionEnabled={false} onBack={()=>setShowSubscription(false)} />;
 
   const passengerLoc=acceptedBooking?{lat:acceptedBooking.originLat,lng:acceptedBooking.originLng}:null;
   const destLoc=acceptedBooking?{lat:acceptedBooking.destLat,lng:acceptedBooking.destLng}:null;
@@ -759,6 +954,11 @@ export default function DriverDashboard({ user, onLogout }) {
             </div>
 
             <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
+              <button onClick={()=>setShowSubscription(true)} style={{ background:`linear-gradient(135deg,${C.goldLight},#fff8e1)`,border:`1px solid ${C.gold}44`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
+                <span style={{ fontSize:22 }}>💳</span>
+                <div style={{ flex:1 }}><div style={{ fontWeight:700, color:C.gold }}>الاشتراكات والعروض</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>🎁 مجاني حالياً خلال فترة الإطلاق</div></div>
+                <span style={{ color:C.textMuted }}>←</span>
+              </button>
               <button onClick={()=>setShowEarnings(true)} style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
                 <span style={{ fontSize:22 }}>📊</span>
                 <div style={{ flex:1 }}><div style={{ fontWeight:700 }}>الإيرادات والرحلات</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>إحصاءات مفصلة بالفترات</div></div>
