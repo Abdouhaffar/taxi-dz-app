@@ -645,17 +645,34 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
           <button key={l.code} onClick={()=>setLang(l.code)} style={{ padding:"6px 12px",borderRadius:20,border:`1.5px solid ${lang===l.code?"#d4a017":"#ffffff33"}`,background:lang===l.code?"#d4a01722":"transparent",color:lang===l.code?"#d4a017":"#ffffff88",fontFamily:"inherit",fontWeight:lang===l.code?700:400,fontSize:13,cursor:"pointer" }}>{l.flag}</button>
         ))}
       </div>
-      <img src="/logo192.png" alt="AL-BURAQ" style={{ width:180,height:180,objectFit:"contain",marginBottom:16,filter:"drop-shadow(0 8px 32px rgba(212,160,23,0.6))",animation:"logoPulse 3s ease-in-out infinite" }} onError={e=>e.target.style.display="none"} />
-      <div style={{ fontSize:36,fontWeight:900,color:"#fff",marginBottom:4,letterSpacing:2 }}>AL-BURAQ</div>
-      <div style={{ fontSize:14,color:"#d4a017",marginBottom:48,fontWeight:600 }}>{t.appTagline}</div>
-      <div style={{ width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:14 }}>
-        <button onClick={()=>onSelect("passenger")} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:20,padding:"20px 24px",color:"#fff",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,boxShadow:"0 8px 24px rgba(0,179,126,0.35)" }}>
-          <span style={{ fontSize:44 }}>🧑</span>
-          <div style={{ textAlign:isRTL?"right":"left" }}><div style={{ fontWeight:800,fontSize:18 }}>{t.passenger}</div><div style={{ fontSize:13,opacity:0.85 }}>{t.passengerSub}</div></div>
+      <img src="/logo192.png" alt="AL-BURAQ" style={{ width:160,height:160,objectFit:"contain",marginBottom:16,filter:"drop-shadow(0 8px 32px rgba(212,160,23,0.6))",animation:"logoPulse 3s ease-in-out infinite" }} onError={e=>e.target.style.display="none"} />
+      <div style={{ fontSize:32,fontWeight:900,color:"#fff",marginBottom:4,letterSpacing:2 }}>AL-BURAQ</div>
+      <div style={{ fontSize:13,color:"#d4a017",marginBottom:8,fontWeight:600 }}>{t.appTagline}</div>
+      <div style={{ fontSize:11,color:"#ffffff44",marginBottom:40,background:"#ffffff0d",padding:"5px 14px",borderRadius:20 }}>{t.pricing}</div>
+
+      {/* حساب واحد للاتجاهين */}
+      <div style={{ background:"#ffffff11",borderRadius:16,padding:"12px 20px",marginBottom:24,border:"1px solid #ffffff22",textAlign:"center" }}>
+        <div style={{ fontSize:12,color:"#ffffff88" }}>
+          {lang==="ar"?"💡 حساب واحد — يمكنك الدخول كراكب أو سائق":
+           lang==="fr"?"💡 Un seul compte — passager ou chauffeur":
+           "💡 One account — switch between rider & driver"}
+        </div>
+      </div>
+
+      <div style={{ width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:12 }}>
+        <button onClick={()=>onSelect("passenger")} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:20,padding:"18px 24px",color:"#fff",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,boxShadow:"0 8px 24px rgba(0,179,126,0.35)" }}>
+          <span style={{ fontSize:40 }}>🧑</span>
+          <div style={{ textAlign:isRTL?"right":"left" }}>
+            <div style={{ fontWeight:800,fontSize:17 }}>{t.passenger}</div>
+            <div style={{ fontSize:12,opacity:0.85 }}>{t.passengerSub}</div>
+          </div>
         </button>
-        <button onClick={()=>onSelect("driver")} style={{ background:`linear-gradient(135deg,${C.orange},#ea580c)`,border:"none",borderRadius:20,padding:"20px 24px",color:"#fff",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,boxShadow:"0 8px 24px rgba(249,115,22,0.35)" }}>
-          <span style={{ fontSize:44 }}>👨‍✈️</span>
-          <div style={{ textAlign:isRTL?"right":"left" }}><div style={{ fontWeight:800,fontSize:18 }}>{t.driver}</div><div style={{ fontSize:13,opacity:0.85 }}>{t.driverSub}</div></div>
+        <button onClick={()=>onSelect("driver")} style={{ background:`linear-gradient(135deg,${C.orange},#ea580c)`,border:"none",borderRadius:20,padding:"18px 24px",color:"#fff",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,boxShadow:"0 8px 24px rgba(249,115,22,0.35)" }}>
+          <span style={{ fontSize:40 }}>👨‍✈️</span>
+          <div style={{ textAlign:isRTL?"right":"left" }}>
+            <div style={{ fontWeight:800,fontSize:17 }}>{t.driver}</div>
+            <div style={{ fontSize:12,opacity:0.85 }}>{t.driverSub}</div>
+          </div>
         </button>
       </div>
       <style>{`@keyframes logoPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 8px 32px rgba(212,160,23,0.6))}50%{transform:scale(1.04);filter:drop-shadow(0 12px 40px rgba(212,160,23,0.9))}}`}</style>
@@ -742,36 +759,79 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       const result=await confirmResult.confirm(code);
       const u=result.user;
       const phoneF=`+213${phone.replace(/\D/g,"").replace(/^0/,"")}`;
-      // تحقق هل المستخدم موجود
-      const col=isPassenger?"passengers":"drivers";
-      const snap=await getDoc(doc(db,col,u.uid));
-      if(snap.exists()){
-        // مستخدم موجود — تسجيل دخول
-        const d=snap.data();
-        if(isPassenger){if(d.name)localStorage.setItem("taxidz_name",d.name);if(d.phone)localStorage.setItem("taxidz_phone",d.phone);}
-        localStorage.setItem("taxidz_role",role);
-        try{const fcmToken=await requestNotificationPermission();if(fcmToken)await setDoc(doc(db,col,u.uid),{fcmToken},{merge:true});}catch(e){}
-        onSuccess(role);
+      localStorage.setItem("taxidz_phone",phoneF);
+
+      // تحقق من وجود الحساب في كلا الـ collections
+      const pSnap=await getDoc(doc(db,"passengers",u.uid));
+      const dSnap=await getDoc(doc(db,"drivers",u.uid));
+      const hasPassenger=pSnap.exists();
+      const hasDriver=dSnap.exists();
+
+      if(isPassenger){
+        if(hasPassenger){
+          // مسجل كراكب — دخول مباشر
+          const d=pSnap.data();
+          if(d.name) localStorage.setItem("taxidz_name",d.name);
+          localStorage.setItem("taxidz_role","passenger");
+          try{const fcmToken=await requestNotificationPermission();if(fcmToken)await setDoc(doc(db,"passengers",u.uid),{fcmToken},{merge:true});}catch(e){}
+          onSuccess("passenger");
+        } else if(hasDriver){
+          // مسجل كسائق فقط — أنشئ له حساب راكب تلقائياً
+          const d=dSnap.data();
+          const name=d.name||d.firstName||"";
+          await setDoc(doc(db,"passengers",u.uid),{
+            uid:u.uid,name,phone:phoneF,role:"passenger",status:"active",
+            rating:0,totalRatings:0,totalRides:0,points:0,
+            referralCode:generateReferralCode(u.uid),referralCount:0,
+            createdAt:serverTimestamp()
+          });
+          if(name) localStorage.setItem("taxidz_name",name);
+          localStorage.setItem("taxidz_role","passenger");
+          try{const fcmToken=await requestNotificationPermission();if(fcmToken)await setDoc(doc(db,"passengers",u.uid),{fcmToken},{merge:true});}catch(e){}
+          onSuccess("passenger");
+        } else {
+          // جديد كلياً — اطلب الاسم
+          setIsNewUser(true);
+          setStep("name");
+        }
       } else {
-        // مستخدم جديد
-        setIsNewUser(true);
-        localStorage.setItem("taxidz_phone",phoneF);
-        if(!isPassenger){
-          // السائق — احفظ مباشرة وانتقل للتوثيق
+        // طلب دخول كسائق
+        if(hasDriver){
+          // مسجل كسائق — دخول مباشر
           localStorage.setItem("taxidz_role","driver");
+          try{const fcmToken=await requestNotificationPermission();if(fcmToken)await setDoc(doc(db,"drivers",u.uid),{fcmToken},{merge:true});}catch(e){}
+          onSuccess("driver");
+        } else if(hasPassenger){
+          // مسجل كراكب ويريد أن يصبح سائقاً — أنشئ حساب سائق وانتقل للتوثيق
+          const d=pSnap.data();
           const myCode=generateReferralCode(u.uid);
-          await setDoc(doc(db,"drivers",u.uid),{ uid:u.uid,phone:phoneF,role:"driver",status:"pending",verificationStatus:"none",rating:0,totalRatings:0,totalRides:0,points:0,referralCode:myCode,referralCount:0,createdAt:serverTimestamp() });
+          await setDoc(doc(db,"drivers",u.uid),{
+            uid:u.uid,phone:phoneF,name:d.name||"",role:"driver",
+            status:"pending",verificationStatus:"none",
+            rating:0,totalRatings:0,totalRides:0,points:0,
+            referralCode:myCode,referralCount:0,createdAt:serverTimestamp()
+          });
+          localStorage.setItem("taxidz_role","driver");
           try{const fcmToken=await requestNotificationPermission();if(fcmToken)await setDoc(doc(db,"drivers",u.uid),{fcmToken},{merge:true});}catch(e){}
           onSuccess("driver");
         } else {
-          setStep("name");
+          // جديد كلياً كسائق
+          const myCode=generateReferralCode(u.uid);
+          await setDoc(doc(db,"drivers",u.uid),{
+            uid:u.uid,phone:phoneF,role:"driver",status:"pending",
+            verificationStatus:"none",rating:0,totalRatings:0,totalRides:0,
+            points:0,referralCode:myCode,referralCount:0,createdAt:serverTimestamp()
+          });
+          localStorage.setItem("taxidz_role","driver");
+          try{const fcmToken=await requestNotificationPermission();if(fcmToken)await setDoc(doc(db,"drivers",u.uid),{fcmToken},{merge:true});}catch(e){}
+          onSuccess("driver");
         }
       }
     } catch(e){
-      console.log("Verify:",e.code);
+      console.log("Verify:",e.code,e.message);
       setError(lang==="ar"?"رمز التحقق خاطئ أو منتهي الصلاحية":"Code incorrect ou expiré");
       setOtp(["","","","","",""]);
-      otpRefs[0].current?.focus();
+      setTimeout(()=>otpRefs[0].current?.focus(),100);
     }
     setLoading(false);
   };
@@ -1369,48 +1429,4 @@ function PassengerApp({ onLogout, user, lang }) {
 
 // ===== MAIN =====
 export default function App() {
-  const{isLoaded,loadError}=useJsApiLoader({googleMapsApiKey:process.env.REACT_APP_GOOGLE_MAPS_KEY||"",libraries:LIBRARIES,language:"ar",region:"DZ"});
-  const[screen,setScreen]=useState("welcome");
-  const[role,setRole]=useState(null);
-  const[user,setUser]=useState(null);
-  const[lang,setLang]=useState(localStorage.getItem("taxidz_lang")||"ar");
-
-  const changeLang=l=>{setLang(l);localStorage.setItem("taxidz_lang",l);};
-
-  useEffect(()=>{
-    const u=onAuthStateChanged(auth,async u=>{
-      if(u){
-        setUser(u);
-        const savedRole=localStorage.getItem("taxidz_role");
-        if(savedRole){setRole(savedRole);setScreen("app");return;}
-        try {
-          await new Promise(r=>setTimeout(r,800));
-          const pSnap=await getDoc(doc(db,"passengers",u.uid));
-          if(pSnap.exists()){const d=pSnap.data();if(d.name)localStorage.setItem("taxidz_name",d.name);if(d.phone)localStorage.setItem("taxidz_phone",d.phone);localStorage.setItem("taxidz_role","passenger");setRole("passenger");setScreen("app");return;}
-          const dSnap=await getDoc(doc(db,"drivers",u.uid));
-          if(dSnap.exists()){localStorage.setItem("taxidz_role","driver");setRole("driver");setScreen("app");return;}
-        } catch(e){console.log("Auth check:",e);}
-        setScreen("welcome");
-      } else {
-        setUser(null);setRole(null);setScreen("welcome");localStorage.removeItem("taxidz_role");
-      }
-    });
-    return()=>u();
-  },[]);
-
-  const handleLogout=async()=>{
-    if(role==="driver"&&user?.uid){try{await setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true});}catch(e){}}
-    try{await signOut(auth);}catch(e){}
-    setUser(null);setRole(null);setScreen("welcome");
-    ["taxidz_role","taxidz_phone","taxidz_name"].forEach(k=>localStorage.removeItem(k));
-  };
-
-  const handleAuthSuccess=r=>{setRole(r);localStorage.setItem("taxidz_role",r);setScreen("app");};
-
-  if(loadError) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg }}><div style={{ textAlign:"center" }}><div style={{ fontSize:48 }}>⚠️</div><div style={{ fontWeight:800,color:C.text }}>خطأ في الخريطة</div></div></div>;
-  if(!isLoaded) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg }}><div style={{ textAlign:"center" }}><img src="/logo192.png" alt="" style={{ width:80,height:80,marginBottom:16 }} onError={e=>e.target.style.display="none"} /><div style={{ fontWeight:700,color:C.text }}>جارٍ تحميل AL-BURAQ...</div></div></div>;
-
-  return (
-    <div style={{ maxWidth:390,margin:"0 auto",minHeight:"100vh" }}>
-      <style>{"* { box-sizing: border-box; margin: 0; padding: 0; }"}</style>
-      {screen==="welcome"&&<WelcomeS
+  const{isLoaded,loadError}=useJs
