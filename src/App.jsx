@@ -11,6 +11,10 @@ import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } f
 import DriverDashboard from "./DriverDashboard";
 
 const LIBRARIES = ["places"];
+
+// ===== SESSION MANAGEMENT =====
+const generateSessionId = () => `${Date.now()}-${Math.random().toString(36).substr(2,9)}`;
+const SESSION_KEY = "taxidz_session_id";
 const ALGERIA_CENTER = { lat: 36.737, lng: 3.086 };
 const PRICE_PER_KM = 30;
 const BASE_PRICE = 40;
@@ -936,6 +940,43 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   );
 }
 
+// ===== FORCE LOGOUT MODAL =====
+function ForceLogoutModal({ lang, onConfirm, onCancel }) {
+  const isRTL = lang === "ar";
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:24,backdropFilter:"blur(8px)" }}>
+      <div style={{ background:"#1a1d27",borderRadius:24,padding:28,width:"100%",maxWidth:380,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr",border:"1px solid #ef444444" }}>
+        <div style={{ textAlign:"center",marginBottom:20 }}>
+          <div style={{ fontSize:56,marginBottom:12 }}>🔐</div>
+          <div style={{ fontWeight:900,fontSize:20,color:"#fff",marginBottom:8 }}>
+            {lang==="ar"?"حسابك مفتوح في جهاز آخر!":lang==="fr"?"Compte ouvert sur un autre appareil!":"Account open on another device!"}
+          </div>
+          <div style={{ fontSize:13,color:"#94a3b8",lineHeight:1.7 }}>
+            {lang==="ar"?"تم اكتشاف أن حسابك مفتوح في جهاز آخر. هل تريد تسجيل الخروج من ذلك الجهاز وفتح الحساب هنا؟":
+             lang==="fr"?"Votre compte est connecté sur un autre appareil. Voulez-vous le déconnecter et vous connecter ici?":
+             "Your account is open on another device. Do you want to sign out there and continue here?"}
+          </div>
+        </div>
+        <div style={{ background:"#ef444422",borderRadius:14,padding:"12px 16px",marginBottom:20,border:"1px solid #ef444444" }}>
+          <div style={{ fontSize:12,color:"#ef4444",fontWeight:600 }}>
+            ⚠️ {lang==="ar"?"إذا فقدت هاتفك — اضغط نعم لإغلاق الجهاز القديم فوراً":
+                lang==="fr"?"Si vous avez perdu votre téléphone, appuyez sur Oui pour déconnecter l'ancien appareil":
+                "If you lost your phone, press Yes to disconnect the old device immediately"}
+          </div>
+        </div>
+        <div style={{ display:"flex",gap:10 }}>
+          <button onClick={onCancel} style={{ flex:1,background:"#2a2d3e",border:"1px solid #3a3d4e",borderRadius:14,padding:14,color:"#94a3b8",fontFamily:"inherit",fontWeight:600,cursor:"pointer",fontSize:14 }}>
+            {lang==="ar"?"إلغاء":lang==="fr"?"Annuler":"Cancel"}
+          </button>
+          <button onClick={onConfirm} style={{ flex:2,background:"linear-gradient(135deg,#ef4444,#dc2626)",border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:14 }}>
+            {lang==="ar"?"✅ نعم، أغلق الجهاز الآخر":lang==="fr"?"✅ Oui, déconnecter l'autre":"✅ Yes, disconnect other device"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===== PASSENGER APP =====
 function PassengerApp({ onLogout, user, lang }) {
   const t=T[lang];
@@ -967,6 +1008,8 @@ function PassengerApp({ onLogout, user, lang }) {
   const [passengerData,setPassengerData]=useState(null);
   const [fcmToast,setFcmToast]=useState(null);
   const [showReport,setShowReport]=useState(false);
+  const [showForceLogout,setShowForceLogout]=useState(false);
+  const [pendingSession,setPendingSession]=useState(null);
   const [showChat,setShowChat]=useState(false);
   const originRef=useRef(null);
   const destRef=useRef(null);
@@ -977,7 +1020,32 @@ function PassengerApp({ onLogout, user, lang }) {
 
   useEffect(()=>{
     if(!user?.uid) return;
-    const u=onSnapshot(doc(db,"passengers",user.uid),s=>{if(s.exists())setPassengerData(s.data());});
+
+    // Session management — منع فتح الحساب من جهازين
+    const initSession = async () => {
+      let sessionId = localStorage.getItem(SESSION_KEY);
+      if (!sessionId) {
+        sessionId = generateSessionId();
+        localStorage.setItem(SESSION_KEY, sessionId);
+      }
+      try {
+        await setDoc(doc(db,"passengers",user.uid), { activeSession: sessionId, lastSeen: serverTimestamp() }, { merge: true });
+      } catch(e) {}
+    };
+    initSession();
+
+    const u=onSnapshot(doc(db,"passengers",user.uid),s=>{
+      if(s.exists()) {
+        setPassengerData(s.data());
+        // تحقق من الجلسة
+        const savedSession = localStorage.getItem(SESSION_KEY);
+        const activeSession = s.data()?.activeSession;
+        if (activeSession && savedSession && activeSession !== savedSession) {
+          // تم فتح الحساب من جهاز آخر — أظهر modal بدل التسجيل الفوري
+          setShowForceLogout(true);
+        }
+      }
+    });
     const unsub=onForegroundMessage(msg=>setFcmToast({title:msg.notification?.title,body:msg.notification?.body}));
     return()=>{u();if(unsub)unsub();};
   },[user?.uid]);
@@ -988,6 +1056,16 @@ function PassengerApp({ onLogout, user, lang }) {
   useEffect(()=>{ if(screen!=="searching") return; const t=setInterval(()=>setTimer(p=>p+1),1000); return()=>clearInterval(t); },[screen]);
   useEffect(()=>{ if(screen==="searching"&&timer===60) setNoDrivers(true); },[timer,screen]);
   useEffect(()=>{ if(screen!=="ride") return; const t=setInterval(()=>setElapsed(p=>p+1),1000); return()=>clearInterval(t); },[screen]);
+
+  const handleForceLogout = async () => {
+    // إغلاق الجهاز الحالي وإعادة تسجيل الدخول هنا بجلسة جديدة
+    const newSessionId = generateSessionId();
+    localStorage.setItem(SESSION_KEY, newSessionId);
+    try {
+      await setDoc(doc(db,"passengers",user.uid),{ activeSession:newSessionId, lastSeen:serverTimestamp() },{ merge:true });
+    } catch(e) {}
+    setShowForceLogout(false);
+  };
 
   const updateDistance=(lat1,lng1,lat2,lng2)=>{ const km=getDistanceKm(lat1,lng1,lat2,lng2);setDistanceKm(km);const p=calcPrice(km,multiplier);setSuggestedPrice(p);setOfferPrice(p); };
   const handleGPS=()=>{ setGpsLoading(true); navigator.geolocation?.getCurrentPosition(pos=>{ const ll=new window.google.maps.LatLng(pos.coords.latitude,pos.coords.longitude);setOriginPlace(ll);setPassengerGPS({lat:pos.coords.latitude,lng:pos.coords.longitude}); new window.google.maps.Geocoder().geocode({location:ll},(results,status)=>{ setOriginText(status==="OK"&&results[0]?results[0].formatted_address:`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);setGpsLoading(false);if(destPlace){const{lat:lat2,lng:lng2}=getLatLng(destPlace);updateDistance(pos.coords.latitude,pos.coords.longitude,lat2,lng2);} }); },()=>setGpsLoading(false)); };
@@ -1017,6 +1095,7 @@ function PassengerApp({ onLogout, user, lang }) {
   if(screen==="home") return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
+      {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={()=>{ signOut(auth); localStorage.removeItem(SESSION_KEY); localStorage.removeItem("taxidz_role"); }} />}
       <div style={{ padding:"48px 20px 12px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
         <div>
           <div style={{ fontSize:13,color:C.textMuted }}>{t.hello}</div>
@@ -1341,15 +1420,4 @@ export default function App() {
   const handleAuthSuccess=r=>{setRole(r);localStorage.setItem("taxidz_role",r);setScreen("app");};
 
   if(loadError) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg }}><div style={{ textAlign:"center" }}><div style={{ fontSize:48 }}>⚠️</div><div style={{ fontWeight:800,color:C.text }}>خطأ في الخريطة</div></div></div>;
-  if(!isLoaded) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg }}><div style={{ textAlign:"center" }}><img src="/logo192.png" alt="" style={{ width:80,height:80,marginBottom:16 }} onError={e=>e.target.style.display="none"} /><div style={{ fontWeight:700,color:C.text }}>جارٍ تحميل AL-BURAQ...</div></div></div>;
-
-  return (
-    <div style={{ maxWidth:390,margin:"0 auto",minHeight:"100vh" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap'); *{box-sizing:border-box;margin:0;padding:0}`}</style>
-      {screen==="welcome"&&<WelcomeScreen onSelect={r=>{setRole(r);setScreen("auth");}} lang={lang} setLang={changeLang} />}
-      {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} />}
-      {screen==="app"&&role==="passenger"&&<PassengerApp onLogout={handleLogout} user={user} lang={lang} />}
-      {screen==="app"&&role==="driver"&&<DriverDashboard user={user} onLogout={handleLogout} />}
-    </div>
-  );
-}
+  if(!isLoaded) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center
