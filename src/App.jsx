@@ -1412,4 +1412,4 @@ export default function App() {
 
   return (
     <div style={{ maxWidth:390,margin:"0 auto",minHeight:"100vh" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap')
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap')
