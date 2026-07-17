@@ -958,6 +958,9 @@ function PassengerApp({ onLogout, user, lang }) {
   const [showRating,setShowRating]=useState(false);
   const [finalRating,setFinalRating]=useState(0);
   const [gpsLoading,setGpsLoading]=useState(false);
+  const [passengers,setPassengers]=useState(1);
+  const [luggageWeight,setLuggageWeight]=useState("less25");
+  const [luggageDesc,setLuggageDesc]=useState("");
   const [noDrivers,setNoDrivers]=useState(false);
   const [timer,setTimer]=useState(0);
   const [passengerGPS,setPassengerGPS]=useState(null);
@@ -995,7 +998,7 @@ function PassengerApp({ onLogout, user, lang }) {
     setTimer(0);setNoDrivers(false);setDriverLocation(null);
     const oLL=getLatLng(originPlace),dLL=getLatLng(destPlace);
     try {
-      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,status:"pending",createdAt:serverTimestamp() });
+      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,passengers,luggageWeight,luggageDesc,status:"pending",createdAt:serverTimestamp() });
       setBookingId(ref.id);
       setBooking({originPlace,destPlace,originText,destText,rideType,price,distanceKm,passengerPhone,passengerName,id:ref.id});
       const snap=await getDocs(query(collection(db,"drivers"),where("isOnline","==",true),where("verificationStatus","==","approved")));
@@ -1095,7 +1098,40 @@ function PassengerApp({ onLogout, user, lang }) {
             ⭐ لديك {passengerData.points} نقطة — يمكنك استخدامها كخصم!
           </div>
         )}
-        <button onClick={()=>{if(originPlace&&destPlace)setScreen("offer");}} style={{ width:"100%",marginTop:8,background:originPlace&&destPlace?`linear-gradient(135deg,${C.green},${C.greenDark})`:C.border,border:"none",borderRadius:16,padding:16,color:originPlace&&destPlace?"#fff":C.textMuted,fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:originPlace&&destPlace?"pointer":"default" }}>
+        {/* عدد الركاب */}
+        <div style={{ fontWeight:700,marginBottom:10,color:C.text }}>👥 {lang==="ar"?"عدد الركاب":lang==="fr"?"Nombre de passagers":"Passengers"}</div>
+        <div style={{ display:"flex",gap:8,marginBottom:16 }}>
+          {[1,2,3,4].map(n=>(
+            <button key={n} onClick={()=>setPassengers(n)} style={{ flex:1,padding:"12px 4px",borderRadius:14,border:`2px solid ${passengers===n?C.green:C.border}`,background:passengers===n?C.greenLight:C.bg,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:16,color:passengers===n?C.greenDark:C.text }}>
+              {n} {n===1?(lang==="ar"?"راكب":lang==="fr"?"passager":"rider"):(lang==="ar"?"ركاب":lang==="fr"?"passagers":"riders")}
+            </button>
+          ))}
+        </div>
+
+        {/* الحمولة */}
+        <div style={{ fontWeight:700,marginBottom:10,color:C.text }}>🧳 {lang==="ar"?"وزن الحمولة":lang==="fr"?"Poids des bagages":"Luggage weight"}</div>
+        <div style={{ display:"flex",flexDirection:"column",gap:8,marginBottom:12 }}>
+          {[
+            {id:"less25",label:lang==="ar"?"أقل من 25 كغ":lang==="fr"?"Moins de 25 kg":"Less than 25 kg",icon:"🎒"},
+            {id:"25to40",label:lang==="ar"?"25 كغ — 40 كغ":lang==="fr"?"25 kg — 40 kg":"25 kg — 40 kg",icon:"🧳"},
+            {id:"more40",label:lang==="ar"?"أكثر من 40 كغ":lang==="fr"?"Plus de 40 kg":"More than 40 kg",icon:"📦"},
+          ].map(l=>(
+            <div key={l.id} onClick={()=>setLuggageWeight(l.id)} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderRadius:14,border:`2px solid ${luggageWeight===l.id?C.orange:C.border}`,background:luggageWeight===l.id?C.orangeLight:C.bg,cursor:"pointer" }}>
+              <div style={{ width:22,height:22,borderRadius:"50%",border:`2px solid ${luggageWeight===l.id?C.orange:C.textLight}`,background:luggageWeight===l.id?C.orange:"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                {luggageWeight===l.id&&<span style={{ color:"#fff",fontSize:12,fontWeight:900 }}>✓</span>}
+              </div>
+              <span style={{ fontSize:16 }}>{l.icon}</span>
+              <span style={{ fontSize:14,fontWeight:luggageWeight===l.id?700:500,color:luggageWeight===l.id?C.orange:C.text }}>{l.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* نوع الحمولة */}
+        <input value={luggageDesc} onChange={e=>setLuggageDesc(e.target.value)}
+          placeholder={lang==="ar"?"نوع الحمولة: مثال: حقائب، مواد بناء...":lang==="fr"?"Type de bagages: Ex: valises, matériaux...":"Luggage type: e.g. bags, materials..."}
+          style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 16px",fontFamily:"inherit",fontSize:13,color:C.text,outline:"none",textAlign:isRTL?"right":"left",marginBottom:14 }} />
+
+        <button onClick={()=>{if(originPlace&&destPlace)setScreen("offer");}} style={{ width:"100%",marginTop:4,background:originPlace&&destPlace?`linear-gradient(135deg,${C.green},${C.greenDark})`:C.border,border:"none",borderRadius:16,padding:16,color:originPlace&&destPlace?"#fff":C.textMuted,fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:originPlace&&destPlace?"pointer":"default" }}>
           {originPlace&&destPlace?`${t.sendOffer} (${suggestedPrice} DA)`:t.searchDest}
         </button>
       </div>
@@ -1178,8 +1214,8 @@ function PassengerApp({ onLogout, user, lang }) {
         </div>
         <div style={{ background:C.bg,borderRadius:16,padding:16,marginBottom:14 }}>
           <div style={{ display:"flex",gap:12,alignItems:"center",marginBottom:10 }}>
-            <div style={{ width:52,height:52,borderRadius:"50%",background:C.dark,overflow:"hidden",border:`2px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24 }}>
-              {selectedDriver?.selfieUrl?<img src={selectedDriver.selfieUrl} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} />:"👨‍✈️"}
+            <div style={{ width:52,height:52,borderRadius:12,background:C.dark,overflow:"hidden",border:`2px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24 }}>
+              {selectedDriver?.carFrontUrl?<img src={selectedDriver.carFrontUrl} alt="سيارة" style={{ width:"100%",height:"100%",objectFit:"cover" }} />:selectedDriver?.selfieUrl?<img src={selectedDriver.selfieUrl} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} />:"🚗"}
             </div>
             <div style={{ flex:1 }}>
               <div style={{ fontWeight:800,fontSize:15,color:C.text }}>{selectedDriver?.name||"السائق"}</div>
