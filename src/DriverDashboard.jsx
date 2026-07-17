@@ -541,7 +541,7 @@ function DriverVerificationForm({ uid, userEmail, existingData, onDone, isUpdate
   const validateStep=()=>{
     if(step===0&&(!gender||!firstName||!lastName||!birthDate||!wilaya)){setError("يرجى إكمال جميع الحقول ⚠️");return false;}
     if(step===1&&(!carYear||!finalBrand||!finalModel||!carColor||!plateNumber||!ownerConfirm)){setError("يرجى إكمال بيانات السيارة ⚠️");return false;}
-    if(step===2&&!isUpdate&&(!selfieB64||!carFrontB64||!carSideB64||!grayCardB64)){setError("يرجى رفع الصور الإلزامية ⚠️");return false;}
+    if(step===2&&!isUpdate&&(!carFrontB64||!carSideB64||!grayCardB64)){setError("يرجى رفع الصور الإلزامية ⚠️");return false;}
     if(step===2&&isUpdate&&!grayCardB64){setError("يرجى رفع صورة البطاقة الرمادية الجديدة ⚠️");return false;}
     return true;
   };
@@ -607,7 +607,7 @@ function DriverVerificationForm({ uid, userEmail, existingData, onDone, isUpdate
         </>)}
         {step===2&&(<>
           {isUpdate&&<div style={{ background:`${C.blue}15`,borderRadius:12,padding:"10px 14px",marginBottom:16,border:`1px solid ${C.blue}44` }}><div style={{ fontSize:12,color:C.blue,fontWeight:600 }}>📌 البطاقة الرمادية إلزامية · باقي الصور اختيارية</div></div>}
-          <PhotoUpload label="🤳 صورة شخصية (سيلفي)" preview={selfieB64} onSelect={e=>handlePhoto(e,setSelfieB64)} required={!isUpdate} />
+          <PhotoUpload label="🤳 صورة شخصية (سيلفي)" preview={selfieB64} onSelect={e=>handlePhoto(e,setSelfieB64)} required={false} />
           <PhotoUpload label="🚗 صورة السيارة من الأمام" preview={carFrontB64} onSelect={e=>handlePhoto(e,setCarFrontB64)} required={!isUpdate} />
           <PhotoUpload label="🚗 صورة السيارة من الجانب" preview={carSideB64} onSelect={e=>handlePhoto(e,setCarSideB64)} required={!isUpdate} />
           <PhotoUpload label="📄 البطاقة الرمادية" preview={grayCardB64} onSelect={e=>handlePhoto(e,setGrayCardB64)} required={true} />
@@ -751,7 +751,7 @@ export default function DriverDashboard({ user, onLogout }) {
 
   const acceptBooking=async(booking)=>{
     try {
-      await updateDoc(doc(db,"bookings",booking.id),{status:"accepted",driverId:user.uid,driverInfo:{name:data?.name||"السائق",phone:data?.phone||"",carBrand:data?.carBrand||"",carModel:data?.carModel||"",plateNumber:data?.plateNumber||"",rating:data?.rating||null,selfieUrl:data?.selfieUrl||null,uid:user.uid},acceptedAt:serverTimestamp()});
+      await updateDoc(doc(db,"bookings",booking.id),{status:"accepted",driverId:user.uid,driverInfo:{name:data?.name||"السائق",phone:data?.phone||"",carBrand:data?.carBrand||"",carModel:data?.carModel||"",carColor:data?.carColor||"",plateNumber:data?.plateNumber||"",rating:data?.rating||null,selfieUrl:data?.selfieUrl||null,carFrontUrl:data?.carFrontUrl||null,uid:user.uid},acceptedAt:serverTimestamp()});
       setAcceptedBooking(booking);setDriverScreen("pickup");setBookings([]);startTracking(booking.id);
       // نقاط للسائق عند قبول الرحلة
       await updateDoc(doc(db,"drivers",user.uid),{totalRides:increment(1)});
@@ -895,9 +895,18 @@ export default function DriverDashboard({ user, onLogout }) {
                   <div style={{ display:"flex",justifyContent:"space-between",marginBottom:10 }}>
                     <div>
                       <div style={{ fontWeight:700,fontSize:14,color:C.text }}>{r.passengerName||"راكب"}</div>
-                      <div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>📍 {r.originText?.substring(0,30)}...</div>
+                          <div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>📍 {r.originText?.substring(0,30)}...</div>
                       <div style={{ fontSize:12,color:C.textMuted }}>🏁 {r.destText?.substring(0,30)}...</div>
-                      <div style={{ fontSize:11,color:r.price>=calcPrice(r.distanceKm)?C.green:C.red,marginTop:4 }}>المعيار: {calcPrice(r.distanceKm)} دج {r.price>=calcPrice(r.distanceKm)?"✅":"⚠️"}</div>
+                      {/* المسافة بين السائق والراكب */}
+                      {driverLocation&&<div style={{ fontSize:11,color:C.blue,marginTop:3,fontWeight:700 }}>
+                        🚗→👤 {getDistKm(driverLocation.lat,driverLocation.lng,r.originLat,r.originLng).toFixed(1)} كم منك
+                      </div>}
+                      <div style={{ fontSize:11,color:C.textMuted,marginTop:2 }}>
+                        📏 {r.distanceKm?.toFixed(1)} كم · 👥 {r.passengers||1} {r.passengers>1?"ركاب":"راكب"}
+                        {r.luggageWeight&&` · 🧳 ${r.luggageWeight==="less25"?"<25كغ":r.luggageWeight==="25to40"?"25-40كغ":">40كغ"}`}
+                      </div>
+                      {r.luggageDesc&&<div style={{ fontSize:11,color:C.textMuted }}>📦 {r.luggageDesc}</div>}
+                      <div style={{ fontSize:11,color:r.price>=calcPrice(r.distanceKm)?C.green:C.red,marginTop:3 }}>المعيار: {calcPrice(r.distanceKm)} دج {r.price>=calcPrice(r.distanceKm)?"✅":"⚠️"}</div>
                     </div>
                     <div style={{ textAlign:"left" }}>
                       <div style={{ fontSize:22,fontWeight:900,color:C.orange }}>{r.price} دج</div>
