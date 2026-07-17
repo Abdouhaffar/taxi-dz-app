@@ -4,6 +4,8 @@ import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer } from "@react-go
 import { db } from "./firebase";
 
 const LIBRARIES = ["places"];
+const generateSessionId = () => `${Date.now()}-${Math.random().toString(36).substr(2,9)}`;
+const SESSION_KEY = "taxidz_session_id";
 
 const C = {
   bg:"#0f1117", card:"#1a1d27", border:"#2a2d3e",
@@ -702,12 +704,40 @@ export default function DriverDashboard({ user, onLogout }) {
   const [driverScreen,setDriverScreen]=useState("dashboard");
   const [driverLocation,setDriverLocation]=useState(null);
   const [showReport,setShowReport]=useState(false);
+  const [showSessionAlert,setShowSessionAlert]=useState(false);
   const [showReset,setShowReset]=useState(false);
   const [showChangeVehicle,setShowChangeVehicle]=useState(false);
   const [showChat,setShowChat]=useState(false);
   const [showEarnings,setShowEarnings]=useState(false);
   const [showSubscription,setShowSubscription]=useState(false);
   const watchIdRef=useRef(null);
+
+  // Session management للسائق
+  useEffect(()=>{
+    if(!user?.uid||status!=="approved") return;
+    const initSession = async () => {
+      let sessionId = localStorage.getItem(SESSION_KEY);
+      if (!sessionId) {
+        sessionId = generateSessionId();
+        localStorage.setItem(SESSION_KEY, sessionId);
+      }
+      try {
+        await setDoc(doc(db,"drivers",user.uid),{ activeSession:sessionId, lastSeen:serverTimestamp() },{ merge:true });
+      } catch(e) {}
+    };
+    initSession();
+
+    // مراقبة الجلسة للسائق
+    const sessionUnsub = onSnapshot(doc(db,"drivers",user.uid), snap=>{
+      if (!snap.exists()) return;
+      const savedSession = localStorage.getItem(SESSION_KEY);
+      const activeSession = snap.data()?.activeSession;
+      if (activeSession && savedSession && activeSession !== savedSession) {
+        setShowSessionAlert(true);
+      }
+    });
+    return()=>sessionUnsub();
+  },[user?.uid,status]);
 
   // تفعيل الاتصال تلقائياً
   useEffect(()=>{
@@ -788,6 +818,31 @@ export default function DriverDashboard({ user, onLogout }) {
   return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:"rtl" }}>
       {showChat&&acceptedBooking&&<ChatBox bookingId={acceptedBooking.id} userId={user?.uid} userName={data?.name||"السائق"} otherName={acceptedBooking.passengerName||"الراكب"} onClose={()=>setShowChat(false)} />}
+      {showSessionAlert&&(
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:24,backdropFilter:"blur(8px)" }}>
+          <div style={{ background:C.card,borderRadius:24,padding:28,width:"100%",maxWidth:380,fontFamily:"'Cairo',sans-serif",direction:"rtl",border:`1px solid ${C.red}44` }}>
+            <div style={{ textAlign:"center",marginBottom:20 }}>
+              <div style={{ fontSize:56,marginBottom:12 }}>🔐</div>
+              <div style={{ fontWeight:900,fontSize:20,color:C.text,marginBottom:8 }}>حسابك مفتوح في جهاز آخر!</div>
+              <div style={{ fontSize:13,color:C.textMuted,lineHeight:1.7 }}>تم اكتشاف أن حسابك مفتوح في جهاز آخر. هل تريد إغلاق الجهاز الآخر والمتابعة هنا؟</div>
+            </div>
+            <div style={{ background:C.redLight,borderRadius:14,padding:"12px 16px",marginBottom:20,border:`1px solid ${C.red}44` }}>
+              <div style={{ fontSize:12,color:C.red,fontWeight:600 }}>⚠️ إذا فقدت هاتفك — اضغط "إغلاق الجهاز الآخر" لحماية حسابك فوراً</div>
+            </div>
+            <div style={{ display:"flex",gap:10 }}>
+              <button onClick={async()=>{
+                import("firebase/auth").then(({getAuth,signOut:so})=>{ so(getAuth()).then(()=>{ localStorage.removeItem(SESSION_KEY); localStorage.removeItem("taxidz_role"); }); });
+              }} style={{ flex:1,background:C.border,border:"none",borderRadius:14,padding:14,color:C.text,fontFamily:"inherit",fontWeight:600,cursor:"pointer",fontSize:13 }}>تسجيل الخروج</button>
+              <button onClick={async()=>{
+                const newId=generateSessionId();
+                localStorage.setItem(SESSION_KEY,newId);
+                try{await setDoc(doc(db,"drivers",user.uid),{activeSession:newId,lastSeen:serverTimestamp()},{merge:true});}catch(e){}
+                setShowSessionAlert(false);
+              }} style={{ flex:2,background:`linear-gradient(135deg,${C.red},#dc2626)`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13 }}>✅ إغلاق الجهاز الآخر</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showReport&&acceptedBooking&&<DriverReportModal targetId={acceptedBooking.passengerId} targetName={acceptedBooking.passengerName||"الراكب"} driverId={user?.uid} driverName={data?.name||"السائق"} onClose={()=>setShowReport(false)} />}
       {showReset&&<DriverPasswordReset onClose={()=>setShowReset(false)} />}
 
