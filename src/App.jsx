@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { auth, db, requestNotificationPermission, onForegroundMessage } from "./firebase";
 import {
-  signOut, onAuthStateChanged, updateProfile
+  signOut, onAuthStateChanged, updateProfile, RecaptchaVerifier, signInWithPhoneNumber
 } from "firebase/auth";
 import {
   doc, setDoc, getDoc, serverTimestamp, addDoc, collection,
@@ -691,30 +691,18 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   // عداد إعادة الإرسال
   useEffect(()=>{ if(resendTimer<=0) return; const t=setInterval(()=>setResendTimer(p=>p-1),1000); return()=>clearInterval(t); },[resendTimer]);
 
-  const setupRecaptcha=()=>{
-    if(!window.recaptchaVerifier){
-      const{RecaptchaVerifier}=require("firebase/auth");
-      window.recaptchaVerifier=new RecaptchaVerifier(auth,"recaptcha-container",{
-        size:"invisible",
-        callback:()=>{},
-        "expired-callback":()=>{ if(window.recaptchaVerifier){try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null;} },
-      });
-    }
-  };
-
   const sendOTP=async()=>{
     const digits=phone.replace(/\D/g,"");
     if(digits.length<9){setError(lang==="ar"?"أدخل رقم هاتف صحيح":"Numéro invalide");return;}
     setLoading(true);setError("");
     try {
       if(window.recaptchaVerifier){try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null;}
-      const{RecaptchaVerifier,signInWithPhoneNumber:signPhone}=await import("firebase/auth");
       window.recaptchaVerifier=new RecaptchaVerifier(auth,"recaptcha-container",{
         size:"invisible",callback:()=>{},
         "expired-callback":()=>{window.recaptchaVerifier=null;},
       });
       const fullPhone=`+213${digits.replace(/^0/,"")}`;
-      const result=await signPhone(auth,fullPhone,window.recaptchaVerifier);
+      const result=await signInWithPhoneNumber(auth,fullPhone,window.recaptchaVerifier);
       setConfirmResult(result);
       setStep("otp");
       setResendTimer(60);
@@ -1420,4 +1408,8 @@ export default function App() {
   const handleAuthSuccess=r=>{setRole(r);localStorage.setItem("taxidz_role",r);setScreen("app");};
 
   if(loadError) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg }}><div style={{ textAlign:"center" }}><div style={{ fontSize:48 }}>⚠️</div><div style={{ fontWeight:800,color:C.text }}>خطأ في الخريطة</div></div></div>;
-  if(!isLoaded) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center
+  if(!isLoaded) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg }}><div style={{ textAlign:"center" }}><img src="/logo192.png" alt="" style={{ width:80,height:80,marginBottom:16 }} onError={e=>e.target.style.display="none"} /><div style={{ fontWeight:700,color:C.text }}>جارٍ تحميل AL-BURAQ...</div></div></div>;
+
+  return (
+    <div style={{ maxWidth:390,margin:"0 auto",minHeight:"100vh" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap')
