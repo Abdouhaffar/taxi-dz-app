@@ -1069,7 +1069,7 @@ function PassengerApp({ onLogout, user, lang }) {
   useEffect(()=>{
     if(!user?.uid) return;
 
-    // Session management — منع فتح الحساب من جهازين
+    // Session management - prevent dual device login
     const initSession = async () => {
       let sessionId = localStorage.getItem(SESSION_KEY);
       if (!sessionId) {
@@ -1085,7 +1085,7 @@ function PassengerApp({ onLogout, user, lang }) {
     const u=onSnapshot(doc(db,"passengers",user.uid),s=>{
       if(s.exists()) {
         setPassengerData(s.data());
-        // تحقق من الجلسة
+        // Check session
         const savedSession = localStorage.getItem(SESSION_KEY);
         const activeSession = s.data()?.activeSession;
         if (activeSession && savedSession && activeSession !== savedSession) {
@@ -1112,7 +1112,7 @@ function PassengerApp({ onLogout, user, lang }) {
   };
 
   const handleForceLogout = async () => {
-    // إغلاق الجهاز الحالي وإعادة تسجيل الدخول هنا بجلسة جديدة
+    // Close current session and open new one
     const newSessionId = generateSessionId();
     localStorage.setItem(SESSION_KEY, newSessionId);
     try {
@@ -1433,4 +1433,5 @@ function PassengerApp({ onLogout, user, lang }) {
   return null;
 }
 
-// ===== 
+// ===== MAIN =====
+export
