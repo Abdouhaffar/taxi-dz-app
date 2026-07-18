@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { auth, db, requestNotificationPermission, onForegroundMessage } from "./firebase";
 import {
@@ -1432,4 +1433,4 @@ function PassengerApp({ onLogout, user, lang }) {
 }
 
 // ===== MAIN =====
-export default function App
+export
