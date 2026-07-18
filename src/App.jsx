@@ -1105,6 +1105,12 @@ function PassengerApp({ onLogout, user, lang }) {
   useEffect(()=>{ if(screen==="searching"&&timer===60) setNoDrivers(true); },[timer,screen]);
   useEffect(()=>{ if(screen!=="ride") return; const t=setInterval(()=>setElapsed(p=>p+1),1000); return()=>clearInterval(t); },[screen]);
 
+  const handleForceLogoutCancel = () => {
+    signOut(auth);
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem("taxidz_role");
+  };
+
   const handleForceLogout = async () => {
     // إغلاق الجهاز الحالي وإعادة تسجيل الدخول هنا بجلسة جديدة
     const newSessionId = generateSessionId();
@@ -1143,7 +1149,7 @@ function PassengerApp({ onLogout, user, lang }) {
   if(screen==="home") return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
-      {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={()=>{ signOut(auth); localStorage.removeItem(SESSION_KEY); localStorage.removeItem("taxidz_role"); }} />}
+      {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ padding:"48px 20px 12px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
         <div>
           <div style={{ fontSize:13,color:C.textMuted }}>{t.hello}</div>
@@ -1427,6 +1433,4 @@ function PassengerApp({ onLogout, user, lang }) {
   return null;
 }
 
-// ===== MAIN =====
-export default function App() {
-  const{isLoaded,loadError}=useJs
+// ===== 
