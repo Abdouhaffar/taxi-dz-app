@@ -1421,9 +1421,7 @@ function PassengerApp({ onLogout, user, lang }) {
             </button>
             <button onClick={()=>setShowReport(true)} style={{ width:44,background:`${C.orange}15`,border:`1px solid ${C.orange}44`,borderRadius:12,padding:"10px",color:C.orange,fontFamily:"inherit",cursor:"pointer",fontSize:16 }}>🚨</button>
           </div>
-          {destPlace&&<button onClick={()=>{const d=getLatLng(destPlace);openNavigation(d.lat,d.lng);}} style={{ width:"100%",background:`linear-gradient(135deg,${C.googleBlue},#1557b0)`,border:"none",borderRadius:14,padding:13,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-            <span style={{ fontSize:18 }}>🗺️</span>{t.trackRoute}
-          </button>}
+          {destPlace&&<button onClick={()=>{ const d=getLatLng(destPlace); openNavigation(d.lat,d.lng); }} style={{ width:"100%",background:`linear-gradient(135deg,${C.googleBlue},#1557b0)`,border:"none",borderRadius:14,padding:13,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}><span style={{ fontSize:18 }}>🗺️</span>{t.trackRoute}</button>}
           <button onClick={finishRide} style={{ width:"100%",background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer" }}>{t.arrived}</button>
         </div>
         <SOSButton passengerName={passengerName} bookingId={bookingId} />
@@ -1434,4 +1432,4 @@ function PassengerApp({ onLogout, user, lang }) {
 }
 
 // ===== MAIN =====
-export
+export default function App
