@@ -1434,4 +1434,27 @@ function PassengerApp({ onLogout, user, lang }) {
 
 // ===== MAIN =====
 export default function App() {
-  cons
+  
+
+  const handleLogout=async()=>{
+    if(role==="driver"&&user?.uid){try{await setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true});}catch(e){}}
+    try{await signOut(auth);}catch(e){}
+    setUser(null);setRole(null);setScreen("welcome");
+    ["taxidz_role","taxidz_phone","taxidz_name"].forEach(k=>localStorage.removeItem(k));
+  };
+
+  const handleAuthSuccess=r=>{setRole(r);localStorage.setItem("taxidz_role",r);setScreen("app");};
+
+  if(loadError) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg }}><div style={{ textAlign:"center" }}><div style={{ fontSize:48 }}>⚠️</div><div style={{ fontWeight:800,color:C.text }}>خطأ في الخريطة</div></div></div>;
+  if(!isLoaded) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg }}><div style={{ textAlign:"center" }}><img src="/logo192.png" alt="" style={{ width:80,height:80,marginBottom:16 }} onError={e=>e.target.style.display="none"} /><div style={{ fontWeight:700,color:C.text }}>جارٍ تحميل AL-BURAQ...</div></div></div>;
+
+  return (
+    <div style={{ maxWidth:390,margin:"0 auto",minHeight:"100vh" }}>
+      <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
+      {screen==="welcome"&&<WelcomeScreen onSelect={r=>{setRole(r);setScreen("auth");}} lang={lang} setLang={changeLang} />}
+      {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} />}
+      {screen==="app"&&role==="passenger"&&<PassengerApp onLogout={handleLogout} user={user} lang={lang} />}
+      {screen==="app"&&role==="driver"&&<DriverDashboard user={user} onLogout={handleLogout} />}
+    </div>
+  );
+}
