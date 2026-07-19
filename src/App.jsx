@@ -252,7 +252,7 @@ function NotificationToast({ notification, onClose }) {
   useEffect(()=>{ const t=setTimeout(onClose,5000); return()=>clearTimeout(t); },[onClose]);
   if (!notification) return null;
   return (
-    <div style={{ position:"fixed", top:20, left:"50%", transform:"translateX(-50%)", width:"calc(100% - 40px)", maxWidth:370, background:C.dark, borderRadius:16, padding:"14px 18px", boxShadow:"0 8px 32px rgba(0,0,0,0.3)", zIndex:9999, fontFamily:"'Cairo',sans-serif", direction:"rtl", display:"flex", gap:12, alignItems:"center", border:`1px solid ${C.green}44`, animation:"slideDown 0.3s ease" }}>
+    <div style={{ position:"fixed", top:20, left:"50%", transform:"translateX(-50%)", width:"calc(100% - 40px)", maxWidth:370, background:C.dark, borderRadius:16, padding:"14px 18px", boxShadow:"0 8px 32px rgba(0,0,0,0.3)", zIndex:9999, fontFamily:"Cairo,sans-serif", direction:"rtl", display:"flex", gap:12, alignItems:"center", border:`1px solid ${C.green}44`, animation:"slideDown 0.3s ease" }}>
       <div style={{ fontSize:28 }}>🔔</div>
       <div style={{ flex:1 }}>
         <div style={{ fontWeight:800, fontSize:14, color:"#fff" }}>{notification.title}</div>
@@ -280,7 +280,7 @@ function ReportModal({ targetId, targetName, targetType, reporterId, reporterNam
   };
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:2000,backdropFilter:"blur(4px)" }}>
-      <div style={{ background:C.card,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:430,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr" }}>
+      <div style={{ background:C.card,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:430,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
         {done?(
           <div style={{ textAlign:"center",padding:"20px 0" }}>
             <div style={{ fontSize:56,marginBottom:12 }}>✅</div>
@@ -327,7 +327,7 @@ function PasswordResetModal({ onClose, lang }) {
   };
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,backdropFilter:"blur(4px)",padding:20 }}>
-      <div style={{ background:C.card,borderRadius:24,padding:28,width:"100%",maxWidth:380,fontFamily:"'Cairo',sans-serif",direction:lang==="ar"?"rtl":"ltr" }}>
+      <div style={{ background:C.card,borderRadius:24,padding:28,width:"100%",maxWidth:380,fontFamily:"Cairo,sans-serif",direction:lang==="ar"?"rtl":"ltr" }}>
         {sent?(
           <div style={{ textAlign:"center" }}>
             <div style={{ fontSize:56,marginBottom:12 }}>📧</div>
@@ -375,7 +375,7 @@ function RatingModal({ booking, driver, onSubmit, onSkip, lang }) {
   };
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:1000,backdropFilter:"blur(4px)" }}>
-      <div style={{ background:C.card,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:430,fontFamily:"'Cairo',sans-serif",direction:lang==="ar"?"rtl":"ltr" }}>
+      <div style={{ background:C.card,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:430,fontFamily:"Cairo,sans-serif",direction:lang==="ar"?"rtl":"ltr" }}>
         <div style={{ textAlign:"center",marginBottom:20 }}>
           <div style={{ fontSize:52,marginBottom:8 }}>🏁</div>
           <div style={{ fontWeight:900,fontSize:22,color:C.text }}>{driver?.name||"👨‍✈️"}</div>
@@ -420,7 +420,7 @@ function ChatBox({ bookingId, userId, userName, otherName, lang, onClose }) {
   };
 
   return (
-    <div style={{ position:"fixed",inset:0,background:C.bg,zIndex:1500,display:"flex",flexDirection:"column",fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ position:"fixed",inset:0,background:C.bg,zIndex:1500,display:"flex",flexDirection:"column",fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {/* Header */}
       <div style={{ background:C.dark,padding:"48px 20px 16px",display:"flex",alignItems:"center",gap:12 }}>
         <button onClick={onClose} style={{ width:36,height:36,borderRadius:10,background:"#ffffff22",border:"none",color:"#fff",cursor:"pointer",fontSize:16 }}>←</button>
@@ -493,7 +493,7 @@ function WalletScreen({ userId, passengerData, lang, onBack }) {
   };
 
   return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
         <BackBtn onBack={onBack} />
         <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.wallet}</div>
@@ -640,7 +640,7 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
   const t=T[lang];
   const isRTL=lang==="ar";
   return (
-    <div style={{ minHeight:"100vh",background:`linear-gradient(160deg,${C.dark} 0%,#16213e 50%,#0f3460 100%)`,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,position:"relative" }}>
+    <div style={{ minHeight:"100vh",background:`linear-gradient(160deg,${C.dark} 0%,#16213e 50%,#0f3460 100%)`,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,position:"relative" }}>
       <div style={{ position:"absolute",top:48,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6 }}>
         {[{code:"ar",flag:"🇩🇿"},{code:"fr",flag:"🇫🇷"},{code:"en",flag:"🇬🇧"}].map(l=>(
           <button key={l.code} onClick={()=>setLang(l.code)} style={{ padding:"6px 12px",borderRadius:20,border:`1.5px solid ${lang===l.code?"#d4a017":"#ffffff33"}`,background:lang===l.code?"#d4a01722":"transparent",color:lang===l.code?"#d4a017":"#ffffff88",fontFamily:"inherit",fontWeight:lang===l.code?700:400,fontSize:13,cursor:"pointer" }}>{l.flag}</button>
@@ -873,7 +873,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   const progressWidth = step==="phone"?"33%":step==="otp"?"66%":"100%";
 
   return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {showReset&&<PasswordResetModal onClose={()=>setShowReset(false)} lang={lang} />}
       <div id="recaptcha-container" style={{ position:"absolute" }} />
 
@@ -994,7 +994,7 @@ function ForceLogoutModal({ lang, onConfirm, onCancel }) {
   const isRTL = lang === "ar";
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:24,backdropFilter:"blur(8px)" }}>
-      <div style={{ background:"#1a1d27",borderRadius:24,padding:28,width:"100%",maxWidth:380,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr",border:"1px solid #ef444444" }}>
+      <div style={{ background:"#1a1d27",borderRadius:24,padding:28,width:"100%",maxWidth:380,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",border:"1px solid #ef444444" }}>
         <div style={{ textAlign:"center",marginBottom:20 }}>
           <div style={{ fontSize:56,marginBottom:12 }}>🔐</div>
           <div style={{ fontWeight:900,fontSize:20,color:"#fff",marginBottom:8 }}>
@@ -1148,7 +1148,7 @@ function PassengerApp({ onLogout, user, lang }) {
 
   // HOME
   if(screen==="home") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ padding:"48px 20px 12px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
@@ -1187,7 +1187,7 @@ function PassengerApp({ onLogout, user, lang }) {
 
   // BOOKING
   if(screen==="booking") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:30 }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:30 }}>
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 12px",gap:12 }}>
         <BackBtn onBack={()=>setScreen("home")} />
         <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.tripDetails}</div>
@@ -1274,7 +1274,7 @@ function PassengerApp({ onLogout, user, lang }) {
 
   // OFFER
   if(screen==="offer") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
         <BackBtn onBack={()=>setScreen("booking")} />
         <div><div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.offerPrice}</div><div style={{ fontSize:12,color:C.textMuted }}>40 + {distanceKm.toFixed(1)}×30 = {suggestedPrice} DA</div></div>
@@ -1309,7 +1309,7 @@ function PassengerApp({ onLogout, user, lang }) {
 
   // SEARCHING
   if(screen==="searching") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
       <TaxiMap origin={booking?.originPlace} destination={booking?.destPlace} showDrivers={true} />
       <div style={{ padding:"14px 20px 0" }}>
         <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.searching}</div>
@@ -1336,7 +1336,7 @@ function PassengerApp({ onLogout, user, lang }) {
 
   // FOUND
   if(screen==="found") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
       {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
       <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="pickup" lang={lang} />
@@ -1389,7 +1389,7 @@ function PassengerApp({ onLogout, user, lang }) {
   if(screen==="ride"){
     const mins=Math.floor(elapsed/60),secs=elapsed%60;
     if(showRating) return (
-      <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr" }}>
+      <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
         {finalRating>0?(
           <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:24,gap:16 }}>
             <div style={{ fontSize:80 }}>{finalRating>=4?"🌟":"⭐"}</div>
@@ -1406,7 +1406,7 @@ function PassengerApp({ onLogout, user, lang }) {
       </div>
     );
     return (
-      <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:isRTL?"rtl":"ltr" }}>
+      <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
         {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
         {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
         <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="ride" lang={lang} />
@@ -1433,4 +1433,5 @@ function PassengerApp({ onLogout, user, lang }) {
 }
 
 // ===== MAIN =====
-export
+export default function App() {
+  cons
