@@ -1434,7 +1434,47 @@ function PassengerApp({ onLogout, user, lang }) {
 
 // ===== MAIN =====
 export default function App() {
-  
+  const mapsResult = useJsApiLoader({ googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_KEY || "", libraries: LIBRARIES, language: "ar", region: "DZ" });
+  const isLoaded = mapsResult.isLoaded;
+  const loadError = mapsResult.loadError;
+  const[screen,setScreen]=useState("welcome");
+  const[role,setRole]=useState(null);
+  const[user,setUser]=useState(null);
+  const[lang,setLang]=useState(localStorage.getItem("taxidz_lang")||"ar");
+
+  const changeLang=l=>{setLang(l);localStorage.setItem("taxidz_lang",l);};
+
+  useEffect(()=>{
+    const u=onAuthStateChanged(auth,async u=>{
+      if(u){
+        setUser(u);
+        const savedRole=localStorage.getItem("taxidz_role");
+        if(savedRole){setRole(savedRole);setScreen("app");return;}
+        try {
+          await new Promise(r=>setTimeout(r,800));
+          // تحقق من كلا الـ collections
+          const savedRole=localStorage.getItem("taxidz_role");
+          if(savedRole==="passenger"){
+            const pSnap=await getDoc(doc(db,"passengers",u.uid));
+            if(pSnap.exists()){const d=pSnap.data();if(d.name)localStorage.setItem("taxidz_name",d.name);if(d.phone)localStorage.setItem("taxidz_phone",d.phone);setRole("passenger");setScreen("app");return;}
+          }
+          if(savedRole==="driver"){
+            const dSnap=await getDoc(doc(db,"drivers",u.uid));
+            if(dSnap.exists()){setRole("driver");setScreen("app");return;}
+          }
+          // بدون دور محفوظ — ابحث في كليهما
+          const pSnap=await getDoc(doc(db,"passengers",u.uid));
+          if(pSnap.exists()){const d=pSnap.data();if(d.name)localStorage.setItem("taxidz_name",d.name);if(d.phone)localStorage.setItem("taxidz_phone",d.phone);localStorage.setItem("taxidz_role","passenger");setRole("passenger");setScreen("app");return;}
+          const dSnap=await getDoc(doc(db,"drivers",u.uid));
+          if(dSnap.exists()){localStorage.setItem("taxidz_role","driver");setRole("driver");setScreen("app");return;}
+        } catch(e){console.log("Auth check:",e);}
+        setScreen("welcome");
+      } else {
+        setUser(null);setRole(null);setScreen("welcome");localStorage.removeItem("taxidz_role");
+      }
+    });
+    return()=>u();
+  },[]);
 
   const handleLogout=async()=>{
     if(role==="driver"&&user?.uid){try{await setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true});}catch(e){}}
