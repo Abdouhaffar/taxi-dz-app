@@ -694,6 +694,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
   const [resendTimer,setResendTimer]=useState(0);
+  const [authMode,setAuthMode]=useState("login"); // login | register
   const [isNewUser,setIsNewUser]=useState(false);
   const otpRefs=[useRef(),useRef(),useRef(),useRef(),useRef(),useRef()];
   const isPassenger=role==="passenger";
@@ -715,10 +716,15 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     setLoading(true);setError("");
     try {
       if(window.recaptchaVerifier){try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null;}
+      // Clear old container
+      const container=document.getElementById("recaptcha-container");
+      if(container) container.innerHTML="";
       window.recaptchaVerifier=new RecaptchaVerifier(auth,"recaptcha-container",{
-        size:"invisible",callback:()=>{},
-        "expired-callback":()=>{window.recaptchaVerifier=null;},
+        size:"normal",
+        callback:()=>{},
+        "expired-callback":()=>{ window.recaptchaVerifier=null; setError(lang==="ar"?"انتهت صلاحية التحقق — أعد المحاولة":"Délai expiré"); },
       });
+      await window.recaptchaVerifier.render();
       const fullPhone=`+213${digits.replace(/^0/,"")}`;
       const result=await signInWithPhoneNumber(auth,fullPhone,window.recaptchaVerifier);
       setConfirmResult(result);
@@ -875,8 +881,6 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {showReset&&<PasswordResetModal onClose={()=>setShowReset(false)} lang={lang} />}
-      <div id="recaptcha-container" style={{ position:"absolute" }} />
-
       {/* Header */}
       <div style={{ background:`linear-gradient(135deg,${C.dark},#16213e)`,padding:"48px 24px 24px",textAlign:"center",position:"relative" }}>
         <button onClick={step==="phone"?onBack:()=>{setStep("phone");setOtp(["","","","","",""]);setError("");}} style={{ position:"absolute",top:48,[isRTL?"right":"left"]:20,width:36,height:36,borderRadius:10,background:"#ffffff22",border:"none",color:"#fff",cursor:"pointer",fontSize:16 }}>←</button>
@@ -900,7 +904,15 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
         {/* STEP 1: رقم الهاتف */}
         {step==="phone"&&(
           <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+            <div id="recaptcha-container" style={{ display:"flex",justifyContent:"center",marginBottom:8 }} />
             <div style={{ background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow }}>
+              {/* تسجيل جديد / دخول */}
+              <div style={{ background:"#e2ddd8",borderRadius:12,padding:3,display:"flex",marginBottom:16 }}>
+                {[{id:"login",label:lang==="ar"?"🔑 مسجل مسبقاً":lang==="fr"?"🔑 Déjà inscrit":"🔑 Already registered"},{id:"register",label:lang==="ar"?"✅ تسجيل جديد":lang==="fr"?"✅ Nouveau":"✅ New account"}].map(m=>(
+                  <button key={m.id} onClick={()=>setAuthMode(m.id)}
+                    style={{ flex:1,padding:9,borderRadius:10,border:"none",background:authMode===m.id?C.card:"transparent",color:authMode===m.id?C.text:C.textMuted,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:12 }}>{m.label}</button>
+                ))}
+              </div>
               <div style={{ fontSize:13,color:C.textMuted,marginBottom:10,fontWeight:600 }}>
                 {lang==="ar"?"رقم الهاتف الجزائري":lang==="fr"?"Numéro algérien":"Algerian phone number"}
               </div>
