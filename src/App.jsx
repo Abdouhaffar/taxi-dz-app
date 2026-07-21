@@ -783,14 +783,26 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     if (digits.length < 9) { setError(lang==="ar"?"أدخل رقم هاتفك":"Entrez votre numéro"); return; }
     setLoading(true); setError("");
     try {
-      if (window.recaptchaVerifier) { try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null; }
+      // تنظيف القديم أولاً
+      if (window.recaptchaVerifier) {
+        try { window.recaptchaVerifier.clear(); } catch(x) {}
+        window.recaptchaVerifier = null;
+      }
       const container = document.getElementById("recaptcha-container");
       if (container) container.innerHTML = "";
+
+      // انتظر لحظة للتأكد من التنظيف
+      await new Promise(r => setTimeout(r, 300));
+
       window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
         size: "normal",
-        callback: () => {},
-        "expired-callback": () => { window.recaptchaVerifier=null; setError(lang==="ar"?"انتهت صلاحية التحقق":"Délai expiré"); },
+        callback: () => { console.log("reCAPTCHA solved ✅"); },
+        "expired-callback": () => {
+          window.recaptchaVerifier = null;
+          setError(lang==="ar"?"انتهت صلاحية التحقق — حاول مرة أخرى":"Délai expiré");
+        },
       });
+
       await window.recaptchaVerifier.render();
       const fullPhone = `+213${digits.replace(/^0/,"")}`;
       const result = await signInWithPhoneNumber(auth, fullPhone, window.recaptchaVerifier);
@@ -800,14 +812,20 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       setTimeout(() => otpRefs[0].current?.focus(), 300);
     } catch(e) {
       console.log("OTP Error:", e.code, e.message);
-      if (window.recaptchaVerifier) { try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null; }
+      if (window.recaptchaVerifier) {
+        try { window.recaptchaVerifier.clear(); } catch(x) {}
+        window.recaptchaVerifier = null;
+      }
       const msgs = {
         "auth/invalid-phone-number": lang==="ar"?"رقم الهاتف غير صحيح":"Numéro invalide",
-        "auth/too-many-requests": lang==="ar"?"طلبات كثيرة — انتظر":"Trop de tentatives",
-        "auth/captcha-check-failed": lang==="ar"?"خطأ في التحقق":"Erreur captcha",
-        "auth/quota-exceeded": lang==="ar"?"تجاوز الحد اليومي":"Quota dépassé",
+        "auth/too-many-requests": lang==="ar"?"محاولات كثيرة جداً — انتظر بضع دقائق":"Trop de tentatives — attendez",
+        "auth/captcha-check-failed": lang==="ar"?"خطأ في التحقق — أعد تحميل الصفحة":"Erreur captcha — rechargez",
+        "auth/quota-exceeded": lang==="ar"?"تجاوز الحد اليومي — حاول غداً":"Quota dépassé",
+        "auth/network-request-failed": lang==="ar"?"تحقق من اتصالك بالإنترنت":"Vérifiez votre connexion",
+        "auth/missing-phone-number": lang==="ar"?"أدخل رقم الهاتف":"Entrez votre numéro",
+        "auth/invalid-app-credential": lang==="ar"?"خطأ في إعداد التطبيق — تواصل مع الدعم":"Erreur de configuration",
       };
-      setError(msgs[e.code] || `${lang==="ar"?"خطأ":"Erreur"}: ${e.code}`);
+      setError(msgs[e.code] || (lang==="ar"?`خطأ: ${e.code}`:`Erreur: ${e.code}`));
     }
     setLoading(false);
   };
@@ -1409,7 +1427,7 @@ function PassengerApp({ onLogout, user, lang }) {
   );
 
   // FOUND
- if(screen==="found") return (
+  if(screen==="found") return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
       {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
@@ -1571,4 +1589,4 @@ export default function App() {
       {screen==="app"&&role==="driver"&&<DriverDashboard user={user} onLogout={handleLogout} />}
     </div>
   );
-}
+} 
