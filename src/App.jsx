@@ -689,19 +689,10 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   const accent = isPassenger ? C.green : C.orange;
   const accentDark = isPassenger ? C.greenDark : "#ea580c";
 
-  const [mode, setMode] = useState("login"); // login | register | reset
-  // Register states
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
-  const [pinCode, setPinCode] = useState("");
-  const [pinConfirm, setPinConfirm] = useState("");
+  const [name, setName] = useState("");
   const [referral, setReferral] = useState("");
-  // Login states
-  const [loginPhone, setLoginPhone] = useState("");
-  const [loginPin, setLoginPin] = useState("");
-  // OTP states (for register + reset)
-  const [step, setStep] = useState("form"); // form | otp | done
+  const [step, setStep] = useState("phone"); // phone | otp | name
   const [otp, setOtp] = useState(["","","","","",""]);
   const [confirmResult, setConfirmResult] = useState(null);
   const [resendTimer, setResendTimer] = useState(0);
@@ -718,92 +709,20 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     return () => clearInterval(t);
   }, [resendTimer]);
 
-  // ===== LOGIN بالكود (بدون SMS) =====
-  const handleLogin = async () => {
-    const digits = loginPhone.replace(/\D/g,"");
-    if (digits.length < 9) { setError(lang==="ar"?"أدخل رقم هاتفك":"Entrez votre numéro"); return; }
-    if (loginPin.length < 4) { setError(lang==="ar"?"أدخل كود حسابك":"Entrez votre code"); return; }
-    setLoading(true); setError("");
-    try {
-      const col = isPassenger ? "passengers" : "drivers";
-      const q = await getDocs(query(collection(db, col),
-        where("phone", "==", `+213${digits.replace(/^0/,"")}`),
-        where("pinCode", "==", loginPin)
-      ));
-      if (q.empty) {
-        // جرب الـ collection الثاني
-        const col2 = isPassenger ? "drivers" : "passengers";
-        const q2 = await getDocs(query(collection(db, col2),
-          where("phone", "==", `+213${digits.replace(/^0/,"")}`),
-          where("pinCode", "==", loginPin)
-        ));
-        if (!q2.empty) {
-          const userData = q2.docs[0].data();
-          // أنشئ حساب في الـ collection المطلوب
-          await setDoc(doc(db, col, q2.docs[0].id), {
-            ...userData, role: role, status: role==="driver"?"pending":"active",
-            verificationStatus: role==="driver"?"none":null,
-          }, { merge: true });
-          if (isPassenger) {
-            localStorage.setItem("taxidz_name", userData.name||"");
-            localStorage.setItem("taxidz_phone", userData.phone||"");
-          }
-          localStorage.setItem("taxidz_role", role);
-          try { const { getAuth: gA, signInAnonymously } = await import("firebase/auth"); await signInAnonymously(gA()); } catch(e){}
-          onSuccess(role);
-          setLoading(false);
-          return;
-        }
-        setError(lang==="ar"?"رقم الهاتف أو الكود غير صحيح":"Numéro ou code incorrect");
-        setLoading(false); return;
-      }
-      const userData = q.docs[0].data();
-      const uid = q.docs[0].id;
-      if (isPassenger) {
-        localStorage.setItem("taxidz_name", userData.name||"");
-        localStorage.setItem("taxidz_phone", userData.phone||"");
-      }
-      localStorage.setItem("taxidz_role", role);
-      // Sign in anonymously to satisfy Firestore Rules
-      try {
-        const { signInWithCustomToken } = await import("firebase/auth");
-      } catch(e){}
-      // Use phone as identifier - sign in to Firebase
-      onSuccess(role);
-    } catch(e) {
-      console.log("Login error:", e);
-      setError(lang==="ar"?"حدث خطأ — حاول مرة أخرى":"Erreur — réessayez");
-    }
-    setLoading(false);
-  };
-
-  // ===== SEND OTP (للتسجيل أو الاسترجاع) =====
   const sendOTP = async () => {
     const digits = phone.replace(/\D/g,"");
     if (digits.length < 9) { setError(lang==="ar"?"أدخل رقم هاتفك":"Entrez votre numéro"); return; }
     setLoading(true); setError("");
     try {
-      // تنظيف القديم أولاً
-      if (window.recaptchaVerifier) {
-        try { window.recaptchaVerifier.clear(); } catch(x) {}
-        window.recaptchaVerifier = null;
-      }
+      if (window.recaptchaVerifier) { try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null; }
       const container = document.getElementById("recaptcha-container");
       if (container) container.innerHTML = "";
-
-      // انتظر لحظة للتأكد من التنظيف
-      await new Promise(r => setTimeout(r, 300));
-
+      await new Promise(r => setTimeout(r, 200));
       window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-        size: "normal",
-        callback: () => { console.log("reCAPTCHA solved ✅"); },
-        "expired-callback": () => {
-          window.recaptchaVerifier = null;
-          setError(lang==="ar"?"انتهت صلاحية التحقق — حاول مرة أخرى":"Délai expiré");
-        },
+        size: "invisible",
+        callback: () => {},
+        "expired-callback": () => { window.recaptchaVerifier=null; },
       });
-
-      await window.recaptchaVerifier.render();
       const fullPhone = `+213${digits.replace(/^0/,"")}`;
       const result = await signInWithPhoneNumber(auth, fullPhone, window.recaptchaVerifier);
       setConfirmResult(result);
@@ -812,18 +731,14 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       setTimeout(() => otpRefs[0].current?.focus(), 300);
     } catch(e) {
       console.log("OTP Error:", e.code, e.message);
-      if (window.recaptchaVerifier) {
-        try { window.recaptchaVerifier.clear(); } catch(x) {}
-        window.recaptchaVerifier = null;
-      }
+      if (window.recaptchaVerifier) { try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null; }
       const msgs = {
         "auth/invalid-phone-number": lang==="ar"?"رقم الهاتف غير صحيح":"Numéro invalide",
-        "auth/too-many-requests": lang==="ar"?"محاولات كثيرة جداً — انتظر بضع دقائق":"Trop de tentatives — attendez",
-        "auth/captcha-check-failed": lang==="ar"?"خطأ في التحقق — أعد تحميل الصفحة":"Erreur captcha — rechargez",
-        "auth/quota-exceeded": lang==="ar"?"تجاوز الحد اليومي — حاول غداً":"Quota dépassé",
-        "auth/network-request-failed": lang==="ar"?"تحقق من اتصالك بالإنترنت":"Vérifiez votre connexion",
-        "auth/missing-phone-number": lang==="ar"?"أدخل رقم الهاتف":"Entrez votre numéro",
-        "auth/invalid-app-credential": lang==="ar"?"خطأ في إعداد التطبيق — تواصل مع الدعم":"Erreur de configuration",
+        "auth/too-many-requests": lang==="ar"?"محاولات كثيرة — انتظر قليلاً":"Trop de tentatives",
+        "auth/captcha-check-failed": lang==="ar"?"أعد تحميل الصفحة وحاول مرة أخرى":"Rechargez et réessayez",
+        "auth/quota-exceeded": lang==="ar"?"تجاوز الحد اليومي":"Quota dépassé",
+        "auth/network-request-failed": lang==="ar"?"تحقق من اتصالك":"Vérifiez votre connexion",
+        "auth/internal-error-encountered": lang==="ar"?"خطأ داخلي — أعد المحاولة":"Erreur interne",
       };
       setError(msgs[e.code] || (lang==="ar"?`خطأ: ${e.code}`:`Erreur: ${e.code}`));
     }
@@ -842,116 +757,156 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     if (paste.length === 6) { setOtp(paste.split("")); otpRefs[5].current?.focus(); }
   };
 
-  // ===== VERIFY OTP للتسجيل =====
-  const verifyOTPRegister = async () => {
+  const verifyOTP = async () => {
     const code = otp.join("");
     if (code.length < 6) { setError(lang==="ar"?"أدخل الرمز كاملاً":"Code incomplet"); return; }
-    if (pinCode.length < 4) { setError(lang==="ar"?"الكود قصير — 4 أرقام على الأقل":"Code trop court"); return; }
-    if (pinCode !== pinConfirm) { setError(lang==="ar"?"الكودان غير متطابقان":"Codes différents"); return; }
     setLoading(true); setError("");
     try {
       const result = await confirmResult.confirm(code);
       const u = result.user;
-      const digits = phone.replace(/\D/g,"");
-      const phoneF = `+213${digits.replace(/^0/,"")}`;
-      const name = `${firstName} ${lastName}`.trim();
-      const myCode = generateReferralCode(u.uid);
-      const col = isPassenger ? "passengers" : "drivers";
-      await setDoc(doc(db, col, u.uid), {
-        uid: u.uid, name, firstName, lastName, phone: phoneF,
-        pinCode, role, status: role==="driver"?"pending":"active",
-        verificationStatus: role==="driver"?"none":null,
-        rating:0, totalRatings:0, totalRides:0, points:0,
-        referralCode: myCode, referralCount:0, createdAt: serverTimestamp(),
-      });
-      if (referral.trim()) {
-        try {
-          const refSnap = await getDocs(query(collection(db,"passengers"), where("referralCode","==",referral.trim().toUpperCase())));
-          if (!refSnap.empty) {
-            await updateDoc(doc(db,"passengers",refSnap.docs[0].id), {points:increment(50),referralCount:increment(1)});
-            await updateDoc(doc(db,col,u.uid), {points:increment(20),referredBy:referral.trim().toUpperCase()});
-          }
-        } catch(e){}
+      const phoneF = `+213${phone.replace(/\D/g,"").replace(/^0/,"")}`;
+
+      // تحقق من وجود الحساب
+      const pSnap = await getDoc(doc(db, "passengers", u.uid));
+      const dSnap = await getDoc(doc(db, "drivers", u.uid));
+      const hasPassenger = pSnap.exists();
+      const hasDriver = dSnap.exists();
+
+      if (isPassenger) {
+        if (hasPassenger) {
+          // راكب موجود — دخول مباشر
+          const d = pSnap.data();
+          if(d.name) localStorage.setItem("taxidz_name", d.name);
+          if(d.phone) localStorage.setItem("taxidz_phone", d.phone);
+          localStorage.setItem("taxidz_role", "passenger");
+          try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,"passengers",u.uid),{fcmToken},{merge:true}); } catch(e){}
+          onSuccess("passenger");
+        } else if (hasDriver) {
+          // سائق يدخل كراكب — أنشئ له حساب راكب
+          const d = dSnap.data();
+          await setDoc(doc(db,"passengers",u.uid),{
+            uid:u.uid, name:d.name||"", phone:phoneF, role:"passenger",
+            status:"active", rating:0, totalRatings:0, totalRides:0,
+            points:0, referralCode:generateReferralCode(u.uid), referralCount:0,
+            createdAt:serverTimestamp()
+          });
+          localStorage.setItem("taxidz_name", d.name||"");
+          localStorage.setItem("taxidz_phone", phoneF);
+          localStorage.setItem("taxidz_role", "passenger");
+          onSuccess("passenger");
+        } else {
+          // مستخدم جديد — اطلب الاسم
+          localStorage.setItem("taxidz_phone", phoneF);
+          setStep("name");
+        }
+      } else {
+        // سائق
+        if (hasDriver) {
+          localStorage.setItem("taxidz_role", "driver");
+          try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,"drivers",u.uid),{fcmToken},{merge:true}); } catch(e){}
+          onSuccess("driver");
+        } else if (hasPassenger) {
+          // راكب يريد أن يصبح سائقاً
+          const d = pSnap.data();
+          await setDoc(doc(db,"drivers",u.uid),{
+            uid:u.uid, phone:phoneF, name:d.name||"", role:"driver",
+            status:"pending", verificationStatus:"none",
+            rating:0, totalRatings:0, totalRides:0, points:0,
+            referralCode:generateReferralCode(u.uid), referralCount:0,
+            createdAt:serverTimestamp()
+          });
+          localStorage.setItem("taxidz_role", "driver");
+          onSuccess("driver");
+        } else {
+          // سائق جديد كلياً
+          await setDoc(doc(db,"drivers",u.uid),{
+            uid:u.uid, phone:phoneF, role:"driver", status:"pending",
+            verificationStatus:"none", rating:0, totalRatings:0, totalRides:0,
+            points:0, referralCode:generateReferralCode(u.uid), referralCount:0,
+            createdAt:serverTimestamp()
+          });
+          localStorage.setItem("taxidz_role", "driver");
+          onSuccess("driver");
+        }
       }
-      if (isPassenger) { localStorage.setItem("taxidz_name",name); localStorage.setItem("taxidz_phone",phoneF); }
-      localStorage.setItem("taxidz_role", role);
-      try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,col,u.uid),{fcmToken},{merge:true}); } catch(e){}
-      onSuccess(role);
     } catch(e) {
       console.log("Verify:", e.code);
-      setError(lang==="ar"?"رمز التحقق خاطئ أو منتهي":"Code incorrect ou expiré");
+      setError(lang==="ar"?"رمز التحقق خاطئ أو منتهي الصلاحية":"Code incorrect ou expiré");
       setOtp(["","","","","",""]);
       setTimeout(() => otpRefs[0].current?.focus(), 100);
     }
     setLoading(false);
   };
 
-  // ===== VERIFY OTP لاسترجاع الكود =====
-  const verifyOTPReset = async () => {
-    const code = otp.join("");
-    if (code.length < 6) { setError(lang==="ar"?"أدخل الرمز كاملاً":"Code incomplet"); return; }
-    if (pinCode.length < 4) { setError(lang==="ar"?"الكود الجديد قصير":"Code trop court"); return; }
-    if (pinCode !== pinConfirm) { setError(lang==="ar"?"الكودان غير متطابقان":"Codes différents"); return; }
-    setLoading(true); setError("");
+  const saveName = async () => {
+    if (!name.trim()) { setError(lang==="ar"?"أدخل اسمك":"Entrez votre nom"); return; }
+    setLoading(true);
     try {
-      const result = await confirmResult.confirm(code);
-      const u = result.user;
-      const col = isPassenger ? "passengers" : "drivers";
-      await setDoc(doc(db, col, u.uid), { pinCode }, { merge: true });
-      setStep("done");
-    } catch(e) {
-      setError(lang==="ar"?"رمز التحقق خاطئ":"Code incorrect");
-    }
+      const u = auth.currentUser;
+      const phoneF = `+213${phone.replace(/\D/g,"").replace(/^0/,"")}`;
+      await updateProfile(u, {displayName: name});
+      const myCode = generateReferralCode(u.uid);
+      await setDoc(doc(db,"passengers",u.uid),{
+        uid:u.uid, name, phone:phoneF, role:"passenger", status:"active",
+        rating:0, totalRatings:0, totalRides:0,
+        points: referral.trim() ? 20 : 0,
+        referralCode:myCode, referralCount:0, createdAt:serverTimestamp()
+      });
+      if (referral.trim()) {
+        try {
+          const refSnap = await getDocs(query(collection(db,"passengers"),where("referralCode","==",referral.trim().toUpperCase())));
+          if (!refSnap.empty) {
+            await updateDoc(doc(db,"passengers",refSnap.docs[0].id),{points:increment(50),referralCount:increment(1)});
+            await updateDoc(doc(db,"passengers",u.uid),{referredBy:referral.trim().toUpperCase()});
+          }
+        } catch(e){}
+      }
+      localStorage.setItem("taxidz_name", name);
+      localStorage.setItem("taxidz_role", "passenger");
+      try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,"passengers",u.uid),{fcmToken},{merge:true}); } catch(e){}
+      onSuccess("passenger");
+    } catch(e) { setError(lang==="ar"?"خطأ في الحفظ":"Erreur de sauvegarde"); }
     setLoading(false);
   };
 
   const resendOTP = () => {
     if (resendTimer > 0) return;
-    setOtp(["","","","","",""]); setError(""); setStep("form");
+    setOtp(["","","","","",""]); setError(""); setStep("phone");
     if (window.recaptchaVerifier) { try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null; }
   };
-
-  const progressWidth = step==="form"?"33%":step==="otp"?"66%":"100%";
 
   return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {showReset&&<PasswordResetModal onClose={()=>setShowReset(false)} lang={lang} />}
+      <div id="recaptcha-container" style={{ position:"absolute",opacity:0 }} />
 
       {/* Header */}
       <div style={{ background:`linear-gradient(135deg,${C.dark},#16213e)`,padding:"48px 24px 24px",textAlign:"center",position:"relative" }}>
-        <button onClick={step==="form"?onBack:()=>{setStep("form");setOtp(["","","","","",""]);setError("");}}
+        <button onClick={step==="phone"?onBack:()=>{setStep("phone");setOtp(["","","","","",""]);setError("");}}
           style={{ position:"absolute",top:48,[isRTL?"right":"left"]:20,width:36,height:36,borderRadius:10,background:"#ffffff22",border:"none",color:"#fff",cursor:"pointer",fontSize:16 }}>←</button>
         <img src="/logo192.png" alt="AL-BURAQ" style={{ width:60,height:60,objectFit:"contain",marginBottom:8 }} onError={e=>e.target.style.display="none"} />
         <div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{isPassenger?t.passengerGate:t.driverGate}</div>
         <div style={{ fontSize:12,color:"#ffffff66",marginTop:4 }}>
-          {mode==="login"?(lang==="ar"?"أدخل رقمك وكود حسابك":lang==="fr"?"Numéro + code compte":"Phone + account code"):
-           mode==="register"?(step==="form"?(lang==="ar"?"أنشئ حسابك":"Créer votre compte"):(lang==="ar"?"أدخل رمز التحقق":"Code de vérification")):
-           (lang==="ar"?"استرجاع الكود":"Récupérer le code")}
+          {step==="phone"?(lang==="ar"?"أدخل رقم هاتفك":lang==="fr"?"Entrez votre numéro":"Enter your phone"):
+           step==="otp"?(lang==="ar"?"أدخل رمز التحقق":"Code de vérification"):
+           (lang==="ar"?"أدخل اسمك":"Votre prénom")}
         </div>
       </div>
 
       {/* Progress */}
-      {mode!=="login"&&<div style={{ height:3,background:C.border }}>
-        <div style={{ height:"100%",background:accent,width:progressWidth,transition:"width 0.4s ease",borderRadius:"0 4px 4px 0" }} />
-      </div>}
+      <div style={{ height:3,background:C.border }}>
+        <div style={{ height:"100%",background:accent,width:step==="phone"?"33%":step==="otp"?"66%":"100%",transition:"width 0.4s ease" }} />
+      </div>
 
-      <div style={{ padding:"20px 20px 40px" }}>
+      <div style={{ padding:"24px 20px 40px" }}>
         <LanguageSwitcher lang={lang} setLang={()=>{}} />
 
-        {/* Tabs */}
-        <div style={{ background:"#e2ddd8",borderRadius:14,padding:4,display:"flex",marginBottom:20 }}>
-          {[
-            {id:"login",label:lang==="ar"?"🔑 دخول":lang==="fr"?"🔑 Connexion":"🔑 Login"},
-            {id:"register",label:lang==="ar"?"✅ تسجيل جديد":lang==="fr"?"✅ Inscription":"✅ Register"},
-          ].map(m=>(
-            <button key={m.id} onClick={()=>{setMode(m.id);setError("");setStep("form");setOtp(["","","","","",""]);}}
-              style={{ flex:1,padding:10,borderRadius:11,border:"none",background:mode===m.id?C.card:"transparent",color:mode===m.id?C.text:C.textMuted,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:13 }}>{m.label}</button>
-          ))}
-        </div>
-
-        {/* ===== LOGIN ===== */}
-        {mode==="login"&&(
-          <div style={{ background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow,display:"flex",flexDirection:"column",gap:12 }}>
+        {/* STEP 1: الهاتف */}
+        {step==="phone"&&(
+          <div style={{ background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow,display:"flex",flexDirection:"column",gap:14 }}>
+            <div style={{ background:C.blueLight,borderRadius:12,padding:"10px 14px",fontSize:12,color:C.blue,textAlign:"center" }}>
+              💡 {lang==="ar"?"المسجل يدخل برقمه مباشرة · الجديد يُنشئ حسابه تلقائياً":"Déjà inscrit: entrez votre numéro · Nouveau: compte créé automatiquement"}
+            </div>
             <div style={{ fontSize:13,color:C.textMuted,fontWeight:600 }}>
               {lang==="ar"?"رقم الهاتف الجزائري":"Numéro algérien"}
             </div>
@@ -960,111 +915,22 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
                 <span style={{ fontSize:18 }}>🇩🇿</span>
                 <span style={{ fontSize:14,color:C.greenDark,fontWeight:700 }}>+213</span>
               </div>
-              <input value={loginPhone} onChange={e=>setLoginPhone(e.target.value.replace(/\D/g,""))}
-                placeholder="0XXXXXXXXX" type="tel" maxLength={10}
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
-            </div>
-            <div style={{ fontSize:13,color:C.textMuted,fontWeight:600,marginTop:4 }}>
-              {lang==="ar"?"كود الحساب (4-6 أرقام)":"Code du compte (4-6 chiffres)"}
-            </div>
-            <input value={loginPin} onChange={e=>setLoginPin(e.target.value.replace(/\D/g,""))}
-              placeholder="****" type="password" maxLength={6} inputMode="numeric"
-              style={{ background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:20,color:C.text,outline:"none",direction:"ltr",textAlign:"center",letterSpacing:6 }} />
-            {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
-            <button onClick={handleLogin} disabled={loading||loginPhone.replace(/\D/g,"").length<9||loginPin.length<4}
-              style={{ background:loginPhone.replace(/\D/g,"").length>=9&&loginPin.length>=4?`linear-gradient(135deg,${accent},${accentDark})`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-              {loading?<><span style={{ width:18,height:18,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite" }} />{lang==="ar"?"جارٍ...":"Connexion..."}</>:`🚀 ${lang==="ar"?"دخول":"Se connecter"}`}
-            </button>
-            <button onClick={()=>{setMode("reset");setError("");setStep("form");}}
-              style={{ background:"none",border:"none",color:C.blue,fontFamily:"inherit",fontSize:13,cursor:"pointer",fontWeight:600,textAlign:"center" }}>
-              {lang==="ar"?"🔐 نسيت كود حسابك؟":lang==="fr"?"🔐 Code oublié?":"🔐 Forgot your code?"}
-            </button>
-          </div>
-        )}
-
-        {/* ===== REGISTER FORM ===== */}
-        {mode==="register"&&step==="form"&&(
-          <div style={{ background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow,display:"flex",flexDirection:"column",gap:12 }}>
-            <div style={{ display:"flex",gap:8 }}>
-              <input value={firstName} onChange={e=>setFirstName(e.target.value)} placeholder={lang==="ar"?"الاسم":"Prénom"}
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 14px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",textAlign:isRTL?"right":"left" }} />
-              <input value={lastName} onChange={e=>setLastName(e.target.value)} placeholder={lang==="ar"?"اللقب":"Nom"}
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 14px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",textAlign:isRTL?"right":"left" }} />
-            </div>
-            <div style={{ display:"flex",gap:8 }}>
-              <div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"13px 12px",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap" }}>
-                <span style={{ fontSize:18 }}>🇩🇿</span>
-                <span style={{ fontSize:14,color:C.greenDark,fontWeight:700 }}>+213</span>
-              </div>
               <input value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g,""))}
-                placeholder="0XXXXXXXXX" type="tel" maxLength={10}
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
+                placeholder="0XXXXXXXXX" type="tel" maxLength={10} autoFocus
+                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:18,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700,letterSpacing:2 }} />
             </div>
-            <div style={{ display:"flex",gap:8 }}>
-              <input value={pinCode} onChange={e=>setPinCode(e.target.value.replace(/\D/g,""))}
-                placeholder={lang==="ar"?"كود حسابك (4-6 أرقام)":"Code (4-6 chiffres)"} type="password" maxLength={6} inputMode="numeric"
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",letterSpacing:4 }} />
-              <input value={pinConfirm} onChange={e=>setPinConfirm(e.target.value.replace(/\D/g,""))}
-                placeholder={lang==="ar"?"تأكيد الكود":"Confirmer"} type="password" maxLength={6} inputMode="numeric"
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",letterSpacing:4 }} />
-            </div>
-            <div style={{ background:C.blueLight,borderRadius:12,padding:"10px 14px",fontSize:12,color:C.blue }}>
-              🔐 {lang==="ar"?"احفظ كودك — ستحتاجه عند كل دخول":"Mémorisez votre code — nécessaire à chaque connexion"}
-            </div>
-            <input value={referral} onChange={e=>setReferral(e.target.value.toUpperCase())} placeholder={t.referralCode}
-              style={{ background:C.goldLight,border:`1px solid ${C.gold}44`,borderRadius:14,padding:"12px 16px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:"ltr",textAlign:"left" }} />
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
-            <div id="recaptcha-container" style={{ display:"flex",justifyContent:"center",margin:"4px 0" }} />
-            <button onClick={()=>{
-              if(!firstName.trim()||!lastName.trim()){setError(lang==="ar"?"أدخل الاسم واللقب":"Entrez prénom et nom");return;}
-              if(phone.replace(/\D/g,"").length<9){setError(lang==="ar"?"أدخل رقم هاتفك":"Entrez votre numéro");return;}
-              if(pinCode.length<4){setError(lang==="ar"?"الكود قصير (4 أرقام على الأقل)":"Code trop court");return;}
-              if(pinCode!==pinConfirm){setError(lang==="ar"?"الكودان غير متطابقان":"Codes différents");return;}
-              setError(""); sendOTP();
-            }} disabled={loading}
-              style={{ background:`linear-gradient(135deg,${accent},${accentDark})`,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-              {loading?<><span style={{ width:18,height:18,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite" }} />{lang==="ar"?"جارٍ الإرسال...":"Envoi..."}</>:`📨 ${lang==="ar"?"إرسال رمز التحقق":"Envoyer le code"}`}
+            <button onClick={sendOTP} disabled={loading||phone.replace(/\D/g,"").length<9}
+              style={{ background:phone.replace(/\D/g,"").length>=9?`linear-gradient(135deg,${accent},${accentDark})`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:phone.replace(/\D/g,"").length>=9?"pointer":"default",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+              {loading?<><span style={{ width:18,height:18,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite" }} />{lang==="ar"?"جارٍ الإرسال...":"Envoi..."}</>:`📨 ${lang==="ar"?"إرسال رمز التحقق":lang==="fr"?"Envoyer le code":"Send code"}`}
+            </button>
+            <button onClick={()=>setShowReset(true)} style={{ background:"none",border:"none",color:C.blue,fontFamily:"inherit",fontSize:13,cursor:"pointer",fontWeight:600,textAlign:"center" }}>
+              {t.forgotPass}
             </button>
           </div>
         )}
 
-        {/* ===== RESET FORM ===== */}
-        {mode==="reset"&&step==="form"&&(
-          <div style={{ background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow,display:"flex",flexDirection:"column",gap:12 }}>
-            <div style={{ textAlign:"center",marginBottom:8 }}>
-              <div style={{ fontSize:40,marginBottom:8 }}>🔐</div>
-              <div style={{ fontWeight:800,fontSize:16,color:C.text }}>{lang==="ar"?"استرجاع كود الحساب":"Récupérer votre code"}</div>
-              <div style={{ fontSize:12,color:C.textMuted,marginTop:4 }}>{lang==="ar"?"أدخل رقم هاتفك وكود جديد":"Entrez votre numéro et un nouveau code"}</div>
-            </div>
-            <div style={{ display:"flex",gap:8 }}>
-              <div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"13px 12px",display:"flex",alignItems:"center",gap:6 }}>
-                <span>🇩🇿</span><span style={{ fontSize:14,color:C.greenDark,fontWeight:700 }}>+213</span>
-              </div>
-              <input value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g,""))}
-                placeholder="0XXXXXXXXX" type="tel" maxLength={10}
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
-            </div>
-            <div style={{ display:"flex",gap:8 }}>
-              <input value={pinCode} onChange={e=>setPinCode(e.target.value.replace(/\D/g,""))}
-                placeholder={lang==="ar"?"كود جديد":"Nouveau code"} type="password" maxLength={6} inputMode="numeric"
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",letterSpacing:4 }} />
-              <input value={pinConfirm} onChange={e=>setPinConfirm(e.target.value.replace(/\D/g,""))}
-                placeholder={lang==="ar"?"تأكيد":"Confirmer"} type="password" maxLength={6} inputMode="numeric"
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",letterSpacing:4 }} />
-            </div>
-            {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
-            <div id="recaptcha-container" style={{ display:"flex",justifyContent:"center",margin:"4px 0" }} />
-            <button onClick={sendOTP} disabled={loading||phone.replace(/\D/g,"").length<9||pinCode.length<4}
-              style={{ background:`linear-gradient(135deg,${C.blue},#1d4ed8)`,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-              {loading?"...":`📨 ${lang==="ar"?"إرسال رمز التحقق":"Envoyer"}`}
-            </button>
-            <button onClick={()=>setMode("login")} style={{ background:"none",border:"none",color:C.textMuted,fontFamily:"inherit",fontSize:13,cursor:"pointer" }}>
-              ← {lang==="ar"?"رجوع للدخول":"Retour connexion"}
-            </button>
-          </div>
-        )}
-
-        {/* ===== OTP ===== */}
+        {/* STEP 2: OTP */}
         {step==="otp"&&(
           <div style={{ background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow }}>
             <div style={{ textAlign:"center",marginBottom:16 }}>
@@ -1083,8 +949,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
               ))}
             </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center",marginBottom:12 }}>{error}</div>}
-            <button onClick={mode==="register"?verifyOTPRegister:verifyOTPReset}
-              disabled={loading||otp.join("").length<6}
+            <button onClick={verifyOTP} disabled={loading||otp.join("").length<6}
               style={{ width:"100%",background:otp.join("").length===6?`linear-gradient(135deg,${accent},${accentDark})`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:otp.join("").length===6?"pointer":"default",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:12 }}>
               {loading?<><span style={{ width:18,height:18,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite" }} />{lang==="ar"?"جارٍ...":"Vérification..."}</>:`✅ ${lang==="ar"?"تأكيد":"Confirmer"}`}
             </button>
@@ -1100,15 +965,24 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
           </div>
         )}
 
-        {/* ===== DONE ===== */}
-        {step==="done"&&(
-          <div style={{ background:C.card,borderRadius:24,padding:40,boxShadow:C.shadow,textAlign:"center" }}>
-            <div style={{ fontSize:64,marginBottom:16 }}>✅</div>
-            <div style={{ fontWeight:900,fontSize:20,color:C.text,marginBottom:8 }}>{lang==="ar"?"تم تحديث الكود!":"Code mis à jour!"}</div>
-            <div style={{ fontSize:13,color:C.textMuted,marginBottom:24 }}>{lang==="ar"?"يمكنك الآن الدخول بكودك الجديد":"Vous pouvez maintenant vous connecter"}</div>
-            <button onClick={()=>{setMode("login");setStep("form");setOtp(["","","","","",""]);}}
-              style={{ background:`linear-gradient(135deg,${accent},${accentDark})`,border:"none",borderRadius:14,padding:"14px 32px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>
-              🔑 {lang==="ar"?"تسجيل الدخول":"Se connecter"}
+        {/* STEP 3: الاسم */}
+        {step==="name"&&(
+          <div style={{ background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow,display:"flex",flexDirection:"column",gap:12 }}>
+            <div style={{ textAlign:"center",marginBottom:8 }}>
+              <div style={{ fontSize:48,marginBottom:8 }}>👤</div>
+              <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{lang==="ar"?"مرحباً بك! 🎉":"Bienvenue! 🎉"}</div>
+              <div style={{ fontSize:13,color:C.textMuted,marginTop:4 }}>{lang==="ar"?"أدخل اسمك لإكمال التسجيل":"Entrez votre nom pour finaliser"}</div>
+            </div>
+            <input value={name} onChange={e=>setName(e.target.value)}
+              placeholder={lang==="ar"?"اسمك الكامل":"Votre nom complet"} autoFocus
+              style={{ background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",textAlign:isRTL?"right":"left" }} />
+            <input value={referral} onChange={e=>setReferral(e.target.value.toUpperCase())}
+              placeholder={t.referralCode}
+              style={{ background:C.goldLight,border:`1px solid ${C.gold}44`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:"ltr",textAlign:"left" }} />
+            {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
+            <button onClick={saveName} disabled={loading||!name.trim()}
+              style={{ background:name.trim()?`linear-gradient(135deg,${C.green},${C.greenDark})`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:name.trim()?"pointer":"default",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+              {loading?<><span style={{ width:18,height:18,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite" }} />{lang==="ar"?"جارٍ...":"..."}</>:`🚀 ${lang==="ar"?"ابدأ!":"C'est parti!"}`}
             </button>
           </div>
         )}
@@ -1589,4 +1463,4 @@ export default function App() {
       {screen==="app"&&role==="driver"&&<DriverDashboard user={user} onLogout={handleLogout} />}
     </div>
   );
-} 
+}
