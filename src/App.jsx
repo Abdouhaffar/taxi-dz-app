@@ -740,7 +740,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
         "auth/network-request-failed": lang==="ar"?"تحقق من اتصالك":"Vérifiez votre connexion",
         "auth/internal-error-encountered": lang==="ar"?"خطأ داخلي — أعد المحاولة":"Erreur interne",
       };
-      setError(msgs[e.code] || (lang==="ar"?`خطأ: ${e.code}`:`Erreur: ${e.code}`));
+      setError(msgs[e.code] || (lang==="ar"?`خطأ: ${e.code||e.message||'غير معروف'}`:`Erreur: ${e.code||e.message||'inconnue'}`));
     }
     setLoading(false);
   };
@@ -831,7 +831,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       }
     } catch(e) {
       console.log("Verify:", e.code);
-      setError(lang==="ar"?"رمز التحقق خاطئ أو منتهي الصلاحية":"Code incorrect ou expiré");
+      console.log('Verify error:', e.code, e.message); setError(lang==="ar"?"رمز التحقق خاطئ أو منتهي الصلاحية":"Code incorrect ou expiré");
       setOtp(["","","","","",""]);
       setTimeout(() => otpRefs[0].current?.focus(), 100);
     }
