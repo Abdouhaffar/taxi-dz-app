@@ -549,6 +549,18 @@ function DriverVerificationForm({ uid, userEmail, existingData, onDone, isUpdate
   };
   const handleSubmit=async()=>{
     if(!validateStep()) return;
+    // التحقق من السن القانوني (18 سنة)
+    if(birthDate && !isUpdate){
+      const birth = new Date(birthDate);
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if(m < 0 || (m===0 && today.getDate() < birth.getDate())) age--;
+      if(age < 18){
+        setError("⚠️ يجب أن يكون عمرك 18 سنة أو أكثر للتسجيل كسائق");
+        return;
+      }
+    }
     setSaving(true);setError("");
     try {
       const updateData={ verificationStatus:"pending",carYear,carBrand:finalBrand,carModel:finalModel,carColor,plateNumber:plateNumber.trim().toUpperCase(),ownerConfirm,hasLicense,hasCar,grayCardUrl:grayCardB64,rejectionReason:null,submittedAt:serverTimestamp() };
