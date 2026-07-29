@@ -15,21 +15,7 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Find Gradlew and Run Report
+      - name: Generate KeyStore and Show SHA1
         run: |
-          echo "=== مسار المشروع الحالي ==="
-          ls -la
-          
-          GRADLEW_PATH=$(find . -name "gradlew" -type f | head -n 1)
-          
-          if [ -n "$GRADLEW_PATH" ]; then
-            echo "تم العثور على gradlew في: $GRADLEW_PATH"
-            DIR=$(dirname "$GRADLEW_PATH")
-            cd "$DIR"
-            chmod +x gradlew
-            ./gradlew signingReport
-          else
-            echo "لم يتم العثور على gradlew، سنقوم باستخراج بصمة KeyStore افتراضية..."
-            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US" -validity 10000
-            keytool -list -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android
-          fi
+          keytool -genkeypair -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -keystore debug.keystore -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+          keytool -list -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android
