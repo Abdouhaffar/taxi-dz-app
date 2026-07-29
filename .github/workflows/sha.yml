@@ -15,8 +15,15 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Make Gradlew Executable & Run SHA1 Report
+      - name: Run SHA1 Report
         run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew signingReport --continue
+          if [ -d "android" ]; then
+            cd android
+          fi
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+            ./gradlew signingReport
+          else
+            echo "لم يتم العثور على ملف gradlew في مشروعك. يرجى التأكد من وجود مجلد android."
+            exit 1
+          fi
