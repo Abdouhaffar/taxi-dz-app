@@ -1,19 +1,37 @@
-// ===== AUTH FORM (محدث لدعم التسجيل والولوج والموافقة الثنائية) =====
-function AuthForm({ role, onSuccess, onBack, lang }) {
-  const t = T[lang];
+import React, { useState, useEffect, useRef } from "react";
+import { 
+  signInWithPhoneNumber, 
+  RecaptchaVerifier, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  updateProfile 
+} from "firebase/auth";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "./firebase"; // تأكد من مسار ملف firebase الخاص بك
+
+// ==========================================
+// AUTH FORM COMPONENT (كامل وجاهز للنسخ)
+// ==========================================
+export default function AuthForm({ role, onSuccess, onBack, lang, T, C }) {
+  const t = T ? T[lang] : {};
   const isRTL = lang === "ar";
   const isPassenger = role === "passenger";
-  const accent = isPassenger ? C.green : C.orange;
-  const accentDark = isPassenger ? C.greenDark : "#ea580c";
+  
+  // ألوان افتراضية حمايةً في حال عدم التمرير
+  const accent = isPassenger ? (C?.green || "#10b981") : (C?.orange || "#f97316");
+  const accentDark = isPassenger ? (C?.greenDark || "#047857") : "#ea580c";
+  const bgCard = C?.card || "#ffffff";
+  const bgMain = C?.bg || "#f8fafc";
+  const textColor = C?.text || "#0f172a";
+  const textMuted = C?.textMuted || "#64748b";
+  const borderColor = C?.border || "#e2e8f0";
 
   // إدارات الحالة (States)
   const [authMode, setAuthMode] = useState("login"); // 'login' | 'register'
-  const [step, setStep] = useState("input"); // 'input' | 'otp' | 'name' | 'reset_pass'
+  const [step, setStep] = useState("input"); // 'input' | 'otp' | 'name'
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
   const [name, setName] = useState("");
-  const [referral, setReferral] = useState("");
   
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [confirmResult, setConfirmResult] = useState(null);
@@ -21,7 +39,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   
-  const otpRefs = [useRef(), useRef(), useRef(), useRef(), useRef()];
+  const otpRefs = [useRef(), useRef(), useRef(), useRef(), useRef(), useRef()];
 
   const generateReferralCode = (uid) => `BRQ${uid.substring(0, 6).toUpperCase()}`;
 
@@ -31,10 +49,41 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     return () => clearInterval(interval);
   }, [resendTimer]);
 
-  // إرسال كود التحقق الثنائي (OTP) عبر Firebase
+  // 1. تسجيل الدخول لمستخدم مسجل سابقاً (هاتف + كلمة مرور)
+  const handleLogin = async () => {
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length < 9 || !password) {
+      setError(lang === "ar" ? "يرجى إدخال رقم الهاتف وكلمة المرور" : "Veuillez remplir tous les champs");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const dummyEmail = `${cleanPhone}@alburaq.app`;
+      const userCred = await signInWithEmailAndPassword(auth, dummyEmail, password);
+      
+      const collectionName = isPassenger ? "passengers" : "drivers";
+      const userSnap = await getDoc(doc(db, collectionName, userCred.user.uid));
+
+      if (userSnap.exists()) {
+        const fullPhone = `+213${cleanPhone.replace(/^0/, "")}`;
+        localStorage.setItem("taxidz_phone", fullPhone);
+        localStorage.setItem("taxidz_role", role);
+        onSuccess(role);
+      } else {
+        setError(lang === "ar" ? "هذا الحساب غير مسجل بهذا الخيار" : "Compte introuvable dans ce rôle");
+      }
+    } catch (e) {
+      console.error(e);
+      setError(lang === "ar" ? "رقم الهاتف أو كلمة المرور غير صحيحة" : "Numéro ou mot de passe incorrect");
+    }
+    setLoading(false);
+  };
+
+  // 2. إرسال كود التحقق الثنائي (OTP) للحسابات الجديدة
   const sendOTP = async () => {
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length < 9) {
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length < 9) {
       setError(lang === "ar" ? "أدخل رقم هاتف صحيح" : "Entrez un numéro valide");
       return;
     }
@@ -45,13 +94,14 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
         try { window.recaptchaVerifier.clear(); } catch (x) {}
         window.recaptchaVerifier = null;
       }
+      
       window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
         size: "invisible",
         callback: () => {},
         "expired-callback": () => { window.recaptchaVerifier = null; },
       });
 
-      const fullPhone = `+213${digits.replace(/^0/, "")}`;
+      const fullPhone = `+213${cleanPhone.replace(/^0/, "")}`;
       const result = await signInWithPhoneNumber(auth, fullPhone, window.recaptchaVerifier);
       setConfirmResult(result);
       setStep("otp");
@@ -59,42 +109,12 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       setTimeout(() => otpRefs[0].current?.focus(), 300);
     } catch (e) {
       console.error("OTP Error:", e);
-      setError(lang === "ar" ? "فشل إرسال رمز التحقق، يرجى المحاولة لاحقاً" : "Erreur d'envoi du code");
+      setError(lang === "ar" ? "فشل إرسال رمز التحقق، حاول مجدداً" : "Erreur d'envoi du code");
     }
     setLoading(false);
   };
 
-  // معالجة تسجيل الدخول لمستخدم مسجل من قبل (هاتف + كلمة مرور)
-  const handlePasswordLogin = async () => {
-    if (!phone || !password) {
-      setError(lang === "ar" ? "يرجى إدخال رقم الهاتف وكلمة المرور" : "Veuillez remplir tous les champs");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    try {
-      // يمكنك استخدام Firebase Auth بالبريد المشتق من الهاتف أو الموثق المستقل
-      const dummyEmail = `${phone.replace(/\D/g, "")}@alburaq.app`;
-      const { signInWithEmailAndPassword } = await import("firebase/auth");
-      const res = await signInWithEmailAndPassword(auth, dummyEmail, password);
-      
-      const targetCol = isPassenger ? "passengers" : "drivers";
-      const userSnap = await getDoc(doc(db, targetCol, res.user.uid));
-
-      if (userSnap.exists()) {
-        localStorage.setItem("taxidz_phone", phone);
-        localStorage.setItem("taxidz_role", role);
-        onSuccess(role);
-      } else {
-        setError(lang === "ar" ? "الحساب غير موجود في هذا القسم" : "Compte introuvable dans ce rôle");
-      }
-    } catch (e) {
-      setError(lang === "ar" ? "رقم الهاتف أو كلمة المرور غير صحيحة" : "Numéro ou mot de passe incorrect");
-    }
-    setLoading(false);
-  };
-
-  // تأكيد كود OTP للموافقة الثنائية
+  // 3. تأكيد رمز OTP
   const verifyOTP = async () => {
     const code = otp.join("");
     if (code.length < 6) {
@@ -104,50 +124,31 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     setLoading(true);
     setError("");
     try {
-      const result = await confirmResult.confirm(code);
-      const u = result.user;
-      const phoneF = `+213${phone.replace(/\D/g, "").replace(/^0/, "")}`;
-
-      // إذا كانت العملية لاستعادة كلمة المرور
-      if (step === "reset_pass") {
-        setStep("new_password_input");
-        setLoading(false);
-        return;
-      }
-
-      // إذا كان تسجيل جديد
-      const pSnap = await getDoc(doc(db, "passengers", u.uid));
-      const dSnap = await getDoc(doc(db, "drivers", u.uid));
-
-      if (isPassenger ? pSnap.exists() : dSnap.exists()) {
-        localStorage.setItem("taxidz_phone", phoneF);
-        localStorage.setItem("taxidz_role", role);
-        onSuccess(role);
-      } else {
-        setStep("name"); // الانقال لإدخال الاسم وتعيين كلمة المرور للحساب الجديد
-      }
+      await confirmResult.confirm(code);
+      setStep("name"); // الانتقال لكتابة الاسم وتحديد كلمة المرور
     } catch (e) {
+      console.error(e);
       setError(lang === "ar" ? "رمز التحقق خاطئ أو منتهي الصلاحية" : "Code incorrect ou expiré");
     }
     setLoading(false);
   };
 
-  // حفظ بيانات التسجيل الجديد
-  const handleCompleteRegistration = async () => {
-    if (!name.trim() || !password) {
-      setError(lang === "ar" ? "يرجى إكمال جميع البيانات المطلوبة" : "Veuillez remplir les champs");
+  // 4. إتمام التسجيل الجديد
+  const handleRegister = async () => {
+    if (!name.trim() || password.length < 6) {
+      setError(lang === "ar" ? "يرجى كتابة الاسم وكلمة مرور من 6 أرقام/أحرف على الأقل" : "Nom et mot de passe (min 6 caractères) requis");
       return;
     }
     setLoading(true);
+    setError("");
     try {
-      const u = auth.currentUser;
-      const phoneF = `+213${phone.replace(/\D/g, "").replace(/^0/, "")}`;
-      
-      // ربط كلمة المرور بالحساب
-      const dummyEmail = `${phone.replace(/\D/g, "")}@alburaq.app`;
-      const { EmailAuthProvider, linkWithCredential } = await import("firebase/auth");
-      const credential = EmailAuthProvider.credential(dummyEmail, password);
-      await linkWithCredential(u, credential);
+      const cleanPhone = phone.replace(/\D/g, "");
+      const dummyEmail = `${cleanPhone}@alburaq.app`;
+      const fullPhone = `+213${cleanPhone.replace(/^0/, "")}`;
+
+      // إنشاء حساب بالبريد المشتق وكلمة المرور
+      const userCred = await createUserWithEmailAndPassword(auth, dummyEmail, password);
+      const u = userCred.user;
 
       await updateProfile(u, { displayName: name });
       const collectionName = isPassenger ? "passengers" : "drivers";
@@ -155,7 +156,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       await setDoc(doc(db, collectionName, u.uid), {
         uid: u.uid,
         name,
-        phone: phoneF,
+        phone: fullPhone,
         role: role,
         status: "active",
         createdAt: serverTimestamp(),
@@ -163,90 +164,90 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       });
 
       localStorage.setItem("taxidz_name", name);
-      localStorage.setItem("taxidz_phone", phoneF);
+      localStorage.setItem("taxidz_phone", fullPhone);
       localStorage.setItem("taxidz_role", role);
       onSuccess(role);
     } catch (e) {
-      setError(lang === "ar" ? "حدث خطأ أثناء إتمام الحساب" : "Erreur d'enregistrement");
+      console.error(e);
+      if (e.code === "auth/email-already-in-use") {
+        setError(lang === "ar" ? "هذا الرقم مسجل بالفعل! حاول تسجيل الدخول" : "Ce numéro est déjà inscrit!");
+      } else {
+        setError(lang === "ar" ? "حدث خطأ أثناء إنشاء الحساب" : "Erreur d'enregistrement");
+      }
     }
     setLoading(false);
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "Cairo,sans-serif", direction: isRTL ? "rtl" : "ltr" }}>
+    <div style={{ minHeight: "100vh", background: bgMain, fontFamily: "Cairo, sans-serif", direction: isRTL ? "rtl" : "ltr" }}>
       <div id="recaptcha-container" style={{ position: "absolute", opacity: 0 }} />
 
       {/* Header */}
-      <div style={{ background: `linear-gradient(135deg, ${C.dark}, #16213e)`, padding: "40px 24px 20px", textAlign: "center", position: "relative" }}>
-        <button onClick={onBack} style={{ position: "absolute", top: 40, [isRTL ? "right" : "left"]: 20, width: 36, height: 36, borderRadius: 10, background: "#ffffff22", border: "none", color: "#fff", cursor: "pointer" }}>←</button>
-        <div style={{ fontSize: 20, fontWeight: 900, color: "#fff" }}>{isPassenger ? t.passengerGate : t.driverGate}</div>
+      <div style={{ background: "linear-gradient(135deg, #0f172a, #1e293b)", padding: "40px 24px 20px", textAlign: "center", position: "relative" }}>
+        <button onClick={onBack} style={{ position: "absolute", top: 35, [isRTL ? "right" : "left"]: 20, width: 36, height: 36, borderRadius: 10, background: "#ffffff22", border: "none", color: "#fff", cursor: "pointer", fontSize: 18 }}>←</button>
+        <div style={{ fontSize: 20, fontWeight: 900, color: "#fff" }}>
+          {isPassenger ? (t?.passengerGate || "بوابة الركاب") : (t?.driverGate || "بوابة السائقين")}
+        </div>
       </div>
 
-      <div style={{ padding: "20px" }}>
+      <div style={{ padding: "20px", maxWidth: "450px", margin: "0 auto" }}>
         
         {/* التبديل بين تسجيل الدخول وتسجيل جديد */}
         {step === "input" && (
-          <div style={{ display: "flex", background: C.border, borderRadius: 16, padding: 4, marginBottom: 20 }}>
+          <div style={{ display: "flex", background: borderColor, borderRadius: 16, padding: 4, marginBottom: 20 }}>
             <button
               onClick={() => { setAuthMode("login"); setError(""); }}
-              style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: authMode === "login" ? "#fff" : "transparent", fontWeight: 800, color: authMode === "login" ? C.text : C.textMuted, cursor: "pointer" }}>
+              style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: authMode === "login" ? "#fff" : "transparent", fontWeight: 800, color: authMode === "login" ? textColor : textMuted, cursor: "pointer" }}>
               🔑 {lang === "ar" ? "مسجل من قبل" : "Se connecter"}
             </button>
             <button
               onClick={() => { setAuthMode("register"); setError(""); }}
-              style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: authMode === "register" ? accent : "transparent", fontWeight: 800, color: authMode === "register" ? "#fff" : C.textMuted, cursor: "pointer" }}>
+              style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: authMode === "register" ? accent : "transparent", fontWeight: 800, color: authMode === "register" ? "#fff" : textMuted, cursor: "pointer" }}>
               ✅ {lang === "ar" ? "تسجيل جديد" : "Créer un compte"}
             </button>
           </div>
         )}
 
-        {/* نموذج الإدخال الأساسي */}
+        {/* 1️⃣ خطوة إدخال رقم الهاتف/كلمة المرور */}
         {step === "input" && (
-          <div style={{ background: C.card, borderRadius: 24, padding: 24, boxShadow: C.shadow, display: "flex", flexDirection: "column", gap: 14 }}>
-            <div style={{ fontSize: 13, color: C.textMuted, fontWeight: 600 }}>{lang === "ar" ? "رقم الهاتف" : "Numéro de téléphone"}</div>
+          <div style={{ background: bgCard, borderRadius: 24, padding: 24, border: `1px solid ${borderColor}`, display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ fontSize: 13, color: textMuted, fontWeight: 600 }}>{lang === "ar" ? "رقم الهاتف" : "Numéro de téléphone"}</div>
             
             <div style={{ display: "flex", gap: 8 }}>
-              <div style={{ background: C.greenLight, border: `1px solid ${C.green}44`, borderRadius: 14, padding: "14px 12px", display: "flex", alignItems: "center", gap: 6 }}>
-                <span>🇩🇿</span><span style={{ fontSize: 14, color: C.greenDark, fontWeight: 700 }}>+213</span>
+              <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 14, padding: "14px 12px", display: "flex", alignItems: "center", gap: 6 }}>
+                <span>🇩🇿</span><span style={{ fontSize: 14, color: "#166534", fontWeight: 700 }}>+213</span>
               </div>
-              <input value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} placeholder="0XXXXXXXXX" type="tel" maxLength={10} style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", fontSize: 18, fontWeight: 700, outline: "none" }} />
+              <input value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} placeholder="0XXXXXXXXX" type="tel" maxLength={10} style={{ flex: 1, background: bgMain, border: `1px solid ${borderColor}`, borderRadius: 14, padding: "14px 16px", fontSize: 18, fontWeight: 700, outline: "none" }} />
             </div>
 
-            {/* إذا كان المستخدم مسجل من قبل، نطلب الكود / كلمة المرور مباشرة */}
+            {/* إذا كان الحساب مسجل من قبل */}
             {authMode === "login" && (
               <>
-                <div style={{ fontSize: 13, color: C.textMuted, fontWeight: 600 }}>{lang === "ar" ? "كلمة المرور / الكود" : "Mot de passe"}</div>
-                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="••••••••" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", fontSize: 16, outline: "none" }} />
-                
-                {/* زر نسيت كلمة المرور بطلب الموافقة الثنائية */}
-                <button
-                  onClick={() => { setStep("reset_pass"); sendOTP(); }}
-                  style={{ background: "none", border: "none", color: C.blue, fontSize: 13, cursor: "pointer", fontWeight: 700, textAlign: isRTL ? "right" : "left" }}>
-                  🔐 {lang === "ar" ? "نسيت كلمة المرور؟ (استعادة عبر OTP)" : "Mot de passe oublié?"}
-                </button>
+                <div style={{ fontSize: 13, color: textMuted, fontWeight: 600 }}>{lang === "ar" ? "كلمة المرور" : "Mot de passe"}</div>
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="••••••••" style={{ background: bgMain, border: `1px solid ${borderColor}`, borderRadius: 14, padding: "14px 16px", fontSize: 16, outline: "none" }} />
               </>
             )}
 
-            {error && <div style={{ background: C.redLight, color: C.red, padding: "10px", borderRadius: 12, fontSize: 13, textAlign: "center" }}>{error}</div>}
+            {error && <div style={{ background: "#fef2f2", color: "#dc2626", padding: "10px", borderRadius: 12, fontSize: 13, textAlign: "center" }}>{error}</div>}
 
             <button
-              onClick={authMode === "login" ? handlePasswordLogin : sendOTP}
+              onClick={authMode === "login" ? handleLogin : sendOTP}
               disabled={loading}
-              style={{ background: `linear-gradient(135deg, ${accent}, ${accentDark})`, border: "none", borderRadius: 16, padding: 16, color: "#fff", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>
+              style={{ background: `linear-gradient(135deg, ${accent}, ${accentDark})`, border: "none", borderRadius: 16, padding: 16, color: "#fff", fontWeight: 800, fontSize: 16, cursor: "pointer", marginTop: 8 }}>
               {loading ? "جارٍ..." : authMode === "login" ? `🔑 ${lang === "ar" ? "تسجيل الدخول" : "Connexion"}` : `📨 ${lang === "ar" ? "إرسال كود التحقق الثنائي" : "Envoyer le code"}`}
             </button>
           </div>
         )}
 
-        {/* خطوة التحقق الثنائي (OTP) */}
-        {(step === "otp" || step === "reset_pass") && (
-          <div style={{ background: C.card, borderRadius: 24, padding: 24, boxShadow: C.shadow, textAlign: "center" }}>
+        {/* 2️⃣ خطوة إدخال رمز التحقق (OTP) */}
+        {step === "otp" && (
+          <div style={{ background: bgCard, borderRadius: 24, padding: 24, border: `1px solid ${borderColor}`, textAlign: "center" }}>
             <div style={{ fontSize: 36, marginBottom: 8 }}>💬</div>
-            <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 16 }}>
+            <div style={{ fontSize: 14, color: textMuted, marginBottom: 16 }}>
               {lang === "ar" ? "أدخل رمز التحقق المرسل لـ" : "Code envoyé au"} <b>+213{phone}</b>
             </div>
             
-            <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 20 }}>
+            <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 20, direction: "ltr" }}>
               {otp.map((digit, i) => (
                 <input
                   key={i}
@@ -259,40 +260,43 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
                     if (e.target.value && i < 5) otpRefs[i + 1].current?.focus();
                   }}
                   maxLength={1}
-                  style={{ width: 44, height: 54, textAlign: "center", fontSize: 22, fontWeight: 900, background: C.bg, border: `2px solid ${digit ? accent : C.border}`, borderRadius: 12, outline: "none" }}
+                  style={{ width: 42, height: 50, textAlign: "center", fontSize: 20, fontWeight: 900, background: bgMain, border: `2px solid ${digit ? accent : borderColor}`, borderRadius: 12, outline: "none" }}
                 />
               ))}
             </div>
 
-            {error && <div style={{ background: C.redLight, color: C.red, padding: "10px", borderRadius: 12, fontSize: 13, marginBottom: 12 }}>{error}</div>}
+            {error && <div style={{ background: "#fef2f2", color: "#dc2626", padding: "10px", borderRadius: 12, fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
             <button
               onClick={verifyOTP}
               disabled={loading || otp.join("").length < 6}
               style={{ width: "100%", background: `linear-gradient(135deg, ${accent}, ${accentDark})`, border: "none", borderRadius: 16, padding: 16, color: "#fff", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>
-              ✅ {lang === "ar" ? "تأكيد الموافقة الثنائية" : "Vérifier le code"}
+              {loading ? "جارٍ..." : `✅ ${lang === "ar" ? "تأكيد الرمز" : "Vérifier le code"}`}
             </button>
           </div>
         )}
 
-        {/* خطوة إدخال بيانات التسجيل الجديد */}
+        {/* 3️⃣ خطوة استكمال بيانات الحساب الجديد */}
         {step === "name" && (
-          <div style={{ background: C.card, borderRadius: 24, padding: 24, boxShadow: C.shadow, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ background: bgCard, borderRadius: 24, padding: 24, border: `1px solid ${borderColor}`, display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ textAlign: "center", marginBottom: 8 }}>
-              <div style={{ fontSize: 40 }}>👤</div>
+              <div style={{ fontSize: 36 }}>👤</div>
               <div style={{ fontWeight: 800, fontSize: 18 }}>{lang === "ar" ? "إكمال الحساب الجديد" : "Finaliser l'inscription"}</div>
             </div>
             
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={lang === "ar" ? "الاسم الكامل" : "Nom complet"} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, outline: "none" }} />
-            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder={lang === "ar" ? "أنشئ كلمة مرور" : "Créer un mot de passe"} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, outline: "none" }} />
+            <div style={{ fontSize: 13, color: textMuted, fontWeight: 600 }}>{lang === "ar" ? "الاسم الكامل" : "Nom complet"}</div>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={lang === "ar" ? "أدخل اسمك" : "Nom complet"} style={{ background: bgMain, border: `1px solid ${borderColor}`, borderRadius: 14, padding: 14, outline: "none" }} />
             
-            {error && <div style={{ background: C.redLight, color: C.red, padding: "10px", borderRadius: 12, fontSize: 13, textAlign: "center" }}>{error}</div>}
+            <div style={{ fontSize: 13, color: textMuted, fontWeight 600 }}>{lang === "ar" ? "أنشئ كلمة مرور" : "Créer un mot de passe"}</div>
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="••••••••" style={{ background: bgMain, border: `1px solid ${borderColor}`, borderRadius: 14, padding: 14, outline: "none" }} />
+            
+            {error && <div style={{ background: "#fef2f2", color: "#dc2626", padding: "10px", borderRadius: 12, fontSize: 13, textAlign: "center" }}>{error}</div>}
 
             <button
-              onClick={handleCompleteRegistration}
+              onClick={handleRegister}
               disabled={loading}
-              style={{ background: `linear-gradient(135deg, ${C.green}, ${C.greenDark})`, border: "none", borderRadius: 16, padding: 16, color: "#fff", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>
-              🚀 {lang === "ar" ? "إنشاء الحساب الآن" : "Créer mon compte"}
+              style={{ background: `linear-gradient(135deg, ${accent}, ${accentDark})`, border: "none", borderRadius: 16, padding: 16, color: "#fff", fontWeight: 800, fontSize: 16, cursor: "pointer", marginTop: 8 }}>
+              {loading ? "جارٍ..." : `🚀 ${lang === "ar" ? "إنشاء الحساب الآن" : "Créer mon compte"}`}
             </button>
           </div>
         )}
