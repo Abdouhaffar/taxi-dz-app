@@ -311,33 +311,6 @@ function ReportModal({ targetId, targetName, targetType, reporterId, reporterNam
   );
 }
 
-// ===== FORCE LOGOUT MODAL =====
-function ForceLogoutModal({ lang, onConfirm, onCancel }) {
-  return (
-    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:3000,backdropFilter:"blur(4px)",padding:20 }}>
-      <div style={{ background:C.card,borderRadius:24,padding:28,width:"100%",maxWidth:380,fontFamily:"Cairo,sans-serif",textAlign:"center",direction:lang==="ar"?"rtl":"ltr" }}>
-        <div style={{ fontSize:48,marginBottom:12 }}>⚠️</div>
-        <div style={{ fontWeight:900,fontSize:18,color:C.text,marginBottom:8 }}>
-          {lang==="ar"?"تنبيه دخول من جهاز آخر":lang==="fr"?"Connexion depuis un autre appareil":"Login from another device"}
-        </div>
-        <div style={{ fontSize:13,color:C.textMuted,marginBottom:20 }}>
-          {lang==="ar"?"تم فتح حسابك على جهاز آخر. هل تريد متابعة الاستخدام من هذا الجهاز وإغلاقه في الجهاز الآخر؟":
-           lang==="fr"?"Votre compte a été ouvert ailleurs. Voulez-vous continuer ici?":
-           "Your account was opened elsewhere. Continue here?"}
-        </div>
-        <div style={{ display:"flex",gap:10 }}>
-          <button onClick={onCancel} style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:14,color:C.textMuted,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>
-            {lang==="ar"?"خروج":"Déconnexion"}
-          </button>
-          <button onClick={onConfirm} style={{ flex:1,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>
-            {lang==="ar"?"متابعة هنا":"Continuer ici"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ===== PASSWORD RESET =====
 function PasswordResetModal({ onClose, lang }) {
   const [email,setEmail]=useState("");
@@ -395,6 +368,7 @@ function RatingModal({ booking, driver, onSubmit, onSkip, lang }) {
         if(dSnap.exists()){const d=dSnap.data();const n=(d.totalRatings||0)+1;await updateDoc(doc(db,"drivers",booking.driverId),{rating:Math.round(((d.rating||0)*(d.totalRatings||0)+rating)/n*10)/10,totalRatings:n});}
       }
       if(booking?.id) await updateDoc(doc(db,"bookings",booking.id),{passengerRating:rating,status:"rated"});
+      // نقاط للراكب (5 نقاط لكل رحلة مكتملة)
       if(booking?.passengerId) await updateDoc(doc(db,"passengers",booking.passengerId),{points:increment(5),totalRides:increment(1)});
     } catch(e){console.log(e);}
     setSaving(false); onSubmit(rating);
@@ -644,7 +618,7 @@ function TaxiMap({ origin, destination, showDrivers, height=220 }) {
   const [nearbyDrivers,setNearbyDrivers]=useState([]);
   const mapRef=useRef(null);
   useEffect(()=>{ navigator.geolocation?.getCurrentPosition(p=>setUserLocation({lat:p.coords.latitude,lng:p.coords.longitude}),()=>{}); },[]);
-  useEffect(()=>{ if(!showDrivers) return; const u=onSnapshot(collection(db,"drivers"),s=>setNearbyDrivers(s.docs.filter(d=>d.data().isOnline&&d.data().verificationStatus==="approved"&&d.data().location).map(d=>({id:d.id,...d.data()}))); return()=>u(); },[showDrivers]);
+  useEffect(()=>{ if(!showDrivers) return; const u=onSnapshot(collection(db,"drivers"),s=>setNearbyDrivers(s.docs.filter(d=>d.data().isOnline&&d.data().verificationStatus==="approved"&&d.data().location).map(d=>({id:d.id,...d.data()})))); return()=>u(); },[showDrivers]);
   useEffect(()=>{ if(!origin||!destination){setDirections(null);return;} new window.google.maps.DirectionsService().route({origin,destination,travelMode:"DRIVING"},(r,s)=>{if(s==="OK")setDirections(r);}); },[origin,destination]);
   const onLoad=useCallback(m=>{mapRef.current=m;},[]);
   const makeMarker=(emoji,color)=>"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><circle cx='20' cy='20' r='18' fill='${color}' stroke='white' stroke-width='3'/><text x='20' y='27' text-anchor='middle' font-size='18'>${emoji}</text></svg>`);
@@ -666,7 +640,12 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
   const t=T[lang];
   const isRTL=lang==="ar";
   return (
-    <div style={{ minHeight:"100vh",background:`linear-gradient(160deg,${C.dark} 0%,#16213e 50%,#0f3460 100%)`,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,position:"relative" }}>
+    <div style={{ minHeight:"100vh",fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,position:"relative",overflow:"hidden" }}>
+      {/* خلفية الصورة */}
+      <div style={{ position:"absolute",inset:0,backgroundImage:"url('/logo512.png')",backgroundSize:"cover",backgroundPosition:"center",backgroundRepeat:"no-repeat",filter:"brightness(0.25)",zIndex:0 }} />
+      {/* طبقة لونية فوق الخلفية */}
+      <div style={{ position:"absolute",inset:0,background:"linear-gradient(160deg,rgba(0,20,10,0.85) 0%,rgba(0,50,30,0.75) 50%,rgba(0,20,10,0.85) 100%)",zIndex:1 }} />
+      <div style={{ position:"relative",zIndex:2,display:"flex",flexDirection:"column",alignItems:"center",width:"100%" }}>
       <div style={{ position:"absolute",top:48,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6 }}>
         {[{code:"ar",flag:"🇩🇿"},{code:"fr",flag:"🇫🇷"},{code:"en",flag:"🇬🇧"}].map(l=>(
           <button key={l.code} onClick={()=>setLang(l.code)} style={{ padding:"6px 12px",borderRadius:20,border:`1.5px solid ${lang===l.code?"#d4a017":"#ffffff33"}`,background:lang===l.code?"#d4a01722":"transparent",color:lang===l.code?"#d4a017":"#ffffff88",fontFamily:"inherit",fontWeight:lang===l.code?700:400,fontSize:13,cursor:"pointer" }}>{l.flag}</button>
@@ -702,8 +681,9 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
           </div>
         </button>
       </div>
-      <style>{`@keyframes logoPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 8px 32px rgba(212,160,23,0.6))}50%{transform:scale(1.04);filter:drop-shadow(0 12px 40px rgba(212,160,23,0.9))}}`}</style>
-    </div>
+        <style>{`@keyframes logoPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 8px 32px rgba(212,160,23,0.6))}50%{transform:scale(1.04);filter:drop-shadow(0 12px 40px rgba(212,160,23,0.9))}}`}</style>
+      </div>{/* end inner zIndex:2 div */}
+    </div>{/* end outer div */}
   );
 }
 
@@ -792,6 +772,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       const u = result.user;
       const phoneF = `+213${phone.replace(/\D/g,"").replace(/^0/,"")}`;
 
+      // تحقق من وجود الحساب
       const pSnap = await getDoc(doc(db, "passengers", u.uid));
       const dSnap = await getDoc(doc(db, "drivers", u.uid));
       const hasPassenger = pSnap.exists();
@@ -799,6 +780,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
 
       if (isPassenger) {
         if (hasPassenger) {
+          // راكب موجود — دخول مباشر
           const d = pSnap.data();
           if(d.name) localStorage.setItem("taxidz_name", d.name);
           if(d.phone) localStorage.setItem("taxidz_phone", d.phone);
@@ -806,6 +788,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
           try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,"passengers",u.uid),{fcmToken},{merge:true}); } catch(e){}
           onSuccess("passenger");
         } else if (hasDriver) {
+          // سائق يدخل كراكب — أنشئ له حساب راكب
           const d = dSnap.data();
           await setDoc(doc(db,"passengers",u.uid),{
             uid:u.uid, name:d.name||"", phone:phoneF, role:"passenger",
@@ -818,15 +801,18 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
           localStorage.setItem("taxidz_role", "passenger");
           onSuccess("passenger");
         } else {
+          // مستخدم جديد — اطلب الاسم
           localStorage.setItem("taxidz_phone", phoneF);
           setStep("name");
         }
       } else {
+        // سائق
         if (hasDriver) {
           localStorage.setItem("taxidz_role", "driver");
           try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,"drivers",u.uid),{fcmToken},{merge:true}); } catch(e){}
           onSuccess("driver");
         } else if (hasPassenger) {
+          // راكب يريد أن يصبح سائقاً
           const d = pSnap.data();
           await setDoc(doc(db,"drivers",u.uid),{
             uid:u.uid, phone:phoneF, name:d.name||"", role:"driver",
@@ -838,6 +824,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
           localStorage.setItem("taxidz_role", "driver");
           onSuccess("driver");
         } else {
+          // سائق جديد كلياً
           await setDoc(doc(db,"drivers",u.uid),{
             uid:u.uid, phone:phoneF, role:"driver", status:"pending",
             verificationStatus:"none", rating:0, totalRatings:0, totalRides:0,
@@ -849,7 +836,8 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
         }
       }
     } catch(e) {
-      console.log("Verify error:", e.code, e.message); setError(lang==="ar"?"رمز التحقق خاطئ أو منتهي الصلاحية":"Code incorrect ou expiré");
+      console.log("Verify:", e.code);
+      console.log('Verify error:', e.code, e.message); setError(lang==="ar"?"رمز التحقق خاطئ أو منتهي الصلاحية":"Code incorrect ou expiré");
       setOtp(["","","","","",""]);
       setTimeout(() => otpRefs[0].current?.focus(), 100);
     }
@@ -1042,6 +1030,7 @@ function PassengerApp({ onLogout, user, lang }) {
   const [fcmToast,setFcmToast]=useState(null);
   const [showReport,setShowReport]=useState(false);
   const [showForceLogout,setShowForceLogout]=useState(false);
+  const [pendingSession,setPendingSession]=useState(null);
   const [showChat,setShowChat]=useState(false);
   const originRef=useRef(null);
   const destRef=useRef(null);
@@ -1053,6 +1042,7 @@ function PassengerApp({ onLogout, user, lang }) {
   useEffect(()=>{
     if(!user?.uid) return;
 
+    // Session management - prevent dual device login
     const initSession = async () => {
       let sessionId = localStorage.getItem(SESSION_KEY);
       if (!sessionId) {
@@ -1068,9 +1058,11 @@ function PassengerApp({ onLogout, user, lang }) {
     const u=onSnapshot(doc(db,"passengers",user.uid),s=>{
       if(s.exists()) {
         setPassengerData(s.data());
+        // Check session
         const savedSession = localStorage.getItem(SESSION_KEY);
         const activeSession = s.data()?.activeSession;
         if (activeSession && savedSession && activeSession !== savedSession) {
+          // تم فتح الحساب من جهاز آخر — أظهر modal بدل التسجيل الفوري
           setShowForceLogout(true);
         }
       }
@@ -1093,6 +1085,7 @@ function PassengerApp({ onLogout, user, lang }) {
   };
 
   const handleForceLogout = async () => {
+    // Close current session and open new one
     const newSessionId = generateSessionId();
     localStorage.setItem(SESSION_KEY, newSessionId);
     try {
@@ -1211,6 +1204,7 @@ function PassengerApp({ onLogout, user, lang }) {
             ⭐ لديك {passengerData.points} نقطة — يمكنك استخدامها كخصم!
           </div>
         )}
+        {/* عدد الركاب */}
         <div style={{ fontWeight:700,marginBottom:10,color:C.text }}>👥 {lang==="ar"?"عدد الركاب":lang==="fr"?"Nombre de passagers":"Passengers"}</div>
         <div style={{ display:"flex",gap:8,marginBottom:16 }}>
           {[1,2,3,4].map(n=>(
@@ -1220,6 +1214,7 @@ function PassengerApp({ onLogout, user, lang }) {
           ))}
         </div>
 
+        {/* الحمولة */}
         <div style={{ fontWeight:700,marginBottom:10,color:C.text }}>🧳 {lang==="ar"?"وزن الحمولة":lang==="fr"?"Poids des bagages":"Luggage weight"}</div>
         <div style={{ display:"flex",flexDirection:"column",gap:8,marginBottom:12 }}>
           {[
@@ -1237,6 +1232,7 @@ function PassengerApp({ onLogout, user, lang }) {
           ))}
         </div>
 
+        {/* نوع الحمولة */}
         <input value={luggageDesc} onChange={e=>setLuggageDesc(e.target.value)}
           placeholder={lang==="ar"?"نوع الحمولة: مثال: حقائب، مواد بناء...":lang==="fr"?"Type de bagages: Ex: valises, matériaux...":"Luggage type: e.g. bags, materials..."}
           style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 16px",fontFamily:"inherit",fontSize:13,color:C.text,outline:"none",textAlign:isRTL?"right":"left",marginBottom:14 }} />
@@ -1347,6 +1343,7 @@ function PassengerApp({ onLogout, user, lang }) {
           <div style={{ flex:1 }}><div style={{ fontSize:11,color:C.textMuted }}>{t.driverPhone}</div><div style={{ fontSize:16,fontWeight:900,color:C.green,direction:"ltr" }}>{selectedDriver.phone}</div></div>
           <div style={{ background:C.green,borderRadius:8,padding:"6px 12px",fontSize:12,color:"#fff",fontWeight:700 }}>{t.call}</div>
         </a>}
+        {/* Chat Button */}
         <button onClick={()=>setShowChat(true)} style={{ width:"100%",background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:12,padding:"12px",color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
           <span style={{ fontSize:18 }}>💬</span>{t.chat}
         </button>
@@ -1376,129 +1373,100 @@ function PassengerApp({ onLogout, user, lang }) {
             <button onClick={resetTrip} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:16,padding:"16px 40px",color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",marginTop:8 }}>{t.backHome}</button>
           </div>
         ):(
-          <RatingModal booking={{...booking,id:bookingId,passengerId:user?.uid,driverId:selectedDriver?.uid}} driver={selectedDriver} onSubmit={r=>{setFinalRating(r);}} onSkip={resetTrip} lang={lang} />
+          <RatingModal booking={{...booking,id:bookingId,passengerId:user?.uid,driverId:selectedDriver?.uid}} driver={selectedDriver} onSubmit={r=>setFinalRating(r)} onSkip={resetTrip} lang={lang} />
         )}
       </div>
     );
-
     return (
       <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
         {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
+        {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
         <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="ride" lang={lang} />
         <div style={{ margin:"14px 20px",background:C.card,borderRadius:24,padding:20,boxShadow:C.shadow }}>
-          <div style={{ textAlign:"center",marginBottom:14 }}>
-            <div style={{ fontSize:36,fontWeight:900,color:C.greenDark,fontFamily:"monospace" }}>{String(mins).padStart(2,"0")}:{String(secs).padStart(2,"0")}</div>
-            <div style={{ fontSize:12,color:C.textMuted }}>{t.tripDuration}</div>
+          <div style={{ display:"flex",justifyContent:"space-between",marginBottom:14 }}>
+            <div style={{ background:C.greenLight,borderRadius:12,padding:"8px 14px" }}><div style={{ fontSize:10,color:C.green }}>{t.tripDuration}</div><div style={{ fontWeight:800,color:C.greenDark }}>{mins}:{secs.toString().padStart(2,"0")}</div></div>
+            <div style={{ textAlign:"center" }}><div style={{ fontSize:11,color:C.textMuted }}>{t.dest}</div><div style={{ fontWeight:700,color:C.text,fontSize:12,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{destText}</div></div>
+            <div style={{ background:C.dark,borderRadius:12,padding:"8px 14px",textAlign:"center" }}><div style={{ fontSize:10,color:"#ffffff88" }}>{t.price}</div><div style={{ fontWeight:800,color:"#fff" }}>{booking?.price} DA</div></div>
           </div>
-          <div style={{ background:C.bg,borderRadius:16,padding:14,marginBottom:14,display:"flex",flexDirection:"column",gap:8 }}>
-            <div style={{ fontSize:13,color:C.text }}>📍 <strong>{t.departure}:</strong> {booking?.originText?.substring(0,35)||"—"}</div>
-            <div style={{ fontSize:13,color:C.text }}>🏁 <strong>{t.dest}:</strong> {booking?.destText?.substring(0,35)||"—"}</div>
-            <div style={{ fontSize:14,color:C.greenDark,fontWeight:900 }}>💰 <strong>{t.price}:</strong> {booking?.price} DA</div>
-          </div>
-          <button onClick={()=>{const dLL=getLatLng(destPlace);openNavigation(dLL.lat,dLL.lng);}} style={{ width:"100%",background:C.googleBlue,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:13,marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-            {t.trackRoute}
-          </button>
-          <div style={{ display:"flex",gap:8 }}>
-            <button onClick={()=>setShowChat(true)} style={{ flex:1,background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:14,padding:14,color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:13 }}>
-              💬 {t.chat}
+          <div style={{ display:"flex",gap:8,marginBottom:8 }}>
+            <button onClick={()=>setShowChat(true)} style={{ flex:1,background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:12,padding:"10px",color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+              <span>💬</span>{t.chat}
             </button>
-            <button onClick={finishRide} style={{ flex:1,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:14 }}>
-              {t.arrived}
-            </button>
+            <button onClick={()=>setShowReport(true)} style={{ width:44,background:`${C.orange}15`,border:`1px solid ${C.orange}44`,borderRadius:12,padding:"10px",color:C.orange,fontFamily:"inherit",cursor:"pointer",fontSize:16 }}>🚨</button>
           </div>
+          {destPlace&&<button onClick={()=>{ const d=getLatLng(destPlace); openNavigation(d.lat,d.lng); }} style={{ width:"100%",background:`linear-gradient(135deg,${C.googleBlue},#1557b0)`,border:"none",borderRadius:14,padding:13,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}><span style={{ fontSize:18 }}>🗺️</span>{t.trackRoute}</button>}
+          <button onClick={finishRide} style={{ width:"100%",background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer" }}>{t.arrived}</button>
         </div>
         <SOSButton passengerName={passengerName} bookingId={bookingId} />
       </div>
     );
   }
-
   return null;
 }
 
-// ===== MAIN APP ENTRY =====
+// ===== MAIN =====
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null); // 'passenger' | 'driver'
-  const [mode, setMode] = useState("welcome"); // welcome | auth | app
-  const [lang, setLang] = useState("ar");
-  const [initializing, setInitializing] = useState(true);
+  const mapsResult = useJsApiLoader({ googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_KEY || "", libraries: LIBRARIES, language: "ar", region: "DZ" });
+  const isLoaded = mapsResult.isLoaded;
+  const loadError = mapsResult.loadError;
+  const[screen,setScreen]=useState("welcome");
+  const[role,setRole]=useState(null);
+  const[user,setUser]=useState(null);
+  const[lang,setLang]=useState(localStorage.getItem("taxidz_lang")||"ar");
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "",
-    libraries: LIBRARIES,
-  });
+  const changeLang=l=>{setLang(l);localStorage.setItem("taxidz_lang",l);};
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      if (u) {
-        const savedRole = localStorage.getItem("taxidz_role");
-        if (savedRole) {
-          setRole(savedRole);
-          setMode("app");
-        } else {
-          setMode("welcome");
-        }
+  useEffect(()=>{
+    const u=onAuthStateChanged(auth,async u=>{
+      if(u){
+        setUser(u);
+        const savedRole=localStorage.getItem("taxidz_role");
+        if(savedRole){setRole(savedRole);setScreen("app");return;}
+        try {
+          await new Promise(r=>setTimeout(r,800));
+          // تحقق من كلا الـ collections
+          const savedRole=localStorage.getItem("taxidz_role");
+          if(savedRole==="passenger"){
+            const pSnap=await getDoc(doc(db,"passengers",u.uid));
+            if(pSnap.exists()){const d=pSnap.data();if(d.name)localStorage.setItem("taxidz_name",d.name);if(d.phone)localStorage.setItem("taxidz_phone",d.phone);setRole("passenger");setScreen("app");return;}
+          }
+          if(savedRole==="driver"){
+            const dSnap=await getDoc(doc(db,"drivers",u.uid));
+            if(dSnap.exists()){setRole("driver");setScreen("app");return;}
+          }
+          // بدون دور محفوظ — ابحث في كليهما
+          const pSnap=await getDoc(doc(db,"passengers",u.uid));
+          if(pSnap.exists()){const d=pSnap.data();if(d.name)localStorage.setItem("taxidz_name",d.name);if(d.phone)localStorage.setItem("taxidz_phone",d.phone);localStorage.setItem("taxidz_role","passenger");setRole("passenger");setScreen("app");return;}
+          const dSnap=await getDoc(doc(db,"drivers",u.uid));
+          if(dSnap.exists()){localStorage.setItem("taxidz_role","driver");setRole("driver");setScreen("app");return;}
+        } catch(e){console.log("Auth check:",e);}
+        setScreen("welcome");
       } else {
-        setMode("welcome");
+        setUser(null);setRole(null);setScreen("welcome");localStorage.removeItem("taxidz_role");
       }
-      setInitializing(false);
     });
-    return () => unsubscribe();
-  }, []);
+    return()=>u();
+  },[]);
 
-  const handleSelectRole = (selectedRole) => {
-    setRole(selectedRole);
-    if (user) {
-      localStorage.setItem("taxidz_role", selectedRole);
-      setMode("app");
-    } else {
-      setMode("auth");
-    }
+  const handleLogout=async()=>{
+    if(role==="driver"&&user?.uid){try{await setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true});}catch(e){}}
+    try{await signOut(auth);}catch(e){}
+    setUser(null);setRole(null);setScreen("welcome");
+    ["taxidz_role","taxidz_phone","taxidz_name"].forEach(k=>localStorage.removeItem(k));
   };
 
-  const handleAuthSuccess = (activeRole) => {
-    setRole(activeRole);
-    setMode("app");
-  };
+  const handleAuthSuccess=r=>{setRole(r);localStorage.setItem("taxidz_role",r);setScreen("app");};
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch(e) {}
-    localStorage.removeItem("taxidz_role");
-    localStorage.removeItem("taxidz_name");
-    localStorage.removeItem("taxidz_phone");
-    localStorage.removeItem(SESSION_KEY);
-    setUser(null);
-    setRole(null);
-    setMode("welcome");
-  };
+  if(loadError) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg }}><div style={{ textAlign:"center" }}><div style={{ fontSize:48 }}>⚠️</div><div style={{ fontWeight:800,color:C.text }}>خطأ في الخريطة</div></div></div>;
+  if(!isLoaded) return <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg }}><div style={{ textAlign:"center" }}><img src="/logo192.png" alt="" style={{ width:80,height:80,marginBottom:16 }} onError={e=>e.target.style.display="none"} /><div style={{ fontWeight:700,color:C.text }}>جارٍ تحميل AL-BURAQ...</div></div></div>;
 
-  if (initializing || !isLoaded) {
-    return (
-      <div style={{ minHeight:"100vh",background:C.dark,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:"#fff",fontFamily:"Cairo,sans-serif" }}>
-        <img src="/logo192.png" alt="AL-BURAQ" style={{ width:100,height:100,objectFit:"contain",marginBottom:16 }} onError={e=>e.target.style.display="none"} />
-        <div style={{ fontSize:20,fontWeight:800,marginBottom:8 }}>AL-BURAQ</div>
-        <div style={{ fontSize:13,color:"#ffffff66" }}>{loadError ? "خطأ في تحميل الخرائط" : "جارٍ التحميل..."}</div>
-      </div>
-    );
-  }
-
-  if (mode === "welcome") {
-    return <WelcomeScreen onSelect={handleSelectRole} lang={lang} setLang={setLang} />;
-  }
-
-  if (mode === "auth") {
-    return <AuthForm role={role} onSuccess={handleAuthSuccess} onBack={() => setMode("welcome")} lang={lang} />;
-  }
-
-  if (mode === "app") {
-    if (role === "driver") {
-      return <DriverDashboard user={user} onLogout={handleLogout} lang={lang} />;
-    }
-    return <PassengerApp user={user} onLogout={handleLogout} lang={lang} />;
-  }
-
-  return null;
+  return (
+    <div style={{ maxWidth:390,margin:"0 auto",minHeight:"100vh" }}>
+      <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
+      {screen==="welcome"&&<WelcomeScreen onSelect={r=>{setRole(r);setScreen("auth");}} lang={lang} setLang={changeLang} />}
+      {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} />}
+      {screen==="app"&&role==="passenger"&&<PassengerApp onLogout={handleLogout} user={user} lang={lang} />}
+      {screen==="app"&&role==="driver"&&<DriverDashboard user={user} onLogout={handleLogout} />}
+    </div>
+  );
 }
