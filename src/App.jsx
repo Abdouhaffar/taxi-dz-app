@@ -801,6 +801,8 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
           localStorage.setItem("taxidz_phone", phoneF);
           localStorage.setItem("taxidz_role", "passenger");
           onSuccess("passenger");
+        } else if (authTab === "login") {
+          setError(lang==="ar"?"الحساب غير موجود — اختر تسجيل جديد":"Compte introuvable — choisissez S'inscrire");
         } else {
           // مستخدم جديد — اطلب الاسم
           localStorage.setItem("taxidz_phone", phoneF);
