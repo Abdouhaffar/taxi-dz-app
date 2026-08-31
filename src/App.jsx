@@ -682,8 +682,8 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
         </button>
       </div>
         <style>{`@keyframes logoPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 8px 32px rgba(212,160,23,0.6))}50%{transform:scale(1.04);filter:drop-shadow(0 12px 40px rgba(212,160,23,0.9))}}`}</style>
-      </div>{/* end inner zIndex:2 div */}
-    </div>{/* end outer div */}
+      </div>
+    </div>
   );
 }
 
