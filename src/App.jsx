@@ -794,8 +794,14 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       }
       if (!found) setError(lang==="ar"?"الرقم غير مسجل — أنشئ حساباً جديداً":"Numéro non inscrit");
     } catch(e) {
-      console.log("Login error:", e);
-      setError(lang==="ar"?"حدث خطأ — حاول مرة أخرى":"Erreur — réessayez");
+      console.log("Login error:", e.code, e.message);
+      if (e.code === "failed-precondition" || e.message?.includes("index")) {
+        setError(lang==="ar"?"خطأ في قاعدة البيانات — تواصل مع الدعم":"Erreur base de données");
+      } else if (e.code === "permission-denied") {
+        setError(lang==="ar"?"غير مصرح — تحقق من الإعدادات":"Permission refusée");
+      } else {
+        setError(lang==="ar"?`خطأ: ${e.code||e.message}`:`Erreur: ${e.code||e.message}`);
+      }
     }
     setLoading(false);
   };
@@ -1596,3 +1602,4 @@ export default function App() {
     </div>
   );
 }
+ 
