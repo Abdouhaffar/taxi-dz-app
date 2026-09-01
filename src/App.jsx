@@ -731,6 +731,10 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   const [otp, setOtp] = useState(["","","","","",""]);
   const [confirmResult, setConfirmResult] = useState(null);
   const [resendTimer, setResendTimer] = useState(0);
+  const [showPin, setShowPin] = useState(false);
+  const [showPinConfirm, setShowPinConfirm] = useState(false);
+  const [showLoginPin, setShowLoginPin] = useState(false);
+  const [otpMethod, setOtpMethod] = useState("sms"); // sms | whatsapp
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const otpRefs = [useRef(),useRef(),useRef(),useRef(),useRef(),useRef()];
@@ -854,6 +858,33 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     setLoading(false);
   };
 
+  // ===== SEND OTP via WhatsApp =====
+  const sendOTPWhatsApp = async (phoneNum) => {
+    const digits = phoneNum.replace(/\D/g,"");
+    if (digits.length < 9) { setError(lang==="ar"?"أدخل رقم هاتفك":"Entrez votre numéro"); return; }
+    setLoading(true); setError("");
+    try {
+      const fullPhone = `+213${digits.replace(/^0/,"")}`;
+      // توليد كود عشوائي 6 أرقام
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      // حفظ الكود مؤقتاً في localStorage
+      localStorage.setItem("whatsapp_otp", code);
+      localStorage.setItem("whatsapp_otp_phone", fullPhone);
+      localStorage.setItem("whatsapp_otp_time", Date.now().toString());
+      // فتح واتساب برسالة تلقائية للأدمن
+      const msg = `رمز التحقق الخاص بك في تطبيق AL-BURAQ هو: *${code}*
+Code AL-BURAQ: *${code}*`;
+      const adminWhatsApp = "213662011277"; // رقم الأدمن
+      window.open(`https://api.whatsapp.com/send?phone=${adminWhatsApp}&text=${encodeURIComponent(msg)}`, "_blank");
+      setStep("otp");
+      setResendTimer(120);
+      setTimeout(() => otpRefs[0].current?.focus(), 500);
+    } catch(e) {
+      setError(lang==="ar"?"خطأ في إرسال الرمز":"Erreur d'envoi");
+    }
+    setLoading(false);
+  };
+
   const handleOtpChange = (i, val) => {
     if (!/^\d*$/.test(val)) return;
     const newOtp = [...otp]; newOtp[i] = val.slice(-1); setOtp(newOtp);
@@ -871,6 +902,47 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     const code = otp.join("");
     if (code.length < 6) { setError(lang==="ar"?"أدخل الرمز كاملاً":"Code incomplet"); return; }
     setLoading(true); setError("");
+    
+    // WhatsApp OTP verification
+    if (otpMethod === "whatsapp") {
+      const savedCode = localStorage.getItem("whatsapp_otp");
+      const savedPhone = localStorage.getItem("whatsapp_otp_phone");
+      const savedTime = parseInt(localStorage.getItem("whatsapp_otp_time")||"0");
+      const digits = phone.replace(/\D/g,"");
+      const fullPhone = `+213${digits.replace(/^0/,"")}`;
+      if (Date.now() - savedTime > 10 * 60 * 1000) {
+        setError(lang==="ar"?"انتهت صلاحية الرمز — أعد المحاولة":"Code expiré");
+        setLoading(false); return;
+      }
+      if (code !== savedCode || fullPhone !== savedPhone) {
+        setError(lang==="ar"?"رمز التحقق خاطئ":"Code incorrect");
+        setOtp(["","","","","",""]); setLoading(false); return;
+      }
+      // OTP صحيح - أنشئ الحساب
+      try {
+        const { signInAnonymously } = await import("firebase/auth");
+        const cred = await signInAnonymously(auth);
+        const u = cred.user;
+        const col = isPassenger ? "passengers" : "drivers";
+        await setDoc(doc(db, col, u.uid), {
+          uid:u.uid, name, phone:fullPhone, pinCode,
+          role, status:role==="driver"?"pending":"active",
+          verificationStatus:role==="driver"?"none":null,
+          rating:0, totalRatings:0, totalRides:0, points:0,
+          referralCode:generateReferralCode(u.uid), referralCount:0,
+          createdAt:serverTimestamp()
+        });
+        localStorage.removeItem("whatsapp_otp");
+        localStorage.removeItem("whatsapp_otp_phone");
+        localStorage.removeItem("whatsapp_otp_time");
+        if (isPassenger) { localStorage.setItem("taxidz_name",name); localStorage.setItem("taxidz_phone",fullPhone); }
+        localStorage.setItem("taxidz_role", role);
+        setLoading(false);
+        onSuccess(role);
+        return;
+      } catch(e) { setError(lang==="ar"?"خطأ في إنشاء الحساب":"Erreur"); setLoading(false); return; }
+    }
+    
     try {
       const result = await confirmResult.confirm(code);
       const u = result.user;
@@ -978,9 +1050,15 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
                 style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
             </div>
             <div style={{ fontSize:13,color:C.textMuted,fontWeight:600 }}>{lang==="ar"?"كود الحساب":"Code du compte"}</div>
-            <input value={loginPin} onChange={e=>setLoginPin(e.target.value.replace(/\D/g,""))}
-              placeholder="****" type="password" maxLength={6} inputMode="numeric"
-              style={{ background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:20,color:C.text,outline:"none",direction:"ltr",textAlign:"center",letterSpacing:6 }} />
+            <div style={{ position:"relative" }}>
+              <input value={loginPin} onChange={e=>setLoginPin(e.target.value)}
+                placeholder={lang==="ar"?"كلمة المرور":"Mot de passe"}
+                type={showLoginPin?"text":"password"} maxLength={20}
+                style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 44px 13px 16px",fontFamily:"inherit",fontSize:15,color:C.text,outline:"none",direction:"ltr" }} />
+              <button onClick={()=>setShowLoginPin(!showLoginPin)} style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
+                {showLoginPin?"🙈":"👁️"}
+              </button>
+            </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
             <button onClick={handleLogin} disabled={loading||loginPhone.replace(/\D/g,"").length<9||loginPin.length<4}
               style={{ background:loginPhone.replace(/\D/g,"").length>=9&&loginPin.length>=4?`linear-gradient(135deg,${accent},${accentDark})`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
@@ -1005,12 +1083,25 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
                 placeholder="0XXXXXXXXX" type="tel" maxLength={10}
                 style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
             </div>
-            <input value={pinCode} onChange={e=>setPinCode(e.target.value.replace(/\D/g,""))}
-              placeholder={lang==="ar"?"كود الحساب (4-6 أرقام)":"Code (4-6 chiffres)"} type="password" maxLength={6} inputMode="numeric"
-              style={{ background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",letterSpacing:4 }} />
-            <input value={pinConfirm} onChange={e=>setPinConfirm(e.target.value.replace(/\D/g,""))}
-              placeholder={lang==="ar"?"تأكيد الكود":"Confirmer le code"} type="password" maxLength={6} inputMode="numeric"
-              style={{ background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",letterSpacing:4 }} />
+            {/* كلمة المرور مع زر الإظهار */}
+            <div style={{ position:"relative" }}>
+              <input value={pinCode} onChange={e=>setPinCode(e.target.value)}
+                placeholder={lang==="ar"?"كلمة المرور (حروف+أرقام+رموز)":"Mot de passe (lettres+chiffres)"}
+                type={showPin?"text":"password"} maxLength={20}
+                style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 44px 13px 16px",fontFamily:"inherit",fontSize:15,color:C.text,outline:"none",direction:"ltr" }} />
+              <button onClick={()=>setShowPin(!showPin)} style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
+                {showPin?"🙈":"👁️"}
+              </button>
+            </div>
+            <div style={{ position:"relative" }}>
+              <input value={pinConfirm} onChange={e=>setPinConfirm(e.target.value)}
+                placeholder={lang==="ar"?"تأكيد كلمة المرور":"Confirmer le mot de passe"}
+                type={showPinConfirm?"text":"password"} maxLength={20}
+                style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 44px 13px 16px",fontFamily:"inherit",fontSize:15,color:C.text,outline:"none",direction:"ltr" }} />
+              <button onClick={()=>setShowPinConfirm(!showPinConfirm)} style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
+                {showPinConfirm?"🙈":"👁️"}
+              </button>
+            </div>
             <div style={{ background:C.blueLight,borderRadius:12,padding:"10px 14px",fontSize:12,color:C.blue }}>
               🔐 {lang==="ar"?"احفظ كودك جيداً — ستحتاجه عند كل دخول":"Mémorisez bien votre code"}
             </div>
@@ -1018,7 +1109,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
             <button onClick={()=>{
               if(!name.trim()){setError(lang==="ar"?"أدخل اسم المستخدم":"Entrez votre nom");return;}
               if(phone.replace(/\D/g,"").length<9){setError(lang==="ar"?"أدخل رقم هاتفك":"Entrez votre numéro");return;}
-              if(pinCode.length<4){setError(lang==="ar"?"الكود قصير (4 أرقام على الأقل)":"Code trop court");return;}
+              if(pinCode.length<4){setError(lang==="ar"?"كلمة المرور قصيرة (4 أحرف على الأقل)":"Mot de passe trop court");return;}
               if(pinCode!==pinConfirm){setError(lang==="ar"?"الكودان غير متطابقان":"Codes différents");return;}
               setError(""); sendOTP(phone);
             }} disabled={loading}
@@ -1101,12 +1192,22 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
               <div style={{ fontSize:40,marginBottom:8 }}>🔑</div>
               <div style={{ fontWeight:800,fontSize:16,color:C.text }}>{lang==="ar"?"أدخل كودك الجديد":"Nouveau code"}</div>
             </div>
-            <input value={newPin} onChange={e=>setNewPin(e.target.value.replace(/\D/g,""))}
-              placeholder={lang==="ar"?"كود جديد (4-6 أرقام)":"Nouveau code (4-6 chiffres)"} type="password" maxLength={6} inputMode="numeric"
-              style={{ background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:20,color:C.text,outline:"none",direction:"ltr",textAlign:"center",letterSpacing:6 }} />
-            <input value={newPinConfirm} onChange={e=>setNewPinConfirm(e.target.value.replace(/\D/g,""))}
-              placeholder={lang==="ar"?"تأكيد الكود الجديد":"Confirmer"} type="password" maxLength={6} inputMode="numeric"
-              style={{ background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:20,color:C.text,outline:"none",direction:"ltr",textAlign:"center",letterSpacing:6 }} />
+            <div style={{ position:"relative" }}>
+              <input value={newPin} onChange={e=>setNewPin(e.target.value)}
+                placeholder={lang==="ar"?"كلمة مرور جديدة":"Nouveau mot de passe"} type={showPin?"text":"password"} maxLength={20}
+                style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 44px 13px 16px",fontFamily:"inherit",fontSize:15,color:C.text,outline:"none",direction:"ltr" }} />
+              <button onClick={()=>setShowPin(!showPin)} style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
+                {showPin?"🙈":"👁️"}
+              </button>
+            </div>
+            <div style={{ position:"relative" }}>
+              <input value={newPinConfirm} onChange={e=>setNewPinConfirm(e.target.value)}
+                placeholder={lang==="ar"?"تأكيد كلمة المرور":"Confirmer"} type={showPinConfirm?"text":"password"} maxLength={20}
+                style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 44px 13px 16px",fontFamily:"inherit",fontSize:15,color:C.text,outline:"none",direction:"ltr" }} />
+              <button onClick={()=>setShowPinConfirm(!showPinConfirm)} style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
+                {showPinConfirm?"🙈":"👁️"}
+              </button>
+            </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
             <button onClick={saveNewPin} disabled={loading||newPin.length<4||newPin!==newPinConfirm}
               style={{ background:newPin.length>=4&&newPin===newPinConfirm?`linear-gradient(135deg,${C.green},${C.greenDark})`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
