@@ -760,7 +760,11 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     setLoading(true); setError("");
     try {
       const fullPhone = `+213${digits.replace(/^0/,"")}`;
-      // البحث برقم الهاتف فقط أولاً ثم التحقق من الكود
+      
+      // تسجيل دخول مجهول مؤقت للوصول لـ Firestore
+      const { signInAnonymously } = await import("firebase/auth");
+      await signInAnonymously(auth);
+      
       const cols = isPassenger ? ["passengers","drivers"] : ["drivers","passengers"];
       let found = false;
       for (const col of cols) {
@@ -770,10 +774,10 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
           if (docData.pinCode === loginPin) {
             const targetCol = isPassenger ? "passengers" : "drivers";
             if (col !== targetCol) {
-              // أنشئ حساب في الـ collection الصحيح
               await setDoc(doc(db, targetCol, q.docs[0].id), {
-                ...docData, role, status:role==="driver"?"pending":"active",
-                verificationStatus:role==="driver"?"none":null
+                ...docData, role,
+                status: role==="driver"?"pending":"active",
+                verificationStatus: role==="driver"?"none":null
               }, { merge:true });
             }
             if (isPassenger) {
@@ -781,27 +785,27 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
               localStorage.setItem("taxidz_phone", fullPhone);
             }
             localStorage.setItem("taxidz_role", role);
+            localStorage.setItem("taxidz_uid", q.docs[0].id);
             try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,targetCol,q.docs[0].id),{fcmToken},{merge:true}); } catch(e){}
             found = true;
             onSuccess(role);
             break;
           } else {
+            // كود خاطئ - سجّل خروج المجهول
+            await signOut(auth);
             setError(lang==="ar"?"كود الحساب غير صحيح":"Code incorrect");
             setLoading(false);
             return;
           }
         }
       }
-      if (!found) setError(lang==="ar"?"الرقم غير مسجل — أنشئ حساباً جديداً":"Numéro non inscrit");
+      if (!found) {
+        await signOut(auth);
+        setError(lang==="ar"?"الرقم غير مسجل — أنشئ حساباً جديداً":"Numéro non inscrit");
+      }
     } catch(e) {
       console.log("Login error:", e.code, e.message);
-      if (e.code === "failed-precondition" || e.message?.includes("index")) {
-        setError(lang==="ar"?"خطأ في قاعدة البيانات — تواصل مع الدعم":"Erreur base de données");
-      } else if (e.code === "permission-denied") {
-        setError(lang==="ar"?"غير مصرح — تحقق من الإعدادات":"Permission refusée");
-      } else {
-        setError(lang==="ar"?`خطأ: ${e.code||e.message}`:`Erreur: ${e.code||e.message}`);
-      }
+      setError(lang==="ar"?`خطأ: ${e.code||e.message}`:`Erreur: ${e.code||e.message}`);
     }
     setLoading(false);
   };
@@ -1602,4 +1606,3 @@ export default function App() {
     </div>
   );
 }
- 
