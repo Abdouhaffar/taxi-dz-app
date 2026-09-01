@@ -635,6 +635,28 @@ function TaxiMap({ origin, destination, showDrivers, height=220 }) {
   );
 }
 
+// ===== FLOATING LANG BUTTON =====
+function FloatingLang({ lang, setLang }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position:"fixed",top:52,right:12,zIndex:9000 }}>
+      <button onClick={()=>setOpen(!open)} style={{ width:36,height:36,borderRadius:10,background:"rgba(0,0,0,0.6)",border:"1px solid rgba(255,255,255,0.2)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)" }}>
+        {lang==="ar"?"🇩🇿":lang==="fr"?"🇫🇷":"🇬🇧"}
+      </button>
+      {open&&(
+        <div style={{ position:"absolute",top:40,right:0,background:"rgba(0,0,0,0.85)",borderRadius:12,padding:8,display:"flex",flexDirection:"column",gap:6,backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.15)" }}>
+          {[{code:"ar",flag:"🇩🇿"},{code:"fr",flag:"🇫🇷"},{code:"en",flag:"🇬🇧"}].map(l=>(
+            <button key={l.code} onClick={()=>{setLang(l.code);localStorage.setItem("taxidz_lang",l.code);setOpen(false);}}
+              style={{ padding:"6px 12px",borderRadius:8,border:"none",background:lang===l.code?"rgba(255,255,255,0.2)":"transparent",color:"#fff",fontFamily:"inherit",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap" }}>
+              {l.flag} {l.code==="ar"?"العربية":l.code==="fr"?"Français":"English"}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ===== WELCOME =====
 function WelcomeScreen({ onSelect, lang, setLang }) {
   const t=T[lang];
@@ -738,28 +760,43 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     setLoading(true); setError("");
     try {
       const fullPhone = `+213${digits.replace(/^0/,"")}`;
-      const col = isPassenger ? "passengers" : "drivers";
-      const col2 = isPassenger ? "drivers" : "passengers";
-      const q = await getDocs(query(collection(db, col), where("phone","==",fullPhone), where("pinCode","==",loginPin)));
-      if (!q.empty) {
-        const d = q.docs[0].data();
-        if (isPassenger) { localStorage.setItem("taxidz_name",d.name||""); localStorage.setItem("taxidz_phone",fullPhone); }
-        localStorage.setItem("taxidz_role", role);
-        try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,col,q.docs[0].id),{fcmToken},{merge:true}); } catch(e){}
-        onSuccess(role);
-      } else {
-        const q2 = await getDocs(query(collection(db, col2), where("phone","==",fullPhone), where("pinCode","==",loginPin)));
-        if (!q2.empty) {
-          const d = q2.docs[0].data();
-          await setDoc(doc(db, col, q2.docs[0].id), { ...d, role, status: role==="driver"?"pending":"active", verificationStatus: role==="driver"?"none":null }, { merge: true });
-          if (isPassenger) { localStorage.setItem("taxidz_name",d.name||""); localStorage.setItem("taxidz_phone",fullPhone); }
-          localStorage.setItem("taxidz_role", role);
-          onSuccess(role);
-        } else {
-          setError(lang==="ar"?"رقم الهاتف أو الكود غير صحيح":"Numéro ou code incorrect");
+      // البحث برقم الهاتف فقط أولاً ثم التحقق من الكود
+      const cols = isPassenger ? ["passengers","drivers"] : ["drivers","passengers"];
+      let found = false;
+      for (const col of cols) {
+        const q = await getDocs(query(collection(db, col), where("phone","==",fullPhone)));
+        if (!q.empty) {
+          const docData = q.docs[0].data();
+          if (docData.pinCode === loginPin) {
+            const targetCol = isPassenger ? "passengers" : "drivers";
+            if (col !== targetCol) {
+              // أنشئ حساب في الـ collection الصحيح
+              await setDoc(doc(db, targetCol, q.docs[0].id), {
+                ...docData, role, status:role==="driver"?"pending":"active",
+                verificationStatus:role==="driver"?"none":null
+              }, { merge:true });
+            }
+            if (isPassenger) {
+              localStorage.setItem("taxidz_name", docData.name||"");
+              localStorage.setItem("taxidz_phone", fullPhone);
+            }
+            localStorage.setItem("taxidz_role", role);
+            try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,targetCol,q.docs[0].id),{fcmToken},{merge:true}); } catch(e){}
+            found = true;
+            onSuccess(role);
+            break;
+          } else {
+            setError(lang==="ar"?"كود الحساب غير صحيح":"Code incorrect");
+            setLoading(false);
+            return;
+          }
         }
       }
-    } catch(e) { setError(lang==="ar"?"حدث خطأ — حاول مرة أخرى":"Erreur — réessayez"); }
+      if (!found) setError(lang==="ar"?"الرقم غير مسجل — أنشئ حساباً جديداً":"Numéro non inscrit");
+    } catch(e) {
+      console.log("Login error:", e);
+      setError(lang==="ar"?"حدث خطأ — حاول مرة أخرى":"Erreur — réessayez");
+    }
     setLoading(false);
   };
 
@@ -769,10 +806,21 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     if (digits.length < 9) { setError(lang==="ar"?"أدخل رقم هاتفك":"Entrez votre numéro"); return; }
     setLoading(true); setError("");
     try {
-      if (window.recaptchaVerifier) { try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null; }
-      const container = document.getElementById("recaptcha-container");
-      if (container) container.innerHTML = "";
-      await new Promise(r => setTimeout(r, 200));
+      // تنظيف شامل لـ reCAPTCHA
+      if (window.recaptchaVerifier) {
+        try { window.recaptchaVerifier.clear(); } catch(x) {}
+        window.recaptchaVerifier = null;
+      }
+      // إنشاء div جديد في كل مرة لتجنب "already rendered"
+      const oldContainer = document.getElementById("recaptcha-container");
+      if (oldContainer) {
+        const newDiv = document.createElement("div");
+        newDiv.id = "recaptcha-container";
+        newDiv.style.position = "absolute";
+        newDiv.style.opacity = "0";
+        oldContainer.parentNode.replaceChild(newDiv, oldContainer);
+      }
+      await new Promise(r => setTimeout(r, 300));
       window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
         size: "invisible",
         callback: () => {},
@@ -881,6 +929,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       <div id="recaptcha-container" style={{ position:"absolute",opacity:0 }} />
+      <FloatingLang lang={lang} setLang={()=>{}} />
 
       {/* Header */}
       <div style={{ background:`linear-gradient(135deg,${C.dark},#16213e)`,padding:"48px 24px 24px",textAlign:"center",position:"relative" }}>
@@ -1075,7 +1124,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
 }
 
 // ===== PASSENGER APP =====
-function PassengerApp({ onLogout, user, lang }) {
+function PassengerApp({ onLogout, user, lang, setLang }) {
   const t=T[lang];
   const isRTL=lang==="ar";
   const [screen,setScreen]=useState("home");
@@ -1198,6 +1247,7 @@ function PassengerApp({ onLogout, user, lang }) {
   if(screen==="home") return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
+      <FloatingLang lang={lang} setLang={setLang} />
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ padding:"48px 20px 12px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
         <div>
@@ -1541,7 +1591,7 @@ export default function App() {
       <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
       {screen==="welcome"&&<WelcomeScreen onSelect={r=>{setRole(r);setScreen("auth");}} lang={lang} setLang={changeLang} />}
       {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} />}
-      {screen==="app"&&role==="passenger"&&<PassengerApp onLogout={handleLogout} user={user} lang={lang} />}
+      {screen==="app"&&role==="passenger"&&<PassengerApp onLogout={handleLogout} user={user} lang={lang} setLang={changeLang} />}
       {screen==="app"&&role==="driver"&&<DriverDashboard user={user} onLogout={handleLogout} />}
     </div>
   );
