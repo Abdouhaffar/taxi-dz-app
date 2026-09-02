@@ -2,12 +2,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { auth, db, requestNotificationPermission, onForegroundMessage } from "./firebase";
 import {
-  signOut, onAuthStateChanged, updateProfile, RecaptchaVerifier, signInWithPhoneNumber
+  signOut, onAuthStateChanged, updateProfile, signInWithCustomToken
 } from "firebase/auth";
 import {
   doc, setDoc, getDoc, serverTimestamp, addDoc, collection,
   onSnapshot, updateDoc, getDocs, query, where, orderBy, limit, increment
 } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
+
+// Cloud Functions منشورة على europe-west1 — غيّر المنطقة إذا نشرت في مكان آخر
+const cloudFunctions = getFunctions(undefined, "europe-west1");
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } from "@react-google-maps/api";
 import DriverDashboard from "./DriverDashboard";
 
@@ -753,7 +757,6 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     setPhone(""); setPinCode(""); setPinConfirm(""); setName("");
     setLoginPhone(""); setLoginPin("");
     setResetPhone(""); setNewPin(""); setNewPinConfirm("");
-    if (window.recaptchaVerifier) { try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null; }
   };
 
   // ===== LOGIN بدون OTP =====
@@ -814,46 +817,27 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     setLoading(false);
   };
 
-  // ===== SEND OTP =====
+  // ===== SEND OTP (عبر Twilio Verify - Cloud Function) =====
   const sendOTP = async (phoneNum) => {
     const digits = phoneNum.replace(/\D/g,"");
     if (digits.length < 9) { setError(lang==="ar"?"أدخل رقم هاتفك":"Entrez votre numéro"); return; }
     setLoading(true); setError("");
     try {
-      // تنظيف شامل لـ reCAPTCHA
-      if (window.recaptchaVerifier) {
-        try { window.recaptchaVerifier.clear(); } catch(x) {}
-        window.recaptchaVerifier = null;
-      }
-      // إنشاء div جديد في كل مرة لتجنب "already rendered"
-      const oldContainer = document.getElementById("recaptcha-container");
-      if (oldContainer) {
-        const newDiv = document.createElement("div");
-        newDiv.id = "recaptcha-container";
-        newDiv.style.position = "absolute";
-        newDiv.style.opacity = "0";
-        oldContainer.parentNode.replaceChild(newDiv, oldContainer);
-      }
-      await new Promise(r => setTimeout(r, 300));
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-        size: "invisible",
-        callback: () => {},
-        "expired-callback": () => { window.recaptchaVerifier=null; },
-      });
       const fullPhone = `+213${digits.replace(/^0/,"")}`;
-      const result = await signInWithPhoneNumber(auth, fullPhone, window.recaptchaVerifier);
-      setConfirmResult(result);
+      const sendOtpTwilio = httpsCallable(cloudFunctions, "sendOtpTwilio");
+      await sendOtpTwilio({ phone: fullPhone });
+      // نخزن رقم الهاتف فقط (بدل confirmationResult الخاص بـ Firebase) لاستعماله عند التحقق
+      setConfirmResult({ phone: fullPhone });
       setStep("otp");
       setResendTimer(60);
       setTimeout(() => otpRefs[0].current?.focus(), 300);
     } catch(e) {
-      if (window.recaptchaVerifier) { try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null; }
+      console.log("OTP send error:", e.code, e.message);
       const msgs = {
-        "auth/invalid-phone-number": lang==="ar"?"رقم غير صحيح":"Numéro invalide",
-        "auth/too-many-requests": lang==="ar"?"محاولات كثيرة — انتظر":"Trop de tentatives",
-        "auth/quota-exceeded": lang==="ar"?"تجاوز الحد اليومي":"Quota dépassé",
+        "invalid-argument": lang==="ar"?"رقم غير صحيح":"Numéro invalide",
+        "resource-exhausted": lang==="ar"?"محاولات كثيرة — انتظر":"Trop de tentatives",
       };
-      setError(msgs[e.code] || `${e.code||e.message}`);
+      setError(msgs[e.code] || (lang==="ar"?"تعذر إرسال الرمز — حاول مجدداً":"Échec de l'envoi du code"));
     }
     setLoading(false);
   };
@@ -944,8 +928,10 @@ Code AL-BURAQ: *${code}*`;
     }
     
     try {
-      const result = await confirmResult.confirm(code);
-      const u = result.user;
+      const verifyOtpTwilio = httpsCallable(cloudFunctions, "verifyOtpTwilio");
+      const { data } = await verifyOtpTwilio({ phone: confirmResult.phone, code });
+      const cred = await signInWithCustomToken(auth, data.customToken);
+      const u = cred.user;
       const digits = phone.replace(/\D/g,"");
       const phoneF = `+213${digits.replace(/^0/,"")}`;
       const col = isPassenger ? "passengers" : "drivers";
@@ -975,7 +961,9 @@ Code AL-BURAQ: *${code}*`;
     if (code.length < 6) { setError(lang==="ar"?"أدخل الرمز كاملاً":"Code incomplet"); return; }
     setLoading(true); setError("");
     try {
-      await confirmResult.confirm(code);
+      const verifyOtpTwilio = httpsCallable(cloudFunctions, "verifyOtpTwilio");
+      const { data } = await verifyOtpTwilio({ phone: confirmResult.phone, code });
+      await signInWithCustomToken(auth, data.customToken);
       setStep("newpin");
     } catch(e) {
       setError(lang==="ar"?"رمز التحقق خاطئ":"Code incorrect");
@@ -1003,14 +991,12 @@ Code AL-BURAQ: *${code}*`;
   const resendOTP = () => {
     if (resendTimer > 0) return;
     setOtp(["","","","","",""]); setError(""); setStep("form");
-    if (window.recaptchaVerifier) { try{window.recaptchaVerifier.clear();}catch(x){} window.recaptchaVerifier=null; }
   };
 
   const inputStyle = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:14, padding:"13px 16px", fontFamily:"inherit", fontSize:14, color:C.text, outline:"none", width:"100%", direction:isRTL?"rtl":"ltr" };
 
   return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
-      <div id="recaptcha-container" style={{ position:"absolute",opacity:0 }} />
       <FloatingLang lang={lang} setLang={()=>{}} />
 
       {/* Header */}
