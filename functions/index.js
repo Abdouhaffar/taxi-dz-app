@@ -1,23 +1,33 @@
 /**
  * AL-BURAQ - Firebase Cloud Functions
- * الإشعارات التلقائية لكل أحداث التطبيق
- * 
+ * (1) الإشعارات التلقائية لكل أحداث التطبيق (FCM)
+ * (2) نظام OTP عبر Twilio Verify
+ *
  * تثبيت:
  * npm install -g firebase-tools
  * firebase login
  * firebase init functions (اختر JavaScript)
  * ضع هذا الملف في مجلد functions/
+ * firebase functions:secrets:set TWILIO_ACCOUNT_SID
+ * firebase functions:secrets:set TWILIO_AUTH_TOKEN
+ * firebase functions:secrets:set TWILIO_VERIFY_SERVICE_SID
  * firebase deploy --only functions
  */
 
 const functions = require("firebase-functions");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const twilio = require("twilio");
 
 admin.initializeApp();
 const db = admin.firestore();
 const messaging = admin.messaging();
 
-// ===== دالة مساعدة لإرسال الإشعار =====
+// ============================================================
+// ==================  1) نظام الإشعارات (FCM)  =================
+// ============================================================
+
 async function sendNotification(token, title, body, data = {}) {
   if (!token) return null;
   try {
@@ -70,7 +80,6 @@ async function sendNotification(token, title, body, data = {}) {
   }
 }
 
-// دالة لإرسال لعدة tokens
 async function sendToMultiple(tokens, title, body, data = {}) {
   if (!tokens || tokens.length === 0) return;
   const promises = tokens.map(token => sendNotification(token, title, body, data));
@@ -85,10 +94,9 @@ exports.onNewBooking = functions.firestore
     if (booking.status !== "pending") return null;
 
     const { bookingId } = context.params;
-    const { originLat, originLng, passengerName, price, distanceKm, passengers, luggageWeight } = booking;
+    const { originLat, originLng, price, distanceKm, passengers, luggageWeight } = booking;
 
     try {
-      // جلب السائقين المتصلين والمعتمدين
       const driversSnap = await db.collection("drivers")
         .where("isOnline", "==", true)
         .where("verificationStatus", "==", "approved")
@@ -99,14 +107,12 @@ exports.onNewBooking = functions.firestore
         const driver = doc.data();
         if (!driver.fcmToken || !driver.location) return;
 
-        // حساب المسافة بين السائق والراكب
         const R = 6371;
         const dLat = (driver.location.lat - originLat) * Math.PI / 180;
         const dLng = (driver.location.lng - originLng) * Math.PI / 180;
         const a = Math.sin(dLat/2)**2 + Math.cos(originLat*Math.PI/180) * Math.cos(driver.location.lat*Math.PI/180) * Math.sin(dLng/2)**2;
         const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-        // إرسال للسائقين في نطاق 5 كم
         if (dist <= 5) {
           nearbyTokens.push(driver.fcmToken);
         }
@@ -146,7 +152,6 @@ exports.onBookingAccepted = functions.firestore
     const after = change.after.data();
     const { bookingId } = context.params;
 
-    // قبول الرحلة
     if (before.status !== "accepted" && after.status === "accepted") {
       try {
         const passengerSnap = await db.collection("passengers").doc(after.passengerId).get();
@@ -163,7 +168,6 @@ exports.onBookingAccepted = functions.firestore
       } catch (e) { console.error("خطأ في onBookingAccepted:", e); }
     }
 
-    // إلغاء الرحلة من السائق
     if (before.status === "accepted" && after.status === "cancelled") {
       try {
         const passengerSnap = await db.collection("passengers").doc(after.passengerId).get();
@@ -179,10 +183,8 @@ exports.onBookingAccepted = functions.firestore
       } catch (e) { console.error("خطأ في onBookingCancelled:", e); }
     }
 
-    // اكتمال الرحلة
     if (before.status !== "completed" && after.status === "completed") {
       try {
-        // إشعار للسائق
         if (after.driverId) {
           const driverSnap = await db.collection("drivers").doc(after.driverId).get();
           const driver = driverSnap.data();
@@ -209,23 +211,19 @@ exports.onNewChatMessage = functions.firestore
     const { bookingId } = context.params;
 
     try {
-      // جلب بيانات الحجز
       const bookingSnap = await db.collection("bookings").doc(bookingId).get();
       if (!bookingSnap.exists) return null;
       const booking = bookingSnap.data();
 
-      // تحديد المستقبل (الطرف الآخر)
       const senderId = message.senderId;
       let recipientToken = null;
       let recipientName = "";
 
       if (senderId === booking.passengerId) {
-        // الراكب أرسل → أخبر السائق
         const driverSnap = await db.collection("drivers").doc(booking.driverId).get();
         recipientToken = driverSnap.data()?.fcmToken;
         recipientName = booking.passengerName || "الراكب";
       } else {
-        // السائق أرسل → أخبر الراكب
         const passengerSnap = await db.collection("passengers").doc(booking.passengerId).get();
         recipientToken = passengerSnap.data()?.fcmToken;
         recipientName = booking.driverInfo?.name || "السائق";
@@ -275,7 +273,6 @@ exports.onSubscriptionApproved = functions.firestore
     const before = change.before.data();
     const after = change.after.data();
 
-    // تم قبول الاشتراك
     if (before.subscription?.status !== "active" && after.subscription?.status === "active") {
       try {
         if (!after.fcmToken) return null;
@@ -288,7 +285,6 @@ exports.onSubscriptionApproved = functions.firestore
       } catch (e) { console.error("خطأ في onSubscriptionApproved:", e); }
     }
 
-    // رفض التوثيق
     if (before.verificationStatus !== "rejected" && after.verificationStatus === "rejected") {
       try {
         if (!after.fcmToken) return null;
@@ -301,7 +297,6 @@ exports.onSubscriptionApproved = functions.firestore
       } catch (e) { console.error("خطأ في onVerificationRejected:", e); }
     }
 
-    // قبول التوثيق
     if (before.verificationStatus !== "approved" && after.verificationStatus === "approved") {
       try {
         if (!after.fcmToken) return null;
@@ -323,7 +318,6 @@ exports.onSOSAlert = functions.firestore
   .onCreate(async (snap, context) => {
     const alert = snap.data();
     try {
-      // جلب token الأدمن الرئيسي
       const adminSnap = await db.collection("admins").where("role", "==", "super").limit(1).get();
       if (adminSnap.empty) return null;
 
@@ -361,3 +355,71 @@ exports.onNewReport = functions.firestore
     } catch (e) { console.error("خطأ في onNewReport:", e); }
     return null;
   });
+
+// ============================================================
+// ==================  2) نظام OTP (Twilio Verify)  =============
+// ============================================================
+
+const TWILIO_SID = defineSecret("TWILIO_ACCOUNT_SID");
+const TWILIO_TOKEN = defineSecret("TWILIO_AUTH_TOKEN");
+const TWILIO_VERIFY_SID = defineSecret("TWILIO_VERIFY_SERVICE_SID");
+
+const OTP_REGION = "europe-west1"; // يطابق المنطقة في App.jsx (cloudFunctions)
+
+// ===== إرسال رمز التحقق =====
+exports.sendOtpTwilio = onCall(
+  { region: OTP_REGION, secrets: [TWILIO_SID, TWILIO_TOKEN, TWILIO_VERIFY_SID] },
+  async (request) => {
+    const phone = request.data?.phone;
+    if (!phone || !/^\+213\d{9}$/.test(phone)) {
+      throw new HttpsError("invalid-argument", "رقم هاتف غير صحيح");
+    }
+
+    const client = twilio(TWILIO_SID.value(), TWILIO_TOKEN.value());
+    try {
+      await client.verify.v2
+        .services(TWILIO_VERIFY_SID.value())
+        .verifications.create({ to: phone, channel: "sms" });
+      return { success: true };
+    } catch (e) {
+      console.error("Twilio send error:", e);
+      throw new HttpsError("internal", "فشل إرسال رمز التحقق");
+    }
+  }
+);
+
+// ===== التحقق من الرمز + إنشاء/تسجيل الدخول في Firebase =====
+exports.verifyOtpTwilio = onCall(
+  { region: OTP_REGION, secrets: [TWILIO_SID, TWILIO_TOKEN, TWILIO_VERIFY_SID] },
+  async (request) => {
+    const { phone, code } = request.data || {};
+    if (!phone || !code) {
+      throw new HttpsError("invalid-argument", "بيانات ناقصة");
+    }
+
+    const client = twilio(TWILIO_SID.value(), TWILIO_TOKEN.value());
+    let check;
+    try {
+      check = await client.verify.v2
+        .services(TWILIO_VERIFY_SID.value())
+        .verificationChecks.create({ to: phone, code });
+    } catch (e) {
+      console.error("Twilio verify error:", e);
+      throw new HttpsError("internal", "فشل التحقق من الرمز");
+    }
+
+    if (check.status !== "approved") {
+      throw new HttpsError("invalid-argument", "رمز التحقق خاطئ أو منتهي الصلاحية");
+    }
+
+    let userRecord;
+    try {
+      userRecord = await admin.auth().getUserByPhoneNumber(phone);
+    } catch (e) {
+      userRecord = await admin.auth().createUser({ phoneNumber: phone });
+    }
+
+    const customToken = await admin.auth().createCustomToken(userRecord.uid);
+    return { customToken, uid: userRecord.uid };
+  }
+);
