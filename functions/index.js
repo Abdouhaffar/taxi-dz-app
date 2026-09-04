@@ -168,6 +168,21 @@ exports.onBookingAccepted = functions.firestore
       } catch (e) { console.error("خطأ في onBookingAccepted:", e); }
     }
 
+    if (before.status !== "arrived" && after.status === "arrived") {
+      try {
+        const passengerSnap = await db.collection("passengers").doc(after.passengerId).get();
+        const passenger = passengerSnap.data();
+        if (!passenger?.fcmToken) return null;
+
+        await sendNotification(
+          passenger.fcmToken,
+          "🚕 السائق وصل!",
+          "السائق بانتظارك عند نقطة الانطلاق",
+          { type: "driver_arrived", bookingId, screen: "app" }
+        );
+      } catch (e) { console.error("خطأ في onDriverArrived:", e); }
+    }
+
     if (before.status === "accepted" && after.status === "cancelled") {
       try {
         const passengerSnap = await db.collection("passengers").doc(after.passengerId).get();
