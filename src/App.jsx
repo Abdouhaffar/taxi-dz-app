@@ -839,15 +839,15 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
       // نخزن رقم الهاتف فقط (بدل confirmationResult الخاص بـ Firebase) لاستعماله عند التحقق
       setConfirmResult({ phone: fullPhone });
       setStep("otp");
-      setResendTimer(60);
+      setResendTimer(120);
       setTimeout(() => otpRefs[0].current?.focus(), 300);
     } catch(e) {
       console.log("OTP send error:", e.code, e.message);
       const msgs = {
         "invalid-argument": lang==="ar"?"رقم غير صحيح":"Numéro invalide",
-        "resource-exhausted": lang==="ar"?"محاولات كثيرة — انتظر":"Trop de tentatives",
+        "resource-exhausted": lang==="ar"?"تم قفل حسابك مؤقتاً 24 ساعة بسبب محاولات خاطئة متكررة":"Compte verrouillé 24h — trop de tentatives",
       };
-      setError(msgs[e.code] || (lang==="ar"?"تعذر إرسال الرمز — حاول مجدداً":"Échec de l'envoi du code"));
+      setError(msgs[e.code?.replace("functions/","")] || (lang==="ar"?"تعذر إرسال الرمز — حاول مجدداً":"Échec de l'envoi du code"));
     }
     setLoading(false);
   };
@@ -965,7 +965,8 @@ Code AL-BURAQ: *${code}*`;
       try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,col,u.uid),{fcmToken},{merge:true}); } catch(e){}
       onSuccess(role);
     } catch(e) {
-      setError(lang==="ar"?"رمز التحقق خاطئ أو منتهي":"Code incorrect ou expiré");
+      const locked = e.code==="functions/resource-exhausted"||e.details?.code==="resource-exhausted"||/قفل|resource-exhausted/i.test(e.message||"");
+      setError(locked?(lang==="ar"?"تم قفل حسابك مؤقتاً 24 ساعة بسبب محاولات خاطئة متكررة":"Compte verrouillé 24h — trop de tentatives"):(lang==="ar"?"رمز التحقق خاطئ أو منتهي":"Code incorrect ou expiré"));
       setOtp(["","","","","",""]);
       setTimeout(() => otpRefs[0].current?.focus(), 100);
     }
@@ -983,7 +984,8 @@ Code AL-BURAQ: *${code}*`;
       await signInWithCustomToken(auth, data.customToken);
       setStep("newpin");
     } catch(e) {
-      setError(lang==="ar"?"رمز التحقق خاطئ":"Code incorrect");
+      const locked = e.code==="functions/resource-exhausted"||e.details?.code==="resource-exhausted"||/قفل|resource-exhausted/i.test(e.message||"");
+      setError(locked?(lang==="ar"?"تم قفل حسابك مؤقتاً 24 ساعة بسبب محاولات خاطئة متكررة":"Compte verrouillé 24h — trop de tentatives"):(lang==="ar"?"رمز التحقق خاطئ":"Code incorrect"));
       setOtp(["","","","","",""]);
       setTimeout(() => otpRefs[0].current?.focus(), 100);
     }
