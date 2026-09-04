@@ -824,6 +824,16 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     setLoading(true); setError("");
     try {
       const fullPhone = `+213${digits.replace(/^0/,"")}`;
+      // عند التسجيل فقط: تحقق من عدم وجود حساب مسبقاً بنفس الرقم قبل إرسال أي SMS
+      if (authTab === "register") {
+        const checkPhoneRegistered = httpsCallable(cloudFunctions, "checkPhoneRegistered");
+        const { data: checkData } = await checkPhoneRegistered({ phone: fullPhone, role: isPassenger?"passenger":"driver" });
+        if (checkData?.exists) {
+          setError(lang==="ar"?"أنت مسجّل بالفعل — انتقل إلى تسجيل الدخول":"Vous êtes déjà inscrit — utilisez la connexion");
+          setLoading(false);
+          return;
+        }
+      }
       const sendOtpTwilio = httpsCallable(cloudFunctions, "sendOtpTwilio");
       await sendOtpTwilio({ phone: fullPhone });
       // نخزن رقم الهاتف فقط (بدل confirmationResult الخاص بـ Firebase) لاستعماله عند التحقق
