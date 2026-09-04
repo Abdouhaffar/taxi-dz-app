@@ -410,6 +410,16 @@ exports.sendOtpTwilio = onCall(
       throw new HttpsError("invalid-argument", "رقم هاتف غير صحيح");
     }
 
+    // تحقق من القفل المؤقت (5 محاولات خاطئة → قفل 24 ساعة)
+    const attemptsRef = admin.firestore().collection("otp_attempts").doc(phone);
+    const attemptsSnap = await attemptsRef.get();
+    if (attemptsSnap.exists) {
+      const d = attemptsSnap.data();
+      if (d.lockedUntil && d.lockedUntil.toDate() > new Date()) {
+        throw new HttpsError("resource-exhausted", "تم قفل حسابك مؤقتاً بسبب محاولات خاطئة متكررة");
+      }
+    }
+
     const client = twilio(TWILIO_SID.value(), TWILIO_TOKEN.value());
     try {
       await client.verify.v2
@@ -432,6 +442,14 @@ exports.verifyOtpTwilio = onCall(
       throw new HttpsError("invalid-argument", "بيانات ناقصة");
     }
 
+    const attemptsRef = admin.firestore().collection("otp_attempts").doc(phone);
+    const attemptsSnap = await attemptsRef.get();
+    const attemptsData = attemptsSnap.exists ? attemptsSnap.data() : { failCount: 0, lockedUntil: null };
+
+    if (attemptsData.lockedUntil && attemptsData.lockedUntil.toDate() > new Date()) {
+      throw new HttpsError("resource-exhausted", "تم قفل حسابك مؤقتاً بسبب محاولات خاطئة متكررة");
+    }
+
     const client = twilio(TWILIO_SID.value(), TWILIO_TOKEN.value());
     let check;
     try {
@@ -444,8 +462,20 @@ exports.verifyOtpTwilio = onCall(
     }
 
     if (check.status !== "approved") {
+      const newFailCount = (attemptsData.failCount || 0) + 1;
+      const update = { failCount: newFailCount };
+      if (newFailCount >= 5) {
+        update.failCount = 0;
+        update.lockedUntil = admin.firestore.Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000);
+        await attemptsRef.set(update, { merge: true });
+        throw new HttpsError("resource-exhausted", "تم قفل حسابك مؤقتاً 24 ساعة بسبب محاولات خاطئة متكررة");
+      }
+      await attemptsRef.set(update, { merge: true });
       throw new HttpsError("invalid-argument", "رمز التحقق خاطئ أو منتهي الصلاحية");
     }
+
+    // نجاح التحقق → تصفير عداد المحاولات
+    await attemptsRef.set({ failCount: 0, lockedUntil: null }, { merge: true });
 
     let userRecord;
     try {
