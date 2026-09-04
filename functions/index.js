@@ -381,6 +381,26 @@ const TWILIO_VERIFY_SID = defineSecret("TWILIO_VERIFY_SERVICE_SID");
 
 const OTP_REGION = "europe-west1"; // يطابق المنطقة في App.jsx (cloudFunctions)
 
+// ===== التحقق من وجود حساب مسبقاً بنفس الرقم (قبل إرسال أي SMS) =====
+exports.checkPhoneRegistered = onCall(
+  { region: OTP_REGION },
+  async (request) => {
+    const { phone, role } = request.data || {};
+    if (!phone || !/^\+213\d{9}$/.test(phone)) {
+      throw new HttpsError("invalid-argument", "رقم هاتف غير صحيح");
+    }
+    const col = role === "driver" ? "drivers" : "passengers";
+    try {
+      const userRecord = await admin.auth().getUserByPhoneNumber(phone);
+      const docSnap = await admin.firestore().collection(col).doc(userRecord.uid).get();
+      return { exists: docSnap.exists };
+    } catch (e) {
+      // ما كاينش حساب Firebase بهذا الرقم أصلاً → مؤكد جديد
+      return { exists: false };
+    }
+  }
+);
+
 // ===== إرسال رمز التحقق =====
 exports.sendOtpTwilio = onCall(
   { region: OTP_REGION, secrets: [TWILIO_SID, TWILIO_TOKEN, TWILIO_VERIFY_SID] },
