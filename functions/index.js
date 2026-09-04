@@ -401,11 +401,12 @@ exports.checkPhoneRegistered = onCall(
   }
 );
 
-// ===== إرسال رمز التحقق =====
+// ===== إرسال رمز التحقق (SMS أو WhatsApp) =====
 exports.sendOtpTwilio = onCall(
   { region: OTP_REGION, secrets: [TWILIO_SID, TWILIO_TOKEN, TWILIO_VERIFY_SID] },
   async (request) => {
     const phone = request.data?.phone;
+    const channel = request.data?.channel === "whatsapp" ? "whatsapp" : "sms";
     if (!phone || !/^\+213\d{9}$/.test(phone)) {
       throw new HttpsError("invalid-argument", "رقم هاتف غير صحيح");
     }
@@ -424,7 +425,7 @@ exports.sendOtpTwilio = onCall(
     try {
       await client.verify.v2
         .services(TWILIO_VERIFY_SID.value())
-        .verifications.create({ to: phone, channel: "sms" });
+        .verifications.create({ to: phone, channel });
       return { success: true };
     } catch (e) {
       console.error("Twilio send error:", e);
