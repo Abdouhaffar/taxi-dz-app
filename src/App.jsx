@@ -835,7 +835,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
         }
       }
       const sendOtpTwilio = httpsCallable(cloudFunctions, "sendOtpTwilio");
-      await sendOtpTwilio({ phone: fullPhone });
+      await sendOtpTwilio({ phone: fullPhone, channel: otpMethod });
       // نخزن رقم الهاتف فقط (بدل confirmationResult الخاص بـ Firebase) لاستعماله عند التحقق
       setConfirmResult({ phone: fullPhone });
       setStep("otp");
@@ -853,32 +853,6 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
   };
 
   // ===== SEND OTP via WhatsApp =====
-  const sendOTPWhatsApp = async (phoneNum) => {
-    const digits = phoneNum.replace(/\D/g,"");
-    if (digits.length < 9) { setError(lang==="ar"?"أدخل رقم هاتفك":"Entrez votre numéro"); return; }
-    setLoading(true); setError("");
-    try {
-      const fullPhone = `+213${digits.replace(/^0/,"")}`;
-      // توليد كود عشوائي 6 أرقام
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      // حفظ الكود مؤقتاً في localStorage
-      localStorage.setItem("whatsapp_otp", code);
-      localStorage.setItem("whatsapp_otp_phone", fullPhone);
-      localStorage.setItem("whatsapp_otp_time", Date.now().toString());
-      // فتح واتساب برسالة تلقائية للأدمن
-      const msg = `رمز التحقق الخاص بك في تطبيق AL-BURAQ هو: *${code}*
-Code AL-BURAQ: *${code}*`;
-      const adminWhatsApp = "213662011277"; // رقم الأدمن
-      window.open(`https://api.whatsapp.com/send?phone=${adminWhatsApp}&text=${encodeURIComponent(msg)}`, "_blank");
-      setStep("otp");
-      setResendTimer(120);
-      setTimeout(() => otpRefs[0].current?.focus(), 500);
-    } catch(e) {
-      setError(lang==="ar"?"خطأ في إرسال الرمز":"Erreur d'envoi");
-    }
-    setLoading(false);
-  };
-
   const handleOtpChange = (i, val) => {
     if (!/^\d*$/.test(val)) return;
     const newOtp = [...otp]; newOtp[i] = val.slice(-1); setOtp(newOtp);
@@ -896,47 +870,7 @@ Code AL-BURAQ: *${code}*`;
     const code = otp.join("");
     if (code.length < 6) { setError(lang==="ar"?"أدخل الرمز كاملاً":"Code incomplet"); return; }
     setLoading(true); setError("");
-    
-    // WhatsApp OTP verification
-    if (otpMethod === "whatsapp") {
-      const savedCode = localStorage.getItem("whatsapp_otp");
-      const savedPhone = localStorage.getItem("whatsapp_otp_phone");
-      const savedTime = parseInt(localStorage.getItem("whatsapp_otp_time")||"0");
-      const digits = phone.replace(/\D/g,"");
-      const fullPhone = `+213${digits.replace(/^0/,"")}`;
-      if (Date.now() - savedTime > 10 * 60 * 1000) {
-        setError(lang==="ar"?"انتهت صلاحية الرمز — أعد المحاولة":"Code expiré");
-        setLoading(false); return;
-      }
-      if (code !== savedCode || fullPhone !== savedPhone) {
-        setError(lang==="ar"?"رمز التحقق خاطئ":"Code incorrect");
-        setOtp(["","","","","",""]); setLoading(false); return;
-      }
-      // OTP صحيح - أنشئ الحساب
-      try {
-        const { signInAnonymously } = await import("firebase/auth");
-        const cred = await signInAnonymously(auth);
-        const u = cred.user;
-        const col = isPassenger ? "passengers" : "drivers";
-        await setDoc(doc(db, col, u.uid), {
-          uid:u.uid, name, phone:fullPhone, pinCode,
-          role, status:role==="driver"?"pending":"active",
-          verificationStatus:role==="driver"?"none":null,
-          rating:0, totalRatings:0, totalRides:0, points:0,
-          referralCode:generateReferralCode(u.uid), referralCount:0,
-          createdAt:serverTimestamp()
-        });
-        localStorage.removeItem("whatsapp_otp");
-        localStorage.removeItem("whatsapp_otp_phone");
-        localStorage.removeItem("whatsapp_otp_time");
-        if (isPassenger) { localStorage.setItem("taxidz_name",name); localStorage.setItem("taxidz_phone",fullPhone); }
-        localStorage.setItem("taxidz_role", role);
-        setLoading(false);
-        onSuccess(role);
-        return;
-      } catch(e) { setError(lang==="ar"?"خطأ في إنشاء الحساب":"Erreur"); setLoading(false); return; }
-    }
-    
+
     try {
       const verifyOtpTwilio = httpsCallable(cloudFunctions, "verifyOtpTwilio");
       const { data } = await verifyOtpTwilio({ phone: confirmResult.phone, code });
@@ -1110,6 +1044,18 @@ Code AL-BURAQ: *${code}*`;
             <div style={{ background:C.blueLight,borderRadius:12,padding:"10px 14px",fontSize:12,color:C.blue }}>
               🔐 {lang==="ar"?"احفظ كودك جيداً — ستحتاجه عند كل دخول":"Mémorisez bien votre code"}
             </div>
+            {/* اختيار قناة استلام رمز التحقق */}
+            <div>
+              <div style={{ fontSize:12,color:C.textMuted,marginBottom:6,fontWeight:600 }}>{lang==="ar"?"استلم رمز التحقق عبر:":"Recevoir le code via :"}</div>
+              <div style={{ display:"flex",gap:8 }}>
+                <button type="button" onClick={()=>setOtpMethod("sms")} style={{ flex:1,padding:"11px",borderRadius:12,border:`2px solid ${otpMethod==="sms"?accent:C.border}`,background:otpMethod==="sms"?`${accent}15`:C.bg,color:otpMethod==="sms"?accent:C.textMuted,fontFamily:"inherit",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+                  💬 SMS
+                </button>
+                <button type="button" onClick={()=>setOtpMethod("whatsapp")} style={{ flex:1,padding:"11px",borderRadius:12,border:`2px solid ${otpMethod==="whatsapp"?"#25D366":C.border}`,background:otpMethod==="whatsapp"?"#25D36615":C.bg,color:otpMethod==="whatsapp"?"#25D366":C.textMuted,fontFamily:"inherit",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+                  🟢 WhatsApp
+                </button>
+              </div>
+            </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
             <button onClick={()=>{
               if(!name.trim()){setError(lang==="ar"?"أدخل اسم المستخدم":"Entrez votre nom");return;}
@@ -1140,6 +1086,17 @@ Code AL-BURAQ: *${code}*`;
                 placeholder="0XXXXXXXXX" type="tel" maxLength={10}
                 style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
             </div>
+            <div>
+              <div style={{ fontSize:12,color:C.textMuted,marginBottom:6,fontWeight:600 }}>{lang==="ar"?"استلم رمز التحقق عبر:":"Recevoir le code via :"}</div>
+              <div style={{ display:"flex",gap:8 }}>
+                <button type="button" onClick={()=>setOtpMethod("sms")} style={{ flex:1,padding:"11px",borderRadius:12,border:`2px solid ${otpMethod==="sms"?C.blue:C.border}`,background:otpMethod==="sms"?`${C.blue}15`:C.bg,color:otpMethod==="sms"?C.blue:C.textMuted,fontFamily:"inherit",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+                  💬 SMS
+                </button>
+                <button type="button" onClick={()=>setOtpMethod("whatsapp")} style={{ flex:1,padding:"11px",borderRadius:12,border:`2px solid ${otpMethod==="whatsapp"?"#25D366":C.border}`,background:otpMethod==="whatsapp"?"#25D36615":C.bg,color:otpMethod==="whatsapp"?"#25D366":C.textMuted,fontFamily:"inherit",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+                  🟢 WhatsApp
+                </button>
+              </div>
+            </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
             <button onClick={()=>sendOTP(resetPhone)} disabled={loading||resetPhone.replace(/\D/g,"").length<9}
               style={{ background:resetPhone.replace(/\D/g,"").length>=9?`linear-gradient(135deg,${C.blue},#1d4ed8)`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
@@ -1155,9 +1112,9 @@ Code AL-BURAQ: *${code}*`;
         {step==="otp"&&(
           <div style={{ background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow }}>
             <div style={{ textAlign:"center",marginBottom:16 }}>
-              <div style={{ fontSize:40,marginBottom:8 }}>💬</div>
+              <div style={{ fontSize:40,marginBottom:8 }}>{otpMethod==="whatsapp"?"🟢":"💬"}</div>
               <div style={{ fontSize:13,color:C.textMuted }}>
-                {lang==="ar"?"أُرسل رمز إلى":"Code envoyé au"} <span style={{ color:C.text,fontWeight:700,direction:"ltr",display:"inline-block" }}>
+                {(lang==="ar"?(otpMethod==="whatsapp"?"أُرسل رمز عبر واتساب إلى":"أُرسل رمز عبر SMS إلى"):(otpMethod==="whatsapp"?"Code envoyé via WhatsApp au":"Code envoyé via SMS au"))} <span style={{ color:C.text,fontWeight:700,direction:"ltr",display:"inline-block" }}>
                   +213{(authTab==="reset"?resetPhone:phone).replace(/\D/g,"").replace(/^0/,"")}
                 </span>
               </div>
