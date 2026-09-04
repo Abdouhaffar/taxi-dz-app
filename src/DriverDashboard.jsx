@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { doc, onSnapshot, updateDoc, setDoc, serverTimestamp, collection, query, where, addDoc, orderBy, getDocs, limit, increment } from "firebase/firestore";
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer } from "@react-google-maps/api";
-import { db } from "./firebase";
+import { db, requestNotificationPermission, onForegroundMessage } from "./firebase";
 
 const LIBRARIES = ["places"];
 const generateSessionId = () => `${Date.now()}-${Math.random().toString(36).substr(2,9)}`;
@@ -705,6 +705,18 @@ function DriverGPSMap({ driverLocation, passengerLocation, destLocation, mode })
   );
 }
 
+// ===== TOAST بسيط للإشعارات =====
+function DriverNotificationToast({ notification, onClose }) {
+  useEffect(()=>{ const t=setTimeout(onClose,6000); return()=>clearTimeout(t); },[notification]);
+  if(!notification) return null;
+  return (
+    <div onClick={onClose} style={{ position:"fixed",top:12,left:12,right:12,zIndex:5000,background:C.card,border:`1px solid ${C.green}`,borderRadius:16,padding:"14px 16px",boxShadow:"0 8px 24px rgba(0,0,0,0.4)",cursor:"pointer",fontFamily:"'Cairo',sans-serif",direction:"rtl" }}>
+      <div style={{ fontWeight:800,fontSize:14,color:C.text,marginBottom:2 }}>{notification.title}</div>
+      <div style={{ fontSize:13,color:C.textMuted }}>{notification.body}</div>
+    </div>
+  );
+}
+
 // ===== MAIN DASHBOARD =====
 export default function DriverDashboard({ user, onLogout }) {
   const {isLoaded}=useJsApiLoader({googleMapsApiKey:process.env.REACT_APP_GOOGLE_MAPS_KEY||"",libraries:LIBRARIES,language:"ar",region:"DZ"});
@@ -722,7 +734,21 @@ export default function DriverDashboard({ user, onLogout }) {
   const [showChat,setShowChat]=useState(false);
   const [showEarnings,setShowEarnings]=useState(false);
   const [showSubscription,setShowSubscription]=useState(false);
+  const [fcmToast,setFcmToast]=useState(null);
   const watchIdRef=useRef(null);
+
+  // تسجيل التوكن لاستقبال إشعارات Push (طلب جديد، رسالة، إلخ)
+  useEffect(()=>{
+    if(!user?.uid||status!=="approved") return;
+    (async()=>{
+      try {
+        const fcmToken = await requestNotificationPermission();
+        if(fcmToken) await setDoc(doc(db,"drivers",user.uid),{fcmToken},{merge:true});
+      } catch(e){}
+    })();
+    const unsub = onForegroundMessage(msg=>setFcmToast({title:msg.notification?.title,body:msg.notification?.body}));
+    return()=>{ if(unsub) unsub(); };
+  },[user?.uid,status]);
 
   // Session management للسائق
   useEffect(()=>{
@@ -764,6 +790,24 @@ export default function DriverDashboard({ user, onLogout }) {
     };
     goOnline();
     return()=>{ if(user?.uid) setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true}).catch(()=>{}); };
+  },[status,user?.uid]);
+
+  // استعادة الرحلة الجارية إذا كانت موجودة (مثلاً بعد الرجوع من تطبيق خرائط خارجي أدى لإغلاق التطبيق)
+  useEffect(()=>{
+    if(status!=="approved"||!user?.uid) return;
+    const restoreActiveTrip = async () => {
+      try {
+        const q = query(collection(db,"bookings"), where("driverId","==",user.uid), where("status","in",["accepted","arrived"]), limit(1));
+        const snap = await getDocs(q);
+        if(!snap.empty){
+          const b = { id: snap.docs[0].id, ...snap.docs[0].data() };
+          setAcceptedBooking(b);
+          setDriverScreen(b.status==="arrived"?"ride":"pickup");
+          startTracking(b.id);
+        }
+      } catch(e) {}
+    };
+    restoreActiveTrip();
   },[status,user?.uid]);
 
   const startTracking=(bookingId)=>{
@@ -829,6 +873,7 @@ export default function DriverDashboard({ user, onLogout }) {
 
   return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:"rtl" }}>
+      {fcmToast&&<DriverNotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showChat&&acceptedBooking&&<ChatBox bookingId={acceptedBooking.id} userId={user?.uid} userName={data?.name||"السائق"} otherName={acceptedBooking.passengerName||"الراكب"} onClose={()=>setShowChat(false)} />}
       {showSessionAlert&&(
         <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:24,backdropFilter:"blur(8px)" }}>
@@ -919,7 +964,7 @@ export default function DriverDashboard({ user, onLogout }) {
                 <div style={{ display:"flex",gap:8 }}>
                   <button onClick={()=>setShowReport(true)} style={{ flex:1,background:`${C.orange}22`,border:`1px solid ${C.orange}44`,borderRadius:10,padding:"11px",color:C.orange,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>🚨 بلّغ</button>
                   <button onClick={endRide} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>❌ إلغاء</button>
-                  <button onClick={()=>setDriverScreen("ride")} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>✅ وصلت</button>
+                  <button onClick={async()=>{ if(acceptedBooking?.id){ try{ await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"arrived",arrivedAt:serverTimestamp()}); }catch(e){} } setDriverScreen("ride"); }} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>✅ وصلت</button>
                 </div>
               </div>
             </div>
