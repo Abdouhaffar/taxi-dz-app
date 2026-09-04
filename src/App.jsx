@@ -935,6 +935,13 @@ Code AL-BURAQ: *${code}*`;
       const digits = phone.replace(/\D/g,"");
       const phoneF = `+213${digits.replace(/^0/,"")}`;
       const col = isPassenger ? "passengers" : "drivers";
+      // منع إنشاء/إعادة تعيين حساب موجود مسبقًا بنفس الرقم
+      const existingSnap = await getDoc(doc(db, col, u.uid));
+      if (existingSnap.exists()) {
+        setError(lang==="ar"?"هذا الرقم مسجّل مسبقاً — استعمل تسجيل الدخول":"Ce numéro est déjà enregistré — utilisez la connexion");
+        setLoading(false);
+        return;
+      }
       await setDoc(doc(db, col, u.uid), {
         uid:u.uid, name, phone:phoneF, pinCode,
         role, status:role==="driver"?"pending":"active",
@@ -1237,6 +1244,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const [bookingId,setBookingId]=useState(null);
   const [selectedDriver,setSelectedDriver]=useState(null);
   const [driverLocation,setDriverLocation]=useState(null);
+  const driverArrivedNotified=useRef(false);
   const [eta,setEta]=useState(null);
   const [elapsed,setElapsed]=useState(0);
   const [showRating,setShowRating]=useState(false);
@@ -1294,7 +1302,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   },[user?.uid]);
 
   useEffect(()=>{ if(distanceKm>0){const p=calcPrice(distanceKm,multiplier);setSuggestedPrice(p);setOfferPrice(p);} },[rideType,distanceKm]);
-  useEffect(()=>{ if(!bookingId||(screen!=="found"&&screen!=="ride")) return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo&&screen==="searching"){setSelectedDriver(d.driverInfo);setScreen("found");} if(d.driverCurrentLocation){const dLoc=d.driverCurrentLocation;setDriverLocation(dLoc);const pLoc=passengerGPS||(originPlace?getLatLng(originPlace):null);if(pLoc&&screen==="found") setEta(Math.max(1,Math.round(getDistanceKm(dLoc.lat,dLoc.lng,pLoc.lat,pLoc.lng)/0.5)));} }); return()=>u(); },[bookingId,screen,originPlace,passengerGPS]);
+  useEffect(()=>{ if(!bookingId||(screen!=="found"&&screen!=="ride")) return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo&&screen==="searching"){setSelectedDriver(d.driverInfo);setScreen("found");} if(d.status==="arrived"&&!driverArrivedNotified.current){ driverArrivedNotified.current=true; setFcmToast({title:lang==="ar"?"🚕 السائق وصل!":"🚕 Le chauffeur est arrivé!",body:lang==="ar"?"السائق بانتظارك عند نقطة الانطلاق":"Le chauffeur vous attend au point de départ"}); } if(d.driverCurrentLocation){const dLoc=d.driverCurrentLocation;setDriverLocation(dLoc);const pLoc=passengerGPS||(originPlace?getLatLng(originPlace):null);if(pLoc&&screen==="found") setEta(Math.max(1,Math.round(getDistanceKm(dLoc.lat,dLoc.lng,pLoc.lat,pLoc.lng)/0.5)));} }); return()=>u(); },[bookingId,screen,originPlace,passengerGPS,lang]);
   useEffect(()=>{ if(!bookingId||screen!=="searching") return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo){setSelectedDriver(d.driverInfo);setScreen("found");} }); return()=>u(); },[bookingId,screen]);
   useEffect(()=>{ if(screen!=="searching") return; const t=setInterval(()=>setTimer(p=>p+1),1000); return()=>clearInterval(t); },[screen]);
   useEffect(()=>{ if(screen==="searching"&&timer===60) setNoDrivers(true); },[timer,screen]);
@@ -1348,7 +1356,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
 
   const cancelBooking=async()=>{ if(bookingId){try{await updateDoc(doc(db,"bookings",bookingId),{status:"cancelled"});}catch(e){}} setBookingId(null);setScreen("home"); };
   const finishRide=async()=>{ if(bookingId){try{await updateDoc(doc(db,"bookings",bookingId),{status:"completed",completedAt:serverTimestamp()});}catch(e){}} setShowRating(true); };
-  const resetTrip=()=>{ setScreen("home");setShowRating(false);setDistanceKm(0);setBookingId(null);setFinalRating(0);setSelectedDriver(null);setShowChat(false); };
+  const resetTrip=()=>{ setScreen("home");setShowRating(false);setDistanceKm(0);setBookingId(null);setFinalRating(0);setSelectedDriver(null);setShowChat(false);driverArrivedNotified.current=false; };
 
   // HOME
   if(screen==="home") return (
@@ -1394,6 +1402,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   if(screen==="booking") return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:30 }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
+      {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 12px",gap:12 }}>
         <BackBtn onBack={()=>setScreen("home")} />
         <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.tripDetails}</div>
@@ -1482,6 +1491,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   if(screen==="offer") return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
+      {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
         <BackBtn onBack={()=>setScreen("booking")} />
         <div><div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.offerPrice}</div><div style={{ fontSize:12,color:C.textMuted }}>40 + {distanceKm.toFixed(1)}×30 = {suggestedPrice} DA</div></div>
@@ -1518,6 +1528,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   if(screen==="searching") return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
+      {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <TaxiMap origin={booking?.originPlace} destination={booking?.destPlace} showDrivers={true} />
       <div style={{ padding:"14px 20px 0" }}>
         <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.searching}</div>
@@ -1546,6 +1557,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   if(screen==="found") return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
+      {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
       {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
       <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="pickup" lang={lang} />
@@ -1617,6 +1629,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     return (
       <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
         {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
+        {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
         {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
         {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
         <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="ride" lang={lang} />
