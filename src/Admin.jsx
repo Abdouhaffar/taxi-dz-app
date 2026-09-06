@@ -20,6 +20,17 @@ const db = getFirestore(app);
 const SUPER_ADMIN_EMAIL = "abdouhaffar@gmail.com";
 const SUPER_ADMIN_CODE = "Daniel&layan@202526";
 
+// يعرض سبب فشل أي عملية كتابة بدل ما يختفي بصمت (خصوصاً permission-denied من قواعد Firestore)
+const showErr = (e, action) => {
+  console.error(action, e);
+  const code = e?.code || "";
+  let msg = e?.message || "خطأ غير معروف";
+  if (code === "permission-denied") {
+    msg = "🔒 مرفوض من قواعد أمان Firestore — تأكد أن قواعد Firestore تسمح للأدمن بالكتابة في هذا الجدول";
+  }
+  alert(`❌ فشلت العملية${action ? " (" + action + ")" : ""}:\n${msg}`);
+};
+
 const C = {
   bg: "#070b14",
   sidebar: "#0d1117",
@@ -90,11 +101,7 @@ function AdminLogin({ onLogin }) {
     if (!email || !code) { setError("أدخل البريد والرمز"); return; }
     setLoading(true); setError("");
     try {
-      // تسجيل دخول Firebase Auth الحقيقي
-      // للأدمن الرئيسي: البريد + كلمة المرور (الكود هو كلمة المرور)
-      // للأدمنات الثانويين: البريد + الكود المحفوظ في Firestore
       if (email === SUPER_ADMIN_EMAIL) {
-        // الأدمن الرئيسي: يدخل بالبريد + كلمة المرور من Firebase Auth
         try {
           await signInWithEmailAndPassword(auth, email, code);
           onLogin({ email, role: "super", name: "عبد الواحد هفار" });
@@ -112,14 +119,12 @@ function AdminLogin({ onLogin }) {
           return;
         }
       }
-      // أدمن ثانوي: تحقق من Firestore
       const unsub = onSnapshot(collection(db, "admins"), snap => {
         let found = false;
         snap.docs.forEach(d => {
           const data = d.data();
           if (data.email === email && data.code === code && data.approved) {
             found = true;
-            // تسجيل دخول Firebase Auth للأدمن الثانوي أيضاً
             signInWithEmailAndPassword(auth, email, code)
               .then(() => onLogin({ email, role: "sub", name: data.name, id: d.id }))
               .catch(() => onLogin({ email, role: "sub", name: data.name, id: d.id }));
@@ -138,7 +143,6 @@ function AdminLogin({ onLogin }) {
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cairo', sans-serif", direction: "rtl" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap'); *{box-sizing:border-box;margin:0;padding:0}`}</style>
       <div style={{ width: "100%", maxWidth: 420, padding: 24 }}>
-        {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <div style={{ width: 64, height: 64, borderRadius: 16, background: "linear-gradient(135deg, #1f6feb, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 16px", boxShadow: "0 8px 32px #1f6feb44" }}>🛡️</div>
           <div style={{ fontSize: 24, fontWeight: 900, color: C.text }}>TaxiDZ Admin</div>
@@ -186,7 +190,6 @@ function Sidebar({ tab, setTab, admin, onLogout, counts }) {
 
   return (
     <div style={{ width: 220, minHeight: "100vh", background: C.sidebar, borderLeft: `1px solid ${C.border}`, display: "flex", flexDirection: "column", position: "fixed", right: 0, top: 0, bottom: 0, zIndex: 100 }}>
-      {/* Logo */}
       <div style={{ padding: "20px 16px", borderBottom: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#1f6feb,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🛡️</div>
@@ -197,7 +200,6 @@ function Sidebar({ tab, setTab, admin, onLogout, counts }) {
         </div>
       </div>
 
-      {/* Nav */}
       <nav style={{ flex: 1, padding: "12px 8px", overflowY: "auto" }}>
         {navItems.map(item => (
           <button key={item.id} onClick={() => setTab(item.id)}
@@ -212,7 +214,6 @@ function Sidebar({ tab, setTab, admin, onLogout, counts }) {
         ))}
       </nav>
 
-      {/* Admin info */}
       <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <Avatar name={admin?.name} size={32} />
@@ -250,7 +251,6 @@ function Dashboard({ drivers, passengers, admins }) {
         <div style={{ fontSize: 13, color: C.textMuted }}>نظرة عامة على نشاط التطبيق</div>
       </div>
 
-      {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 24 }}>
         <StatCard icon="🚕" label="إجمالي السائقين" value={drivers.length} sub={`${approved.length} معتمد`} color={C.green} trend="12% هذا الأسبوع" />
         <StatCard icon="⏳" label="بانتظار الموافقة" value={pending.length} sub="طلبات جديدة" color={C.orange} />
@@ -259,7 +259,6 @@ function Dashboard({ drivers, passengers, admins }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        {/* Pending drivers */}
         <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 14, display: "flex", justifyContent: "space-between" }}>
             <span>⏳ أحدث الطلبات المعلقة</span>
@@ -278,7 +277,6 @@ function Dashboard({ drivers, passengers, admins }) {
           ))}
         </div>
 
-        {/* Activity */}
         <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 14 }}>🕐 آخر النشاطات</div>
           {activity.map((a, i) => (
@@ -321,7 +319,7 @@ function DriversPanel({ drivers, isSuperAdmin }) {
   const approveDriver = async (id) => {
     setLoading(true);
     try { await updateDoc(doc(db, "drivers", id), { verificationStatus: "approved", approvedAt: serverTimestamp() }); }
-    catch (e) { console.log(e); }
+    catch (e) { showErr(e, "قبول السائق"); }
     setLoading(false); setSelected(null);
   };
 
@@ -329,14 +327,14 @@ function DriversPanel({ drivers, isSuperAdmin }) {
     if (!rejectReason.trim()) return;
     setLoading(true);
     try { await updateDoc(doc(db, "drivers", id), { verificationStatus: "rejected", rejectionReason: rejectReason, rejectedAt: serverTimestamp() }); }
-    catch (e) { console.log(e); }
+    catch (e) { showErr(e, "رفض السائق"); }
     setLoading(false); setShowReject(null); setRejectReason(""); setSelected(null);
   };
 
   const deleteDriver = async (id) => {
     if (!window.confirm("هل تريد حذف هذا السائق نهائياً؟")) return;
     try { await deleteDoc(doc(db, "drivers", id)); }
-    catch (e) { console.log(e); }
+    catch (e) { showErr(e, "حذف السائق"); }
     setSelected(null);
   };
 
@@ -348,14 +346,12 @@ function DriversPanel({ drivers, isSuperAdmin }) {
 
   return (
     <div style={{ display: "flex", gap: 16, height: "100%" }}>
-      {/* List */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}>🚕 إدارة السائقين</div>
           <div style={{ fontSize: 13, color: C.textMuted }}>مراجعة وإدارة طلبات التوثيق</div>
         </div>
 
-        {/* Filters */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
           {[
             { id: "pending", label: `⏳ معلق (${counts.pending})` },
@@ -370,13 +366,11 @@ function DriversPanel({ drivers, isSuperAdmin }) {
           ))}
         </div>
 
-        {/* Search */}
         <div style={{ marginBottom: 16, position: "relative" }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 بحث بالاسم، البريد، اللوحة، الولاية..."
             style={{ width: "100%", background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: "inherit", fontSize: 13, color: C.text, outline: "none", direction: "rtl" }} />
         </div>
 
-        {/* Table */}
         <div style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 1fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
             <span>السائق</span>
@@ -417,7 +411,6 @@ function DriversPanel({ drivers, isSuperAdmin }) {
         </div>
       </div>
 
-      {/* Detail panel */}
       {selected && (
         <div style={{ width: 320, background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, padding: 20, overflowY: "auto", maxHeight: "calc(100vh - 80px)", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -432,7 +425,6 @@ function DriversPanel({ drivers, isSuperAdmin }) {
             <div style={{ marginTop: 8 }}>{statusBadge(selected.verificationStatus)}</div>
           </div>
 
-          {/* Info */}
           {[
             { label: "الجنس", value: selected.gender },
             { label: "تاريخ الميلاد", value: selected.birthDate },
@@ -450,7 +442,6 @@ function DriversPanel({ drivers, isSuperAdmin }) {
             </div>
           ))}
 
-          {/* Photos */}
           {[
             { label: "صورة السيلفي", url: selected.selfieUrl },
             { label: "السيارة من الأمام", url: selected.carFrontUrl },
@@ -465,7 +456,6 @@ function DriversPanel({ drivers, isSuperAdmin }) {
             </div>
           ))}
 
-          {/* Rejection reason */}
           {selected.verificationStatus === "rejected" && selected.rejectionReason && (
             <div style={{ marginTop: 14, background: C.redGlow, border: `1px solid ${C.red}44`, borderRadius: 8, padding: "10px 12px" }}>
               <div style={{ fontSize: 11, color: C.red, fontWeight: 700, marginBottom: 4 }}>سبب الرفض</div>
@@ -473,7 +463,6 @@ function DriversPanel({ drivers, isSuperAdmin }) {
             </div>
           )}
 
-          {/* Actions */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 20 }}>
             {selected.verificationStatus !== "approved" && (
               <Btn onClick={() => approveDriver(selected.id)} color={C.green} disabled={loading}>✅ قبول السائق</Btn>
@@ -488,7 +477,6 @@ function DriversPanel({ drivers, isSuperAdmin }) {
         </div>
       )}
 
-      {/* Reject modal */}
       {showReject && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(4px)" }}>
           <div style={{ background: C.card, borderRadius: 16, padding: 28, width: "100%", maxWidth: 400, border: `1px solid ${C.border}`, direction: "rtl", fontFamily: "inherit" }}>
@@ -521,7 +509,7 @@ function PassengersPanel({ passengers, isSuperAdmin }) {
 
   const deletePassenger = async (id) => {
     if (!window.confirm("حذف هذا الراكب؟")) return;
-    try { await deleteDoc(doc(db, "passengers", id)); } catch (e) { console.log(e); }
+    try { await deleteDoc(doc(db, "passengers", id)); } catch (e) { showErr(e, "حذف الراكب"); }
   };
 
   return (
@@ -579,18 +567,18 @@ function AdminsPanel({ admins, currentAdmin }) {
         approved: false, createdAt: serverTimestamp(), createdBy: currentAdmin.email,
       });
       setNewName(""); setNewEmail(""); setNewCode("");
-    } catch (e) { setError("خطأ في الإضافة"); }
+    } catch (e) { showErr(e, "إضافة أدمن"); setError(e.message || "خطأ في الإضافة"); }
     setLoading(false);
   };
 
   const approveAdmin = async (id) => {
     try { await updateDoc(doc(db, "admins", id), { approved: true, approvedAt: serverTimestamp() }); }
-    catch (e) { console.log(e); }
+    catch (e) { showErr(e, "قبول الأدمن"); }
   };
 
   const deleteAdmin = async (id) => {
     if (!window.confirm("حذف هذا الأدمن؟")) return;
-    try { await deleteDoc(doc(db, "admins", id)); } catch (e) { console.log(e); }
+    try { await deleteDoc(doc(db, "admins", id)); } catch (e) { showErr(e, "حذف الأدمن"); }
   };
 
   return (
@@ -600,7 +588,6 @@ function AdminsPanel({ admins, currentAdmin }) {
         <div style={{ fontSize: 13, color: C.textMuted }}>أنت الوحيد الذي يمكنه قبول أو حذف الأدمنات</div>
       </div>
 
-      {/* Add admin */}
       <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}`, marginBottom: 20 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 14 }}>➕ إضافة أدمن ثانوي جديد</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, alignItems: "end" }}>
@@ -624,7 +611,6 @@ function AdminsPanel({ admins, currentAdmin }) {
         {error && <div style={{ fontSize: 12, color: C.red, marginTop: 8 }}>{error}</div>}
       </div>
 
-      {/* Admins list */}
       <div style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase" }}>
           <span>الاسم</span>
@@ -632,7 +618,6 @@ function AdminsPanel({ admins, currentAdmin }) {
           <span>الحالة</span>
           <span>إجراء</span>
         </div>
-        {/* Super admin row */}
         <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr", padding: "14px 16px", borderBottom: `1px solid ${C.border}`, alignItems: "center", background: C.purpleGlow }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <Avatar name="A" size={36} />
@@ -687,7 +672,6 @@ function ReportsPanel({ drivers, passengers }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        {/* Wilayas */}
         <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 16 }}>📍 أكثر الولايات نشاطاً</div>
           {topWilayas.length === 0 && <div style={{ color: C.textMuted, fontSize: 13 }}>لا توجد بيانات بعد</div>}
@@ -704,7 +688,6 @@ function ReportsPanel({ drivers, passengers }) {
           ))}
         </div>
 
-        {/* Car brands */}
         <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 16 }}>🚗 أكثر الماركات شيوعاً</div>
           {topBrands.length === 0 && <div style={{ color: C.textMuted, fontSize: 13 }}>لا توجد بيانات بعد</div>}
@@ -721,7 +704,6 @@ function ReportsPanel({ drivers, passengers }) {
           ))}
         </div>
 
-        {/* Summary */}
         <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}`, gridColumn: "1 / -1" }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 16 }}>📊 ملخص عام</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
@@ -793,11 +775,11 @@ function ComplaintsPanel({ reports, drivers, passengers, isSuperAdmin }) {
   const filtered = reports.filter(r => filter === "all" || r.status === filter);
 
   const resolveReport = async (id) => {
-    try { await updateDoc(doc(db, "reports", id), { status: "resolved", resolvedAt: serverTimestamp() }); } catch(e) { console.log(e); }
+    try { await updateDoc(doc(db, "reports", id), { status: "resolved", resolvedAt: serverTimestamp() }); } catch(e) { showErr(e, "معالجة التبليغ"); }
   };
 
   const dismissReport = async (id) => {
-    try { await updateDoc(doc(db, "reports", id), { status: "dismissed", dismissedAt: serverTimestamp() }); } catch(e) { console.log(e); }
+    try { await updateDoc(doc(db, "reports", id), { status: "dismissed", dismissedAt: serverTimestamp() }); } catch(e) { showErr(e, "تجاهل التبليغ"); }
   };
 
   const deleteUser = async (targetId, targetType) => {
@@ -805,14 +787,12 @@ function ComplaintsPanel({ reports, drivers, passengers, isSuperAdmin }) {
     setLoading(true);
     try {
       await deleteDoc(doc(db, targetType === "driver" ? "drivers" : "passengers", targetId));
-      // حذف كل التبليغات المرتبطة
       const relatedReports = reports.filter(r => r.targetId === targetId);
       for (const r of relatedReports) await deleteDoc(doc(db, "reports", r.id));
-    } catch(e) { console.log(e); }
+    } catch(e) { showErr(e, "حذف المستخدم"); }
     setLoading(false);
   };
 
-  // إحصاء التبليغات لكل مستخدم
   const reportCounts = {};
   reports.forEach(r => { reportCounts[r.targetId] = (reportCounts[r.targetId] || 0) + 1; });
 
@@ -826,7 +806,6 @@ function ComplaintsPanel({ reports, drivers, passengers, isSuperAdmin }) {
         <div style={{ fontSize: 13, color: C.textMuted }}>{reports.length} تبليغ إجمالي · {reports.filter(r=>r.status==="pending").length} معلق</div>
       </div>
 
-      {/* Filters */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {[
           { id: "pending", label: `⏳ معلق (${reports.filter(r=>r.status==="pending").length})` },
@@ -876,7 +855,6 @@ function ComplaintsPanel({ reports, drivers, passengers, isSuperAdmin }) {
         ))}
       </div>
 
-      {/* تحذير المستخدمين الأكثر تبليغاً */}
       {Object.entries(reportCounts).filter(([,c]) => c >= 3).length > 0 && (
         <div style={{ background: C.redGlow, border: `1px solid ${C.red}44`, borderRadius: 12, padding: 16, marginTop: 16 }}>
           <div style={{ fontWeight: 700, color: C.red, marginBottom: 10, fontSize: 14 }}>⚠️ مستخدمون بتبليغات متعددة</div>
@@ -926,7 +904,7 @@ function SubscriptionPanel({ drivers, isSuperAdmin }) {
         },
         "subscriptionRequest.status": "approved",
       });
-    } catch(e) { console.log(e); }
+    } catch(e) { showErr(e, "تفعيل الاشتراك"); }
     setLoading(false);
   };
 
@@ -935,14 +913,14 @@ function SubscriptionPanel({ drivers, isSuperAdmin }) {
       await updateDoc(doc(db, "drivers", driverId), {
         "subscriptionRequest.status": "rejected",
       });
-    } catch(e) { console.log(e); }
+    } catch(e) { showErr(e, "رفض الاشتراك"); }
   };
 
   const toggleSubscriptionSystem = async (enabled) => {
     try {
       await setDoc(doc(db, "settings", "app"), { subscriptionEnabled: enabled }, { merge: true });
       alert(enabled ? "✅ تم تفعيل نظام الاشتراكات!" : "⏸️ تم إيقاف نظام الاشتراكات");
-    } catch(e) { console.log(e); }
+    } catch(e) { showErr(e, "تبديل نظام الاشتراكات"); }
   };
 
   return (
@@ -960,7 +938,6 @@ function SubscriptionPanel({ drivers, isSuperAdmin }) {
         )}
       </div>
 
-      {/* طلبات معلقة */}
       {pendingDrivers.length > 0 && (
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 700, color: C.orange, marginBottom: 10, fontSize: 14 }}>⏳ طلبات تنتظر الموافقة ({pendingDrivers.length})</div>
@@ -977,7 +954,6 @@ function SubscriptionPanel({ drivers, isSuperAdmin }) {
                   <div style={{ fontSize: 11, color: C.textMuted }}>{driver.subscriptionRequest?.duration} يوم</div>
                 </div>
               </div>
-              {/* صورة الإيصال */}
               {driver.subscriptionRequest?.receipt && (
                 <div style={{ borderRadius: 12, overflow:"hidden", marginBottom: 12, maxHeight: 200 }}>
                   <img src={driver.subscriptionRequest.receipt} alt="إيصال" style={{ width:"100%", objectFit:"cover", display:"block" }} />
@@ -992,7 +968,6 @@ function SubscriptionPanel({ drivers, isSuperAdmin }) {
         </div>
       )}
 
-      {/* الاشتراكات النشطة */}
       <div style={{ fontWeight: 700, color: C.green, marginBottom: 10, fontSize: 14 }}>🟢 الاشتراكات النشطة ({activeDrivers.length})</div>
       <div style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow:"hidden" }}>
         <div style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr 1fr 1fr", padding:"12px 16px", borderBottom:`1px solid ${C.border}`, fontSize:11, color:C.textMuted, fontWeight:700 }}>
@@ -1027,11 +1002,13 @@ export default function AdminApp() {
   const [passengers, setPassengers] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [reports, setReports] = useState([]);
+  const [loadErr, setLoadErr] = useState("");
 
   useEffect(() => {
     if (!admin || !db) return;
-    const u1 = onSnapshot(collection(db, "drivers"), snap => setDrivers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const u2 = onSnapshot(collection(db, "passengers"), snap => setPassengers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    setLoadErr("");
+    const u1 = onSnapshot(collection(db, "drivers"), snap => setDrivers(snap.docs.map(d => ({ id: d.id, ...d.data() }))), e => setLoadErr("تعذر قراءة بيانات السائقين: " + (e.code || e.message)));
+    const u2 = onSnapshot(collection(db, "passengers"), snap => setPassengers(snap.docs.map(d => ({ id: d.id, ...d.data() }))), e => setLoadErr("تعذر قراءة بيانات الركاب: " + (e.code || e.message)));
     const u3 = admin.role === "super" ? onSnapshot(collection(db, "admins"), snap => setAdmins(snap.docs.map(d => ({ id: d.id, ...d.data() })))) : () => {};
     const u4 = onSnapshot(collection(db, "reports"), snap => setReports(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     return () => { u1(); u2(); u3(); u4(); };
@@ -1053,6 +1030,7 @@ export default function AdminApp() {
       <Sidebar tab={tab} setTab={setTab} admin={admin} onLogout={() => setAdmin(null)} counts={counts} />
 
       <main style={{ flex: 1, marginRight: 220, padding: "32px 28px", overflowY: "auto", minHeight: "100vh" }}>
+        {loadErr && <div style={{ background: C.redGlow, border: `1px solid ${C.red}44`, borderRadius: 10, padding: "12px 16px", color: C.redLight, fontSize: 13, marginBottom: 20 }}>⚠️ {loadErr}</div>}
         {tab === "dashboard" && <Dashboard drivers={drivers} passengers={passengers} admins={admins} />}
         {tab === "drivers" && <DriversPanel drivers={drivers} isSuperAdmin={admin.role === "super"} />}
         {tab === "passengers" && <PassengersPanel passengers={passengers} isSuperAdmin={admin.role === "super"} />}
