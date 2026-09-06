@@ -643,7 +643,7 @@ function TaxiMap({ origin, destination, showDrivers, height=220 }) {
 function FloatingLang({ lang, setLang }) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{ position:"fixed",top:52,right:12,zIndex:9000 }}>
+    <div style={{ position:"fixed",top:14,right:12,zIndex:9000 }}>
       <button onClick={()=>setOpen(!open)} style={{ width:36,height:36,borderRadius:10,background:"rgba(0,0,0,0.6)",border:"1px solid rgba(255,255,255,0.2)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)" }}>
         {lang==="ar"?"🇩🇿":lang==="fr"?"🇫🇷":"🇬🇧"}
       </button>
@@ -714,7 +714,7 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
 }
 
 // ===== AUTH =====
-function AuthForm({ role, onSuccess, onBack, lang }) {
+function AuthForm({ role, onSuccess, onBack, lang, resetGuardRef }) {
   const t = T[lang];
   const isRTL = lang === "ar";
   const isPassenger = role === "passenger";
@@ -915,6 +915,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
     try {
       const verifyOtpTwilio = httpsCallable(cloudFunctions, "verifyOtpTwilio");
       const { data } = await verifyOtpTwilio({ phone: confirmResult.phone, code });
+      if (resetGuardRef) resetGuardRef.current = true; // امنع التنقل التلقائي للتطبيق قبل حفظ الكود الجديد
       await signInWithCustomToken(auth, data.customToken);
       setStep("newpin");
     } catch(e) {
@@ -994,7 +995,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
                 placeholder={lang==="ar"?"كلمة المرور":"Mot de passe"}
                 type={showLoginPin?"text":"password"} maxLength={20}
                 style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 44px 13px 16px",fontFamily:"inherit",fontSize:15,color:C.text,outline:"none",direction:"ltr" }} />
-              <button onClick={()=>setShowLoginPin(!showLoginPin)} style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
+              <button onClick={()=>setShowLoginPin(!showLoginPin)} style={{ position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
                 {showLoginPin?"🙈":"👁️"}
               </button>
             </div>
@@ -1028,7 +1029,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
                 placeholder={lang==="ar"?"كلمة المرور (حروف+أرقام+رموز)":"Mot de passe (lettres+chiffres)"}
                 type={showPin?"text":"password"} maxLength={20}
                 style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 44px 13px 16px",fontFamily:"inherit",fontSize:15,color:C.text,outline:"none",direction:"ltr" }} />
-              <button onClick={()=>setShowPin(!showPin)} style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
+              <button onClick={()=>setShowPin(!showPin)} style={{ position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
                 {showPin?"🙈":"👁️"}
               </button>
             </div>
@@ -1037,7 +1038,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
                 placeholder={lang==="ar"?"تأكيد كلمة المرور":"Confirmer le mot de passe"}
                 type={showPinConfirm?"text":"password"} maxLength={20}
                 style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 44px 13px 16px",fontFamily:"inherit",fontSize:15,color:C.text,outline:"none",direction:"ltr" }} />
-              <button onClick={()=>setShowPinConfirm(!showPinConfirm)} style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
+              <button onClick={()=>setShowPinConfirm(!showPinConfirm)} style={{ position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
                 {showPinConfirm?"🙈":"👁️"}
               </button>
             </div>
@@ -1119,7 +1120,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
                 </span>
               </div>
             </div>
-            <div style={{ display:"flex",gap:8,justifyContent:"center",marginBottom:20 }} onPaste={handleOtpPaste}>
+            <div style={{ display:"flex",gap:8,justifyContent:"center",marginBottom:20,direction:"ltr" }} onPaste={handleOtpPaste}>
               {otp.map((digit,i)=>(
                 <input key={i} ref={otpRefs[i]} value={digit}
                   onChange={e=>handleOtpChange(i,e.target.value)}
@@ -1158,7 +1159,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
               <input value={newPin} onChange={e=>setNewPin(e.target.value)}
                 placeholder={lang==="ar"?"كلمة مرور جديدة":"Nouveau mot de passe"} type={showPin?"text":"password"} maxLength={20}
                 style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 44px 13px 16px",fontFamily:"inherit",fontSize:15,color:C.text,outline:"none",direction:"ltr" }} />
-              <button onClick={()=>setShowPin(!showPin)} style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
+              <button onClick={()=>setShowPin(!showPin)} style={{ position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
                 {showPin?"🙈":"👁️"}
               </button>
             </div>
@@ -1166,7 +1167,7 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
               <input value={newPinConfirm} onChange={e=>setNewPinConfirm(e.target.value)}
                 placeholder={lang==="ar"?"تأكيد كلمة المرور":"Confirmer"} type={showPinConfirm?"text":"password"} maxLength={20}
                 style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 44px 13px 16px",fontFamily:"inherit",fontSize:15,color:C.text,outline:"none",direction:"ltr" }} />
-              <button onClick={()=>setShowPinConfirm(!showPinConfirm)} style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
+              <button onClick={()=>setShowPinConfirm(!showPinConfirm)} style={{ position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.textMuted }}>
                 {showPinConfirm?"🙈":"👁️"}
               </button>
             </div>
@@ -1184,9 +1185,9 @@ function AuthForm({ role, onSuccess, onBack, lang }) {
             <div style={{ fontSize:64,marginBottom:16 }}>✅</div>
             <div style={{ fontWeight:900,fontSize:20,color:C.text,marginBottom:8 }}>{lang==="ar"?"تم تحديث الكود!":"Code mis à jour!"}</div>
             <div style={{ fontSize:13,color:C.textMuted,marginBottom:24 }}>{lang==="ar"?"يمكنك الآن الدخول بكودك الجديد":"Connectez-vous avec votre nouveau code"}</div>
-            <button onClick={()=>switchTab("login")}
+            <button onClick={()=>{ if(resetGuardRef) resetGuardRef.current=false; onSuccess(role); }}
               style={{ background:`linear-gradient(135deg,${accent},${accentDark})`,border:"none",borderRadius:14,padding:"14px 32px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>
-              🔑 {lang==="ar"?"تسجيل الدخول":"Se connecter"}
+              🔑 {lang==="ar"?"الدخول للتطبيق":"Accéder à l'app"}
             </button>
           </div>
         )}
@@ -1463,7 +1464,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
         <BackBtn onBack={()=>setScreen("booking")} />
-        <div><div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.offerPrice}</div><div style={{ fontSize:12,color:C.textMuted }}>40 + {distanceKm.toFixed(1)}×30 = {suggestedPrice} DA</div></div>
+        <div><div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.offerPrice}</div><div style={{ fontSize:12,color:C.textMuted }}>{distanceKm.toFixed(1)} كم</div></div>
       </div>
       <div style={{ margin:"0 20px 14px",background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow,textAlign:"center" }}>
         <div style={{ fontSize:13,color:C.textMuted,marginBottom:4 }}>{t.yourOffer}</div>
@@ -1635,11 +1636,13 @@ export default function App() {
   const[lang,setLang]=useState(localStorage.getItem("taxidz_lang")||"ar");
 
   const changeLang=l=>{setLang(l);localStorage.setItem("taxidz_lang",l);};
+  const resetGuardRef = useRef(false);
 
   useEffect(()=>{
     const u=onAuthStateChanged(auth,async u=>{
       if(u){
         setUser(u);
+        if(resetGuardRef.current) return; // بصدد استرجاع كلمة المرور — لا تنتقل تلقائياً للتطبيق
         const savedRole=localStorage.getItem("taxidz_role");
         if(savedRole){setRole(savedRole);setScreen("app");return;}
         try {
@@ -1684,7 +1687,7 @@ export default function App() {
     <div style={{ maxWidth:390,margin:"0 auto",minHeight:"100vh" }}>
       <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
       {screen==="welcome"&&<WelcomeScreen onSelect={r=>{setRole(r);setScreen("auth");}} lang={lang} setLang={changeLang} />}
-      {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} />}
+      {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} resetGuardRef={resetGuardRef} />}
       {screen==="app"&&role==="passenger"&&<PassengerApp onLogout={handleLogout} user={user} lang={lang} setLang={changeLang} />}
       {screen==="app"&&role==="driver"&&<DriverDashboard user={user} onLogout={handleLogout} />}
     </div>
