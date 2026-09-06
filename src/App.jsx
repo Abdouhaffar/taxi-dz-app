@@ -680,8 +680,7 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
       </div>
       <img src="/logo192.png" alt="AL-BURAQ" style={{ width:160,height:160,objectFit:"contain",marginBottom:16,filter:"drop-shadow(0 8px 32px rgba(212,160,23,0.6))",animation:"logoPulse 3s ease-in-out infinite" }} onError={e=>e.target.style.display="none"} />
       <div style={{ fontSize:32,fontWeight:900,color:"#fff",marginBottom:4,letterSpacing:2 }}>AL-BURAQ</div>
-      <div style={{ fontSize:13,color:"#d4a017",marginBottom:8,fontWeight:600 }}>{t.appTagline}</div>
-      <div style={{ fontSize:11,color:"#ffffff44",marginBottom:40,background:"#ffffff0d",padding:"5px 14px",borderRadius:20 }}>{t.pricing}</div>
+      <div style={{ fontSize:13,color:"#d4a017",marginBottom:40,fontWeight:600 }}>{t.appTagline}</div>
 
       {/* حساب واحد للاتجاهين */}
       <div style={{ background:"#ffffff11",borderRadius:16,padding:"12px 20px",marginBottom:24,border:"1px solid #ffffff22",textAlign:"center" }}>
@@ -1364,7 +1363,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       <div style={{ margin:"0 20px",background:`linear-gradient(135deg,${C.dark},#1a2340)`,borderRadius:20,padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",border:`1px solid #d4a01733` }}>
         <div>
           <div style={{ fontSize:18,fontWeight:900,color:"#d4a017",letterSpacing:1 }}>AL-BURAQ</div>
-          <div style={{ fontSize:12,color:"#d4a01799",marginTop:2 }}>{t.pricingFormula}</div>
+          <div style={{ fontSize:12,color:"#d4a01799",marginTop:2 }}>{lang==="ar"?"🚕 خدمتك دائماً في الطريق":lang==="fr"?"🚕 Toujours en route pour vous":"🚕 Always on the road for you"}</div>
         </div>
         <img src="/logo192.png" alt="AL-BURAQ" style={{ width:60,height:60,objectFit:"contain",filter:"drop-shadow(0 4px 12px rgba(212,160,23,0.5))" }} onError={e=>e.target.style.display="none"} />
       </div>
@@ -1699,4 +1698,3 @@ export default function App() {
     </div>
   );
 }
-   
