@@ -640,15 +640,16 @@ function TaxiMap({ origin, destination, showDrivers, height=220 }) {
 }
 
 // ===== FLOATING LANG BUTTON =====
-function FloatingLang({ lang, setLang }) {
+function FloatingLang({ lang, setLang, side="right" }) {
   const [open, setOpen] = useState(false);
+  const sideStyle = side==="left" ? { left:12 } : { right:12 };
   return (
-    <div style={{ position:"fixed",top:14,right:12,zIndex:9000 }}>
+    <div style={{ position:"fixed",top:14,...sideStyle,zIndex:9000 }}>
       <button onClick={()=>setOpen(!open)} style={{ width:36,height:36,borderRadius:10,background:"rgba(0,0,0,0.6)",border:"1px solid rgba(255,255,255,0.2)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)" }}>
         {lang==="ar"?"🇩🇿":lang==="fr"?"🇫🇷":"🇬🇧"}
       </button>
       {open&&(
-        <div style={{ position:"absolute",top:40,right:0,background:"rgba(0,0,0,0.85)",borderRadius:12,padding:8,display:"flex",flexDirection:"column",gap:6,backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.15)" }}>
+        <div style={{ position:"absolute",top:40,...(side==="left"?{left:0}:{right:0}),background:"rgba(0,0,0,0.85)",borderRadius:12,padding:8,display:"flex",flexDirection:"column",gap:6,backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.15)" }}>
           {[{code:"ar",flag:"🇩🇿"},{code:"fr",flag:"🇫🇷"},{code:"en",flag:"🇬🇧"}].map(l=>(
             <button key={l.code} onClick={()=>{setLang(l.code);localStorage.setItem("taxidz_lang",l.code);setOpen(false);}}
               style={{ padding:"6px 12px",borderRadius:8,border:"none",background:lang===l.code?"rgba(255,255,255,0.2)":"transparent",color:"#fff",fontFamily:"inherit",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap" }}>
@@ -714,7 +715,7 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
 }
 
 // ===== AUTH =====
-function AuthForm({ role, onSuccess, onBack, lang, resetGuardRef }) {
+function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   const t = T[lang];
   const isRTL = lang === "ar";
   const isPassenger = role === "passenger";
@@ -915,7 +916,11 @@ function AuthForm({ role, onSuccess, onBack, lang, resetGuardRef }) {
     try {
       const verifyOtpTwilio = httpsCallable(cloudFunctions, "verifyOtpTwilio");
       const { data } = await verifyOtpTwilio({ phone: confirmResult.phone, code });
-      if (resetGuardRef) resetGuardRef.current = true; // امنع التنقل التلقائي للتطبيق قبل حفظ الكود الجديد
+      // امنع التنقل التلقائي للتطبيق قبل حفظ الكود الجديد.
+      // نخزّنه في sessionStorage وليس فقط في useRef، لأن useRef يُفقد إذا أُعيد تحميل الصفحة
+      // (وهذا بالضبط ما كان يسبب الدخول المباشر للتطبيق بكلمة المرور القديمة دون حفظ الجديدة)
+      if (resetGuardRef) resetGuardRef.current = true;
+      sessionStorage.setItem("taxidz_reset_in_progress", "1");
       await signInWithCustomToken(auth, data.customToken);
       setStep("newpin");
     } catch(e) {
@@ -937,6 +942,7 @@ function AuthForm({ role, onSuccess, onBack, lang, resetGuardRef }) {
       if (!u) { setError("Session expired"); setLoading(false); return; }
       const col = isPassenger ? "passengers" : "drivers";
       await setDoc(doc(db, col, u.uid), { pinCode: newPin }, { merge: true });
+      sessionStorage.removeItem("taxidz_reset_in_progress");
       setStep("done");
     } catch(e) { setError(lang==="ar"?"خطأ في الحفظ":"Erreur"); }
     setLoading(false);
@@ -951,18 +957,18 @@ function AuthForm({ role, onSuccess, onBack, lang, resetGuardRef }) {
 
   return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
-      <FloatingLang lang={lang} setLang={()=>{}} />
+      <FloatingLang lang={lang} setLang={setLang} side={isRTL?"left":"right"} />
 
       {/* Header */}
       <div style={{ background:`linear-gradient(135deg,${C.dark},#16213e)`,padding:"48px 24px 24px",textAlign:"center",position:"relative" }}>
-        <button onClick={step==="form"?onBack:()=>{setStep("form");setOtp(["","","","","",""]);setError("");}}
+        <button onClick={step==="form"?onBack:()=>{if(resetGuardRef)resetGuardRef.current=false;sessionStorage.removeItem("taxidz_reset_in_progress");setStep("form");setOtp(["","","","","",""]);setError("");}}
           style={{ position:"absolute",top:48,[isRTL?"right":"left"]:20,width:36,height:36,borderRadius:10,background:"#ffffff22",border:"none",color:"#fff",cursor:"pointer",fontSize:16 }}>←</button>
         <img src="/logo192.png" alt="AL-BURAQ" style={{ width:60,height:60,objectFit:"contain",marginBottom:8 }} onError={e=>e.target.style.display="none"} />
         <div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{isPassenger?t.passengerGate:t.driverGate}</div>
       </div>
 
       <div style={{ padding:"20px 20px 40px" }}>
-        <LanguageSwitcher lang={lang} setLang={()=>{}} />
+        <LanguageSwitcher lang={lang} setLang={setLang} />
 
         {/* Tabs */}
         {step==="form"&&authTab!=="reset"&&(
@@ -1642,7 +1648,7 @@ export default function App() {
     const u=onAuthStateChanged(auth,async u=>{
       if(u){
         setUser(u);
-        if(resetGuardRef.current) return; // بصدد استرجاع كلمة المرور — لا تنتقل تلقائياً للتطبيق
+        if(resetGuardRef.current || sessionStorage.getItem("taxidz_reset_in_progress")) return; // بصدد استرجاع كلمة المرور — لا تنتقل تلقائياً للتطبيق
         const savedRole=localStorage.getItem("taxidz_role");
         if(savedRole){setRole(savedRole);setScreen("app");return;}
         try {
@@ -1687,9 +1693,10 @@ export default function App() {
     <div style={{ maxWidth:390,margin:"0 auto",minHeight:"100vh" }}>
       <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
       {screen==="welcome"&&<WelcomeScreen onSelect={r=>{setRole(r);setScreen("auth");}} lang={lang} setLang={changeLang} />}
-      {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} resetGuardRef={resetGuardRef} />}
+      {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} setLang={changeLang} resetGuardRef={resetGuardRef} />}
       {screen==="app"&&role==="passenger"&&<PassengerApp onLogout={handleLogout} user={user} lang={lang} setLang={changeLang} />}
       {screen==="app"&&role==="driver"&&<DriverDashboard user={user} onLogout={handleLogout} />}
     </div>
   );
 }
+   
