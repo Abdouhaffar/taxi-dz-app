@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { doc, onSnapshot, updateDoc, setDoc, serverTimestamp, collection, query, where, addDoc, orderBy, getDocs, limit, increment } from "firebase/firestore";
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer } from "@react-google-maps/api";
 import { db, requestNotificationPermission, onForegroundMessage } from "./firebase";
+import { getFunctions, httpsCallable } from "firebase/functions";
+
+const cloudFunctions = getFunctions(undefined, "europe-west1");
 
 const LIBRARIES = ["places"];
 const generateSessionId = () => `${Date.now()}-${Math.random().toString(36).substr(2,9)}`;
@@ -101,42 +104,118 @@ function DriverReportModal({ targetId, targetName, driverId, driverName, onClose
   );
 }
 
-// ===== PASSWORD RESET =====
-function DriverPasswordReset({ onClose }) {
-  const [email,setEmail]=useState("");
-  const [sent,setSent]=useState(false);
+// ===== تغيير / استرجاع كود الحساب (السائق يسجّل دخوله برقم الهاتف + كود، لا بريد إلكتروني) =====
+function DriverPinChange({ uid, phone, currentPin, onClose }) {
+  const [mode,setMode]=useState("choose"); // choose | knowOld | forgotPhone | forgotOtp | newPin
+  const [oldPin,setOldPin]=useState("");
+  const [phoneInput,setPhoneInput]=useState(phone||"");
+  const [otp,setOtp]=useState("");
+  const [confirmResult,setConfirmResult]=useState(null);
+  const [newPin,setNewPin]=useState("");
+  const [newPinConfirm,setNewPinConfirm]=useState("");
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
-  const handleReset=async()=>{
-    if(!email){setError("أدخل بريدك الإلكتروني");return;}
-    setLoading(true);setError("");
-    try { const{sendPasswordResetEmail,getAuth}=await import("firebase/auth"); await sendPasswordResetEmail(getAuth(),email); setSent(true); }
-    catch(e){setError("البريد غير موجود أو خاطئ");}
+  const [done,setDone]=useState(false);
+
+  const checkOldPin=()=>{
+    if(oldPin!==currentPin){ setError("كلمة المرور الحالية غير صحيحة"); return; }
+    setError(""); setMode("newPin");
+  };
+
+  const sendOtp=async()=>{
+    const digits=phoneInput.replace(/\D/g,"");
+    if(digits.length<9){ setError("أدخل رقم هاتف صحيح"); return; }
+    setLoading(true); setError("");
+    try {
+      const fullPhone=`+213${digits.replace(/^0/,"")}`;
+      if(fullPhone!==phone){ setError("هذا الرقم غير مطابق لرقم حسابك المسجّل"); setLoading(false); return; }
+      const sendOtpTwilio=httpsCallable(cloudFunctions,"sendOtpTwilio");
+      await sendOtpTwilio({ phone:fullPhone, channel:"sms" });
+      setConfirmResult({ phone:fullPhone });
+      setMode("forgotOtp");
+    } catch(e){ setError("تعذر إرسال الرمز، حاول مجدداً"); }
     setLoading(false);
   };
+
+  const verifyOtp=async()=>{
+    if(otp.length<4){ setError("أدخل الرمز المرسل إليك"); return; }
+    setLoading(true); setError("");
+    try {
+      const verifyOtpTwilio=httpsCallable(cloudFunctions,"verifyOtpTwilio");
+      const { data }=await verifyOtpTwilio({ phone:confirmResult.phone, code:otp });
+      if(data?.uid!==uid){ setError("تعذر التحقق من حسابك"); setLoading(false); return; }
+      setMode("newPin");
+    } catch(e){ setError("رمز خاطئ أو منتهي الصلاحية"); }
+    setLoading(false);
+  };
+
+  const savePin=async()=>{
+    if(newPin.length<4){ setError("كلمة المرور قصيرة (4 أحرف على الأقل)"); return; }
+    if(newPin!==newPinConfirm){ setError("الكودان غير متطابقان"); return; }
+    setLoading(true); setError("");
+    try { await setDoc(doc(db,"drivers",uid),{pinCode:newPin},{merge:true}); setDone(true); }
+    catch(e){ setError("تعذر الحفظ، حاول مجدداً"); }
+    setLoading(false);
+  };
+
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,backdropFilter:"blur(4px)",padding:20 }}>
       <div style={{ background:C.card,borderRadius:24,padding:28,width:"100%",maxWidth:380,fontFamily:"'Cairo',sans-serif",direction:"rtl",border:`1px solid ${C.border}` }}>
-        {sent?(
+        {done?(
           <div style={{ textAlign:"center" }}>
-            <div style={{ fontSize:56,marginBottom:12 }}>📧</div>
-            <div style={{ fontWeight:900,fontSize:18,color:C.text,marginBottom:8 }}>تم إرسال رابط الاسترجاع!</div>
-            <div style={{ fontSize:13,color:C.textMuted,marginBottom:20 }}>تحقق من بريدك الإلكتروني</div>
+            <div style={{ fontSize:56,marginBottom:12 }}>✅</div>
+            <div style={{ fontWeight:900,fontSize:18,color:C.text,marginBottom:8 }}>تم تغيير كود حسابك بنجاح</div>
             <button onClick={onClose} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:14,padding:"12px 32px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>موافق</button>
           </div>
-        ):(
-          <>
-            <div style={{ textAlign:"center",marginBottom:20 }}><div style={{ fontSize:48,marginBottom:8 }}>🔐</div><div style={{ fontWeight:900,fontSize:18,color:C.text }}>نسيت كلمة المرور؟</div></div>
-            <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="البريد الإلكتروني" type="email" style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:"ltr",textAlign:"left",marginBottom:12 }} />
+        ):(<>
+          <div style={{ textAlign:"center",marginBottom:20 }}><div style={{ fontSize:48,marginBottom:8 }}>🔐</div><div style={{ fontWeight:900,fontSize:18,color:C.text }}>تغيير كود حسابك</div></div>
+
+          {mode==="choose"&&(
+            <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
+              <button onClick={()=>{setMode("knowOld");setError("");}} style={{ background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:14,color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14 }}>أعرف كودي الحالي</button>
+              <button onClick={()=>{setMode("forgotPhone");setError("");}} style={{ background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:14,color:C.orange,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14 }}>نسيت الكود</button>
+              <button onClick={onClose} style={{ background:"none",border:"none",color:C.textMuted,fontFamily:"inherit",cursor:"pointer",fontSize:13,marginTop:6 }}>إلغاء</button>
+            </div>
+          )}
+
+          {mode==="knowOld"&&(<>
+            <input value={oldPin} onChange={e=>setOldPin(e.target.value)} placeholder="كلمة المرور الحالية" type="password" style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:"ltr",textAlign:"left",marginBottom:12 }} />
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,marginBottom:12 }}>{error}</div>}
             <div style={{ display:"flex",gap:10 }}>
               <button onClick={onClose} style={{ flex:1,background:C.border,border:"none",borderRadius:14,padding:14,color:C.text,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>إلغاء</button>
-              <button onClick={handleReset} disabled={loading} style={{ flex:2,background:`linear-gradient(135deg,#3b82f6,#1d4ed8)`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",opacity:loading?0.7:1 }}>
-                {loading?"جارٍ...":"📧 إرسال الرابط"}
-              </button>
+              <button onClick={checkOldPin} style={{ flex:2,background:`linear-gradient(135deg,#3b82f6,#1d4ed8)`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>متابعة</button>
             </div>
-          </>
-        )}
+          </>)}
+
+          {mode==="forgotPhone"&&(<>
+            <input value={phoneInput} onChange={e=>setPhoneInput(e.target.value)} placeholder="رقم هاتفك" type="tel" style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:"ltr",textAlign:"left",marginBottom:12 }} />
+            {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,marginBottom:12 }}>{error}</div>}
+            <div style={{ display:"flex",gap:10 }}>
+              <button onClick={onClose} style={{ flex:1,background:C.border,border:"none",borderRadius:14,padding:14,color:C.text,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>إلغاء</button>
+              <button onClick={sendOtp} disabled={loading} style={{ flex:2,background:`linear-gradient(135deg,${C.orange},${C.orangeDark})`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",opacity:loading?0.7:1 }}>{loading?"جارٍ الإرسال...":"📩 إرسال الرمز"}</button>
+            </div>
+          </>)}
+
+          {mode==="forgotOtp"&&(<>
+            <div style={{ fontSize:13,color:C.textMuted,marginBottom:12,textAlign:"center" }}>أدخل الرمز المرسل إلى هاتفك</div>
+            <input value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,""))} placeholder="000000" maxLength={6} style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:20,letterSpacing:6,color:C.text,outline:"none",direction:"ltr",textAlign:"center",marginBottom:12 }} />
+            {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,marginBottom:12 }}>{error}</div>}
+            <div style={{ display:"flex",gap:10 }}>
+              <button onClick={onClose} style={{ flex:1,background:C.border,border:"none",borderRadius:14,padding:14,color:C.text,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>إلغاء</button>
+              <button onClick={verifyOtp} disabled={loading} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",opacity:loading?0.7:1 }}>{loading?"جارٍ التحقق...":"✅ تحقق"}</button>
+            </div>
+          </>)}
+
+          {mode==="newPin"&&(<>
+            <input value={newPin} onChange={e=>setNewPin(e.target.value)} placeholder="كلمة المرور الجديدة" type="password" style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:"ltr",textAlign:"left",marginBottom:10 }} />
+            <input value={newPinConfirm} onChange={e=>setNewPinConfirm(e.target.value)} placeholder="تأكيد كلمة المرور الجديدة" type="password" style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:"ltr",textAlign:"left",marginBottom:12 }} />
+            {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,marginBottom:12 }}>{error}</div>}
+            <div style={{ display:"flex",gap:10 }}>
+              <button onClick={onClose} style={{ flex:1,background:C.border,border:"none",borderRadius:14,padding:14,color:C.text,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>إلغاء</button>
+              <button onClick={savePin} disabled={loading} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",opacity:loading?0.7:1 }}>{loading?"جارٍ الحفظ...":"💾 حفظ"}</button>
+            </div>
+          </>)}
+        </>)}
       </div>
     </div>
   );
@@ -730,6 +809,54 @@ function DriverGPSMap({ driverLocation, passengerLocation, destLocation, mode })
   );
 }
 
+// ===== تقييم الراكب بعد الرحلة =====
+function RatePassengerModal({ booking, onDone }) {
+  const [stars,setStars]=useState(0);
+  const [comment,setComment]=useState("");
+  const [saving,setSaving]=useState(false);
+  const submit=async(skip=false)=>{
+    setSaving(true);
+    try {
+      if(!skip && stars>0 && booking?.passengerId){
+        await addDoc(collection(db,"ratings"),{ type:"driver_to_passenger", targetId:booking.passengerId, driverId:booking.driverId, bookingId:booking.id, rating:stars, comment:comment||null, createdAt:serverTimestamp() });
+        try {
+          const pSnap=await getDocs(query(collection(db,"passengers"),where("__name__","==",booking.passengerId)));
+          const pDoc=pSnap.docs[0];
+          if(pDoc){
+            const pd=pDoc.data();
+            const oldCount=pd.totalRatings||0, oldAvg=pd.rating||0;
+            const newCount=oldCount+1, newAvg=Math.round(((oldAvg*oldCount+stars)/newCount)*10)/10;
+            await updateDoc(doc(db,"passengers",booking.passengerId),{ rating:newAvg, totalRatings:newCount });
+          }
+        } catch(e){}
+      }
+    } catch(e){}
+    setSaving(false);
+    onDone();
+  };
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,backdropFilter:"blur(4px)",padding:20 }}>
+      <div style={{ background:C.card,borderRadius:24,padding:28,width:"100%",maxWidth:380,fontFamily:"'Cairo',sans-serif",direction:"rtl",border:`1px solid ${C.border}`,textAlign:"center" }}>
+        <div style={{ fontSize:48,marginBottom:8 }}>🏁</div>
+        <div style={{ fontWeight:900,fontSize:18,color:C.text,marginBottom:4 }}>قيّم الراكب</div>
+        <div style={{ fontSize:13,color:C.textMuted,marginBottom:20 }}>{booking?.passengerName||"الراكب"}</div>
+        <div style={{ display:"flex",justifyContent:"center",gap:8,marginBottom:18,direction:"ltr" }}>
+          {[1,2,3,4,5].map(n=>(
+            <span key={n} onClick={()=>setStars(n)} style={{ fontSize:32,cursor:"pointer",opacity:n<=stars?1:0.25 }}>⭐</span>
+          ))}
+        </div>
+        <textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="ملاحظة (اختياري)" rows={2} style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px",fontFamily:"inherit",fontSize:13,color:C.text,outline:"none",resize:"none",direction:"rtl",marginBottom:16 }} />
+        <div style={{ display:"flex",gap:10 }}>
+          <button onClick={()=>submit(true)} disabled={saving} style={{ flex:1,background:C.border,border:"none",borderRadius:14,padding:14,color:C.text,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>تخطّي</button>
+          <button onClick={()=>submit(false)} disabled={saving||stars===0} style={{ flex:2,background:stars>0?`linear-gradient(135deg,${C.green},${C.greenDark})`:C.border,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:stars>0?"pointer":"default" }}>
+            {saving?"جارٍ الحفظ...":"✅ إرسال التقييم"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===== TOAST بسيط للإشعارات =====
 function DriverNotificationToast({ notification, onClose }) {
   useEffect(()=>{ const t=setTimeout(onClose,6000); return()=>clearTimeout(t); },[notification]);
@@ -759,6 +886,7 @@ export default function DriverDashboard({ user, onLogout }) {
   const [showChat,setShowChat]=useState(false);
   const [showEarnings,setShowEarnings]=useState(false);
   const [showSubscription,setShowSubscription]=useState(false);
+  const [showRatePassenger,setShowRatePassenger]=useState(false);
   const [fcmToast,setFcmToast]=useState(null);
   const watchIdRef=useRef(null);
   const knownBookingIdsRef=useRef(new Set());
@@ -875,7 +1003,18 @@ export default function DriverDashboard({ user, onLogout }) {
     } catch(e){console.log(e);}
   };
   const rejectBooking=(id)=>setBookings(p=>p.filter(b=>b.id!==id));
-  const endRide=async()=>{
+  const sendSOS=async()=>{
+    if(!window.confirm("سيتم إرسال تنبيه طارئ فوري للإدارة مع موقعك الحالي. متابعة؟")) return;
+    try {
+      await addDoc(collection(db,"sos_alerts"),{
+        driverId:user?.uid, driverName:data?.name||"سائق", driverPhone:data?.phone||"",
+        bookingId:acceptedBooking?.id||null, passengerName:acceptedBooking?.passengerName||null,
+        location:driverLocation||null, createdAt:serverTimestamp(),
+      });
+      alert("🆘 تم إرسال التنبيه للإدارة");
+    } catch(e){ alert("تعذر إرسال التنبيه، حاول الاتصال مباشرة إن أمكن"); }
+  };
+  const finishRide=async()=>{
     stopTracking();
     if(acceptedBooking?.id){try{await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"completed",completedAt:serverTimestamp()});}catch(e){}}
     setAcceptedBooking(null);setDriverScreen("dashboard");setShowChat(false);setShowReport(false);
@@ -904,6 +1043,7 @@ export default function DriverDashboard({ user, onLogout }) {
 
   return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'Cairo',sans-serif",direction:"rtl" }}>
+      {showRatePassenger&&acceptedBooking&&<RatePassengerModal booking={acceptedBooking} onDone={()=>{setShowRatePassenger(false);finishRide();}} />}
       {fcmToast&&<DriverNotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showChat&&acceptedBooking&&<ChatBox bookingId={acceptedBooking.id} userId={user?.uid} userName={data?.name||"السائق"} otherName={acceptedBooking.passengerName||"الراكب"} onClose={()=>setShowChat(false)} />}
       {showSessionAlert&&(
@@ -932,7 +1072,7 @@ export default function DriverDashboard({ user, onLogout }) {
         </div>
       )}
       {showReport&&acceptedBooking&&<DriverReportModal targetId={acceptedBooking.passengerId} targetName={acceptedBooking.passengerName||"الراكب"} driverId={user?.uid} driverName={data?.name||"السائق"} onClose={()=>setShowReport(false)} />}
-      {showReset&&<DriverPasswordReset onClose={()=>setShowReset(false)} />}
+      {showReset&&<DriverPinChange uid={user?.uid} phone={data?.phone} currentPin={data?.pinCode} onClose={()=>setShowReset(false)} />}
 
       {/* Header */}
       <div style={{ background:C.card,padding:"48px 20px 16px",borderBottom:`1px solid ${C.border}` }}>
@@ -994,7 +1134,8 @@ export default function DriverDashboard({ user, onLogout }) {
                 </button>
                 <div style={{ display:"flex",gap:8 }}>
                   <button onClick={()=>setShowReport(true)} style={{ flex:1,background:`${C.orange}22`,border:`1px solid ${C.orange}44`,borderRadius:10,padding:"11px",color:C.orange,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>🚨 بلّغ</button>
-                  <button onClick={endRide} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>❌ إلغاء</button>
+                  <button onClick={sendSOS} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>🆘 SOS</button>
+                  <button onClick={finishRide} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>❌ إلغاء</button>
                   <button onClick={async()=>{ if(acceptedBooking?.id){ try{ await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"arrived",arrivedAt:serverTimestamp()}); }catch(e){} } setDriverScreen("ride"); }} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>✅ وصلت</button>
                 </div>
               </div>
@@ -1023,7 +1164,8 @@ export default function DriverDashboard({ user, onLogout }) {
                 </button>
                 <div style={{ display:"flex",gap:8 }}>
                   <button onClick={()=>setShowReport(true)} style={{ flex:1,background:`${C.orange}22`,border:`1px solid ${C.orange}44`,borderRadius:10,padding:"11px",color:C.orange,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>🚨 بلّغ</button>
-                  <button onClick={endRide} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:12,padding:"13px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:14 }}>🏁 إنهاء الرحلة</button>
+                  <button onClick={sendSOS} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>🆘 SOS</button>
+                  <button onClick={()=>setShowRatePassenger(true)} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:12,padding:"13px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:14 }}>🏁 إنهاء الرحلة</button>
                 </div>
               </div>
             </div>
