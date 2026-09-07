@@ -25,6 +25,23 @@ const db = admin.firestore();
 const messaging = admin.messaging();
 
 // ============================================================
+// ============  تطبيع رقم الهاتف — مصدر الحقيقة الوحيد  =========
+// ============================================================
+// كل نقطة دخول (checkPhoneRegistered / sendOtpTwilio / verifyOtpTwilio) تمر عبر
+// هذه الدالة قبل أي بحث/إنشاء في Firebase Auth. الهدف: مهما كتب المستخدم رقمه
+// (بمسافات، بصفر بادئ، بـ 213 أو +213 أو 00213 في البداية...) يجب أن ينتج
+// دائمًا نفس النص +213XXXXXXXXX — وإلا فسيُنشئ Firebase Auth حسابًا جديدًا
+// مختلفًا لكل صياغة مختلفة، وهذا بالضبط ما كان يسبب تعدد الحسابات لنفس الرقم.
+function normalizePhone(raw) {
+  let digits = String(raw || "").replace(/\D/g, "");
+  if (digits.startsWith("00213")) digits = digits.slice(5);
+  else if (digits.startsWith("213")) digits = digits.slice(3);
+  else if (digits.startsWith("0")) digits = digits.slice(1);
+  if (!/^\d{9}$/.test(digits)) return null; // رقم جزائري غير صحيح
+  return `+213${digits}`;
+}
+
+// ============================================================
 // ==================  1) نظام الإشعارات (FCM)  =================
 // ============================================================
 
@@ -385,18 +402,26 @@ const OTP_REGION = "europe-west1"; // يطابق المنطقة في App.jsx (cl
 exports.checkPhoneRegistered = onCall(
   { region: OTP_REGION },
   async (request) => {
-    const { phone, role } = request.data || {};
-    if (!phone || !/^\+213\d{9}$/.test(phone)) {
+    const phone = normalizePhone(request.data?.phone);
+    const { role } = request.data || {};
+    if (!phone) {
       throw new HttpsError("invalid-argument", "رقم هاتف غير صحيح");
     }
-    const col = role === "driver" ? "drivers" : "passengers";
     try {
       const userRecord = await admin.auth().getUserByPhoneNumber(phone);
-      const docSnap = await admin.firestore().collection(col).doc(userRecord.uid).get();
-      return { exists: docSnap.exists };
+      // نتحقق من الرقم في مجموعتي السائقين والركاب معًا، وليس فقط في الدور
+      // الحالي — هذا هو الثغرة التي كانت تسمح بإنشاء أكثر من حساب لنفس الرقم
+      const [driverSnap, passengerSnap] = await Promise.all([
+        admin.firestore().collection("drivers").doc(userRecord.uid).get(),
+        admin.firestore().collection("passengers").doc(userRecord.uid).get(),
+      ]);
+      const targetCol = role === "driver" ? "drivers" : "passengers";
+      const existsInTarget = targetCol === "drivers" ? driverSnap.exists : passengerSnap.exists;
+      const existsInOther = targetCol === "drivers" ? passengerSnap.exists : driverSnap.exists;
+      return { exists: existsInTarget, existsAsOtherRole: existsInOther };
     } catch (e) {
       // ما كاينش حساب Firebase بهذا الرقم أصلاً → مؤكد جديد
-      return { exists: false };
+      return { exists: false, existsAsOtherRole: false };
     }
   }
 );
@@ -405,9 +430,9 @@ exports.checkPhoneRegistered = onCall(
 exports.sendOtpTwilio = onCall(
   { region: OTP_REGION, secrets: [TWILIO_SID, TWILIO_TOKEN, TWILIO_VERIFY_SID] },
   async (request) => {
-    const phone = request.data?.phone;
+    const phone = normalizePhone(request.data?.phone);
     const channel = request.data?.channel === "whatsapp" ? "whatsapp" : "sms";
-    if (!phone || !/^\+213\d{9}$/.test(phone)) {
+    if (!phone) {
       throw new HttpsError("invalid-argument", "رقم هاتف غير صحيح");
     }
 
@@ -438,7 +463,8 @@ exports.sendOtpTwilio = onCall(
 exports.verifyOtpTwilio = onCall(
   { region: OTP_REGION, secrets: [TWILIO_SID, TWILIO_TOKEN, TWILIO_VERIFY_SID] },
   async (request) => {
-    const { phone, code } = request.data || {};
+    const phone = normalizePhone(request.data?.phone);
+    const code = request.data?.code;
     if (!phone || !code) {
       throw new HttpsError("invalid-argument", "بيانات ناقصة");
     }
