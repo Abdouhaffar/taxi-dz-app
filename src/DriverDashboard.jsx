@@ -23,6 +23,31 @@ const calcPrice=(km)=>{ if(!km||km<=0) return MIN_PRICE; const p=Math.round(BASE
 const getDistKm=(lat1,lng1,lat2,lng2)=>{ const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2; return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); };
 const openNavigation=(lat,lng)=>window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving&dir_action=navigate`,"_blank");
 
+// تنبيه صوتي + اهتزاز عند وصول طلب جديد — لا يعتمد على ملف صوت خارجي (Web Audio API)
+// ولا يعتمد فقط على وصول إشعار FCM، بل يُطلق أيضاً مباشرة عند ظهور طلب جديد في قائمة onSnapshot
+// حتى لو تأخر أو فشل الإشعار نفسه، طالما التطبيق ما زال مفتوحاً (في الواجهة أو الخلفية القريبة)
+const alertNewBooking=()=>{
+  try { navigator.vibrate?.([300,100,300,100,300]); } catch(e){}
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if(!AudioCtx) return;
+    const ctx = new AudioCtx();
+    [0,0.25,0.5].forEach(delay=>{
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime+delay);
+      gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime+delay+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+delay+0.2);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(ctx.currentTime+delay);
+      osc.stop(ctx.currentTime+delay+0.22);
+    });
+    setTimeout(()=>ctx.close?.(),1200);
+  } catch(e){}
+};
+
 const WILAYAS=["01 - أدرار","02 - الشلف","03 - الأغواط","04 - أم البواقي","05 - باتنة","06 - بجاية","07 - بسكرة","08 - بشار","09 - البليدة","10 - البويرة","11 - تمنراست","12 - تبسة","13 - تلمسان","14 - تيارت","15 - تيزي وزو","16 - الجزائر العاصمة","17 - الجلفة","18 - جيجل","19 - سطيف","20 - سعيدة","21 - سكيكدة","22 - سيدي بلعباس","23 - عنابة","24 - قالمة","25 - قسنطينة","26 - المدية","27 - مستغانم","28 - المسيلة","29 - معسكر","30 - ورقلة","31 - وهران","32 - البيض","33 - إليزي","34 - برج بوعريريج","35 - بومرداس","36 - الطارف","37 - تندوف","38 - تيسمسيلت","39 - الوادي","40 - خنشلة","41 - سوق أهراس","42 - تيبازة","43 - ميلة","44 - عين الدفلى","45 - النعامة","46 - عين تموشنت","47 - غرداية","48 - غليزان","49 - تيميمون","50 - برج باجي مختار","51 - أولاد جلال","52 - بني عباس","53 - عين صالح","54 - إن قزام","55 - تقرت","56 - جانت","57 - المغير","58 - المنيعة","59 - بريكة","60 - أفلو","61 - الأبيض سيدي الشيخ","62 - قصر الشلالة","63 - بوسعادة","64 - مسعد","65 - عين وسارة","66 - بئر العاتر","67 - القنطرة","68 - العريشة","69 - قصر البخاري"];
 const CAR_BRANDS=["RENAULT","PEUGEOT","TOYOTA","HYUNDAI","KIA","VOLKSWAGEN","DACIA","FORD","NISSAN","MERCEDES","BMW","SUZUKI","MITSUBISHI","SEAT","OPEL","CITROEN","FIAT","HONDA","MAZDA","CHEVROLET","أخرى (أدخل يدوياً)"];
 const CAR_MODELS={ RENAULT:["Clio","Symbol","Logan","Megane","Kangoo","Fluence","Captur"],PEUGEOT:["206","207","208","301","308","405","406","Partner"],TOYOTA:["Corolla","Yaris","Camry","RAV4","Hilux"],HYUNDAI:["i10","i20","i30","Accent","Elantra","Tucson"],KIA:["Picanto","Rio","Cerato","Sportage"],VOLKSWAGEN:["Golf","Polo","Passat","Tiguan","Jetta"],DACIA:["Logan","Sandero","Duster","Dokker","Lodgy"],FORD:["Fiesta","Focus","Fusion","Transit"],NISSAN:["Micra","Sunny","Almera","Tiida","Qashqai"],MERCEDES:["C200","E200","A180","Sprinter","Vito"],BMW:["316i","318i","320i","520i"],SUZUKI:["Alto","Swift","Vitara","Jimny"],MITSUBISHI:["Lancer","Colt","Galant","Outlander"],SEAT:["Ibiza","Leon","Altea"],OPEL:["Corsa","Astra","Vectra","Zafira"],CITROEN:["C3","C4","C5","Berlingo"],FIAT:["Punto","Bravo","Tipo","Doblo"],HONDA:["Jazz","Civic","Accord","CR-V"],MAZDA:["Mazda2","Mazda3","Mazda6","CX-5"],CHEVROLET:["Aveo","Cruze","Captiva","Spark"],"أخرى (أدخل يدوياً)":[] };
@@ -736,6 +761,7 @@ export default function DriverDashboard({ user, onLogout }) {
   const [showSubscription,setShowSubscription]=useState(false);
   const [fcmToast,setFcmToast]=useState(null);
   const watchIdRef=useRef(null);
+  const knownBookingIdsRef=useRef(new Set());
 
   // تسجيل التوكن لاستقبال إشعارات Push (طلب جديد، رسالة، إلخ)
   useEffect(()=>{
@@ -746,7 +772,7 @@ export default function DriverDashboard({ user, onLogout }) {
         if(fcmToken) await setDoc(doc(db,"drivers",user.uid),{fcmToken},{merge:true});
       } catch(e){}
     })();
-    const unsub = onForegroundMessage(msg=>setFcmToast({title:msg.notification?.title,body:msg.notification?.body}));
+    const unsub = onForegroundMessage(msg=>{ alertNewBooking(); setFcmToast({title:msg.notification?.title,body:msg.notification?.body}); });
     return()=>{ if(unsub) unsub(); };
   },[user?.uid,status]);
 
@@ -826,11 +852,16 @@ export default function DriverDashboard({ user, onLogout }) {
   };
 
   useEffect(()=>{
-    if(!online||!user?.uid){setBookings([]);return;}
-    const q=query(collection(db,"bookings"),where("status","==","pending"));
+    if(!online||!user?.uid){setBookings([]);knownBookingIdsRef.current=new Set();return;}
+    const q=query(collection(db,"bookings"),where("status","==","pending"),orderBy("createdAt","desc"));
     const u=onSnapshot(q,snap=>{
       const now=Date.now();
-      setBookings(snap.docs.map(d=>({id:d.id,...d.data()})).filter(b=>(now-(b.createdAt?.toMillis?.())||0)<10*60*1000));
+      const fresh=snap.docs.map(d=>({id:d.id,...d.data()})).filter(b=>b.status==="pending"&&(now-(b.createdAt?.toMillis?.())||0)<10*60*1000);
+      const freshIds=new Set(fresh.map(b=>b.id));
+      const isNew=fresh.some(b=>!knownBookingIdsRef.current.has(b.id));
+      if(isNew && knownBookingIdsRef.current.size>0) alertNewBooking(); // لا ننبّه عند أول تحميل، فقط عند وصول طلب جديد فعلاً
+      knownBookingIdsRef.current=freshIds;
+      setBookings(fresh);
     });
     return()=>u();
   },[online,user?.uid]);
