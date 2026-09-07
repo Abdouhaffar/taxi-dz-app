@@ -183,6 +183,7 @@ function Sidebar({ tab, setTab, admin, onLogout, counts }) {
     { id: "passengers", icon: "👥", label: "الركاب" },
     ...(isSuperAdmin ? [{ id: "admins", icon: "🛡️", label: "الأدمنات", badge: counts.pendingAdmins }] : []),
     { id: "reports", icon: "📈", label: "التقارير" },
+    { id: "analytics", icon: "💹", label: "التحليلات" },
     { id: "complaints", icon: "🚨", label: "التبليغات", badge: counts.pendingReports },
     { id: "subscriptions", icon: "💳", label: "الاشتراكات", badge: counts.pendingSubscriptions },
     { id: "settings", icon: "⚙️", label: "الإعدادات" },
@@ -725,6 +726,70 @@ function ReportsPanel({ drivers, passengers }) {
   );
 }
 
+// ===== ANALYTICS (الإيرادات اليومية، معدل الإلغاء، متوسط وقت الانتظار) =====
+function AnalyticsPanel({ bookings }) {
+  const DAYS = 7;
+  const dayKey = (d) => d.toISOString().slice(0, 10);
+  const today = new Date();
+  const last7 = Array.from({ length: DAYS }, (_, i) => {
+    const d = new Date(today); d.setDate(d.getDate() - (DAYS - 1 - i)); return d;
+  });
+
+  const completed = bookings.filter(b => b.status === "completed" || b.status === "rated");
+  const cancelled = bookings.filter(b => b.status === "cancelled");
+  const total = bookings.length;
+
+  const revenueByDay = {};
+  completed.forEach(b => {
+    const d = b.completedAt?.toDate?.() || b.createdAt?.toDate?.();
+    if (!d) return;
+    const k = dayKey(d);
+    revenueByDay[k] = (revenueByDay[k] || 0) + (b.price || 0);
+  });
+  const revenueSeries = last7.map(d => ({ label: d.toLocaleDateString("ar-DZ", { weekday: "short", day: "numeric" }), value: revenueByDay[dayKey(d)] || 0 }));
+  const maxRevenue = Math.max(1, ...revenueSeries.map(r => r.value));
+  const totalRevenue7d = revenueSeries.reduce((s, r) => s + r.value, 0);
+
+  const cancellationRate = total ? Math.round((cancelled.length / total) * 100) : 0;
+
+  const waitTimes = [];
+  bookings.forEach(b => {
+    const created = b.createdAt?.toDate?.();
+    const accepted = b.acceptedAt?.toDate?.();
+    if (created && accepted) waitTimes.push((accepted - created) / 60000); // بالدقائق
+  });
+  const avgWait = waitTimes.length ? (waitTimes.reduce((s, w) => s + w, 0) / waitTimes.length) : null;
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}>💹 التحليلات</div>
+        <div style={{ fontSize: 13, color: C.textMuted }}>مؤشرات الأداء التشغيلي</div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 20 }}>
+        <StatCard icon="💰" label="إيرادات آخر 7 أيام" value={`${totalRevenue7d.toLocaleString()} دج`} sub={`${completed.length} رحلة مكتملة (كل الوقت)`} color={C.green} />
+        <StatCard icon="🚫" label="معدل الإلغاء" value={`${cancellationRate}%`} sub={`${cancelled.length} من ${total} طلب`} color={cancellationRate > 20 ? C.red : C.orange} />
+        <StatCard icon="⏱️" label="متوسط وقت الانتظار" value={avgWait !== null ? `${avgWait.toFixed(1)} دق` : "—"} sub="من الطلب حتى قبول سائق" color={C.blue} />
+      </div>
+
+      <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 16 }}>💰 الإيرادات اليومية (آخر 7 أيام)</div>
+        {totalRevenue7d === 0 && <div style={{ color: C.textMuted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>لا توجد رحلات مكتملة في هذه الفترة بعد</div>}
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 160, padding: "0 4px" }}>
+          {revenueSeries.map((r, i) => (
+            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+              <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 700 }}>{r.value > 0 ? r.value.toLocaleString() : ""}</div>
+              <div style={{ width: "100%", height: Math.max(3, (r.value / maxRevenue) * 110), background: `linear-gradient(180deg, ${C.green}, ${C.greenDark || C.green})`, borderRadius: 6 }} />
+              <div style={{ fontSize: 10, color: C.textMuted }}>{r.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===== SETTINGS =====
 function SettingsPanel({ admin }) {
   return (
@@ -1002,6 +1067,7 @@ export default function AdminApp() {
   const [passengers, setPassengers] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [reports, setReports] = useState([]);
+  const [bookings, setBookings] = useState([]);
   const [loadErr, setLoadErr] = useState("");
 
   useEffect(() => {
@@ -1011,7 +1077,8 @@ export default function AdminApp() {
     const u2 = onSnapshot(collection(db, "passengers"), snap => setPassengers(snap.docs.map(d => ({ id: d.id, ...d.data() }))), e => setLoadErr("تعذر قراءة بيانات الركاب: " + (e.code || e.message)));
     const u3 = admin.role === "super" ? onSnapshot(collection(db, "admins"), snap => setAdmins(snap.docs.map(d => ({ id: d.id, ...d.data() })))) : () => {};
     const u4 = onSnapshot(collection(db, "reports"), snap => setReports(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    return () => { u1(); u2(); u3(); u4(); };
+    const u5 = onSnapshot(collection(db, "bookings"), snap => setBookings(snap.docs.map(d => ({ id: d.id, ...d.data() }))), e => setLoadErr("تعذر قراءة بيانات الرحلات: " + (e.code || e.message)));
+    return () => { u1(); u2(); u3(); u4(); u5(); };
   }, [admin]);
 
   if (!admin) return <AdminLogin onLogin={setAdmin} />;
@@ -1036,6 +1103,7 @@ export default function AdminApp() {
         {tab === "passengers" && <PassengersPanel passengers={passengers} isSuperAdmin={admin.role === "super"} />}
         {tab === "admins" && admin.role === "super" && <AdminsPanel admins={admins} currentAdmin={admin} />}
         {tab === "reports" && <ReportsPanel drivers={drivers} passengers={passengers} />}
+        {tab === "analytics" && <AnalyticsPanel bookings={bookings} />}
         {tab === "complaints" && <ComplaintsPanel reports={reports} drivers={drivers} passengers={passengers} isSuperAdmin={admin.role === "super"} />}
         {tab === "subscriptions" && <SubscriptionPanel drivers={drivers} isSuperAdmin={admin.role === "super"} />}
         {tab === "settings" && <SettingsPanel admin={admin} />}
