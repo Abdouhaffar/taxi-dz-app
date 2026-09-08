@@ -616,7 +616,7 @@ function PassengerTrackingMap({ passengerLocation, driverLocation, destinationLo
   );
 }
 
-function TaxiMap({ origin, destination, showDrivers, height=220 }) {
+function TaxiMap({ origin, destination, showDrivers, height=220, onMapClick, picking }) {
   const [directions,setDirections]=useState(null);
   const [userLocation,setUserLocation]=useState(ALGERIA_CENTER);
   const [nearbyDrivers,setNearbyDrivers]=useState([]);
@@ -627,8 +627,9 @@ function TaxiMap({ origin, destination, showDrivers, height=220 }) {
   const onLoad=useCallback(m=>{mapRef.current=m;},[]);
   const makeMarker=(emoji,color)=>"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><circle cx='20' cy='20' r='18' fill='${color}' stroke='white' stroke-width='3'/><text x='20' y='27' text-anchor='middle' font-size='18'>${emoji}</text></svg>`);
   return (
-    <div style={{ margin:"0 20px",borderRadius:20,overflow:"hidden" }}>
-      <GoogleMap mapContainerStyle={{ width:"100%",height:`${height}px` }} center={origin||userLocation} zoom={13} onLoad={onLoad} options={{ styles:MAP_STYLE,disableDefaultUI:true,zoomControl:true }}>
+    <div style={{ margin:"0 20px",borderRadius:20,overflow:"hidden",position:"relative" }}>
+      {picking&&<div style={{ position:"absolute",top:10,left:"50%",transform:"translateX(-50%)",zIndex:10,background:"rgba(0,0,0,0.75)",color:"#fff",padding:"6px 16px",borderRadius:20,fontSize:12,fontWeight:700,whiteSpace:"nowrap" }}>{picking}</div>}
+      <GoogleMap mapContainerStyle={{ width:"100%",height:`${height}px`,cursor:onMapClick?"crosshair":"grab" }} center={origin||userLocation} zoom={13} onLoad={onLoad} onClick={onMapClick?e=>onMapClick(e.latLng):undefined} options={{ styles:MAP_STYLE,disableDefaultUI:true,zoomControl:true }}>
         {!origin&&<Marker position={userLocation} />}
         {origin&&!directions&&<Marker position={origin} icon={{ url:makeMarker("📍",C.green),scaledSize:new window.google.maps.Size(40,40) }} />}
         {destination&&!directions&&<Marker position={destination} icon={{ url:makeMarker("🏁",C.orange),scaledSize:new window.google.maps.Size(40,40) }} />}
@@ -1225,6 +1226,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const [showRating,setShowRating]=useState(false);
   const [finalRating,setFinalRating]=useState(0);
   const [gpsLoading,setGpsLoading]=useState(false);
+  const [gpsError,setGpsError]=useState("");
+  const [pickMode,setPickMode]=useState(null); // null | "origin" | "destination"
   const [passengers,setPassengers]=useState(1);
   const [luggageWeight,setLuggageWeight]=useState("less25");
   const [luggageDesc,setLuggageDesc]=useState("");
@@ -1300,7 +1303,56 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   };
 
   const updateDistance=(lat1,lng1,lat2,lng2)=>{ const km=getDistanceKm(lat1,lng1,lat2,lng2);setDistanceKm(km);const p=calcPrice(km,multiplier);setSuggestedPrice(p);setOfferPrice(p); };
-  const handleGPS=()=>{ setGpsLoading(true); navigator.geolocation?.getCurrentPosition(pos=>{ const ll=new window.google.maps.LatLng(pos.coords.latitude,pos.coords.longitude);setOriginPlace(ll);setPassengerGPS({lat:pos.coords.latitude,lng:pos.coords.longitude}); new window.google.maps.Geocoder().geocode({location:ll},(results,status)=>{ setOriginText(status==="OK"&&results[0]?results[0].formatted_address:`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);setGpsLoading(false);if(destPlace){const{lat:lat2,lng:lng2}=getLatLng(destPlace);updateDistance(pos.coords.latitude,pos.coords.longitude,lat2,lng2);} }); },()=>setGpsLoading(false)); };
+  const handleGPS=()=>{
+    setGpsError("");
+    if(!("geolocation" in navigator)){
+      setGpsError(lang==="ar"?"متصفحك لا يدعم تحديد الموقع":lang==="fr"?"Votre navigateur ne supporte pas la géolocalisation":"Your browser doesn't support geolocation");
+      return;
+    }
+    if(window.location.protocol!=="https:" && window.location.hostname!=="localhost"){
+      setGpsError(lang==="ar"?"تحديد الموقع يحتاج اتصالاً آمناً (HTTPS)":lang==="fr"?"La géolocalisation nécessite une connexion sécurisée (HTTPS)":"Geolocation requires a secure (HTTPS) connection");
+      return;
+    }
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      pos=>{
+        const ll=new window.google.maps.LatLng(pos.coords.latitude,pos.coords.longitude);
+        setOriginPlace(ll);setPassengerGPS({lat:pos.coords.latitude,lng:pos.coords.longitude});
+        new window.google.maps.Geocoder().geocode({location:ll},(results,status)=>{
+          setOriginText(status==="OK"&&results[0]?results[0].formatted_address:`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+          setGpsLoading(false);
+          if(destPlace){const{lat:lat2,lng:lng2}=getLatLng(destPlace);updateDistance(pos.coords.latitude,pos.coords.longitude,lat2,lng2);}
+        });
+      },
+      err=>{
+        setGpsLoading(false);
+        const msgs = {
+          1: lang==="ar"?"تم رفض إذن الموقع — فعّله من إعدادات المتصفح/الهاتف لهذا الموقع":lang==="fr"?"Autorisation de localisation refusée — activez-la dans les paramètres":"Location permission denied — enable it in your browser/phone settings",
+          2: lang==="ar"?"تعذر تحديد موقعك حالياً — تأكد أن GPS الهاتف مفعّل":lang==="fr"?"Position indisponible — vérifiez que le GPS est activé":"Position unavailable — make sure GPS is enabled",
+          3: lang==="ar"?"استغرق تحديد الموقع وقتاً طويلاً — حاول مجدداً":lang==="fr"?"Délai dépassé — réessayez":"Location request timed out — try again",
+        };
+        setGpsError(msgs[err.code] || (lang==="ar"?"تعذر تحديد الموقع":lang==="fr"?"Échec de la localisation":"Failed to get location"));
+      },
+      { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
+    );
+  };
+
+  // اختيار نقطة الانطلاق أو الوجهة مباشرة بالنقر على الخريطة
+  const handleMapPick=(latLng)=>{
+    if(!pickMode) return;
+    const lat=latLng.lat(), lng=latLng.lng();
+    new window.google.maps.Geocoder().geocode({location:latLng},(results,status)=>{
+      const address = status==="OK"&&results[0] ? results[0].formatted_address : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      if(pickMode==="origin"){
+        setOriginPlace(latLng); setOriginText(address); setPassengerGPS({lat,lng});
+        if(destPlace){const{lat:lat2,lng:lng2}=getLatLng(destPlace);updateDistance(lat,lng,lat2,lng2);}
+      } else {
+        setDestPlace(latLng); setDestText(address);
+        if(originPlace){const{lat:lat1,lng:lng1}=getLatLng(originPlace);updateDistance(lat1,lng1,lat,lng);}
+      }
+      setPickMode(null);
+    });
+  };
   const onOriginChanged=()=>{ if(originRef.current){const p=originRef.current.getPlace();if(p?.geometry){setOriginPlace(p.geometry.location);setOriginText(p.formatted_address||p.name);if(destPlace){const{lat:lat1,lng:lng1}=getLatLng(p.geometry.location);const{lat:lat2,lng:lng2}=getLatLng(destPlace);updateDistance(lat1,lng1,lat2,lng2);}}} };
   const onDestChanged=()=>{ if(destRef.current){const p=destRef.current.getPlace();if(p?.geometry){setDestPlace(p.geometry.location);setDestText(p.formatted_address||p.name);if(originPlace){const{lat:lat1,lng:lng1}=getLatLng(originPlace);const{lat:lat2,lng:lng2}=getLatLng(p.geometry.location);updateDistance(lat1,lng1,lat2,lng2);}}} };
 
@@ -1382,15 +1434,24 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         <BackBtn onBack={()=>setScreen("home")} />
         <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.tripDetails}</div>
       </div>
-      <TaxiMap origin={originPlace} destination={destPlace} showDrivers={false} />
+      <TaxiMap origin={originPlace} destination={destPlace} showDrivers={false} onMapClick={handleMapPick} picking={pickMode==="origin"?(lang==="ar"?"📍 اضغط على الخريطة لتحديد نقطة الانطلاق":lang==="fr"?"📍 Touchez la carte pour le départ":"📍 Tap the map to set pickup"):pickMode==="destination"?(lang==="ar"?"🏁 اضغط على الخريطة لتحديد الوجهة":lang==="fr"?"🏁 Touchez la carte pour la destination":"🏁 Tap the map to set destination"):null} />
       {distanceKm>0&&<div style={{ display:"flex",gap:8,margin:"10px 20px 0",justifyContent:"center" }}>
         <div style={{ background:C.greenLight,borderRadius:20,padding:"6px 14px",fontSize:13,color:C.greenDark,fontWeight:700 }}>📏 {distanceKm.toFixed(1)} km</div>
         <div style={{ background:C.orangeLight,borderRadius:20,padding:"6px 14px",fontSize:14,color:C.orange,fontWeight:900 }}>💰 {suggestedPrice} DA</div>
       </div>}
       <div style={{ margin:"14px 20px",background:C.card,borderRadius:24,padding:20,boxShadow:C.shadow }}>
-        <button onClick={handleGPS} disabled={gpsLoading} style={{ width:"100%",background:gpsLoading?C.border:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",marginBottom:12,fontFamily:"inherit",fontWeight:700,fontSize:14,color:gpsLoading?C.textMuted:C.greenDark }}>
+        <button onClick={handleGPS} disabled={gpsLoading} style={{ width:"100%",background:gpsLoading?C.border:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",marginBottom:8,fontFamily:"inherit",fontWeight:700,fontSize:14,color:gpsLoading?C.textMuted:C.greenDark }}>
           <span style={{ fontSize:18 }}>📍</span>{gpsLoading?t.locating:t.useMyLocation}
         </button>
+        {gpsError&&<div style={{ background:C.redLight||"#ef444422",border:"1px solid #ef444444",borderRadius:12,padding:"10px 14px",fontSize:12,color:"#ef4444",marginBottom:12,textAlign:"center" }}>{gpsError}</div>}
+        <div style={{ display:"flex",gap:8,marginBottom:12 }}>
+          <button onClick={()=>setPickMode(pickMode==="origin"?null:"origin")} style={{ flex:1,background:pickMode==="origin"?C.green:C.card,border:`1px solid ${C.green}44`,borderRadius:12,padding:"10px",fontFamily:"inherit",fontWeight:700,fontSize:12,color:pickMode==="origin"?"#fff":C.green,cursor:"pointer" }}>
+            📍 {lang==="ar"?"حدّد الانطلاق من الخريطة":lang==="fr"?"Départ sur la carte":"Pick pickup on map"}
+          </button>
+          <button onClick={()=>setPickMode(pickMode==="destination"?null:"destination")} style={{ flex:1,background:pickMode==="destination"?C.orange:C.card,border:`1px solid ${C.orange}44`,borderRadius:12,padding:"10px",fontFamily:"inherit",fontWeight:700,fontSize:12,color:pickMode==="destination"?"#fff":C.orange,cursor:"pointer" }}>
+            🏁 {lang==="ar"?"حدّد الوجهة من الخريطة":lang==="fr"?"Destination sur la carte":"Pick destination on map"}
+          </button>
+        </div>
         <div style={{ display:"flex",flexDirection:"column",gap:10,marginBottom:16 }}>
           <div style={{ background:C.greenLight,borderRadius:14,padding:"10px 16px",display:"flex",gap:10,alignItems:"center" }}>
             <div style={{ width:10,height:10,borderRadius:"50%",background:C.green,flexShrink:0 }} />
