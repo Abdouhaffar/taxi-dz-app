@@ -676,8 +676,9 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
         @keyframes ctaRise{0%{opacity:0;transform:translateY(18px)}100%{opacity:1;transform:translateY(0)}}
       `}</style>
       {/* خلفية الصورة */}
-      <div style={{ position:"absolute",inset:0,backgroundImage:"url('/logo512.png')",backgroundSize:"cover",backgroundPosition:"center",backgroundRepeat:"no-repeat",filter:"brightness(0.22)",zIndex:0 }} />
-      <div style={{ position:"absolute",inset:0,background:"linear-gradient(160deg,rgba(4,16,11,0.9) 0%,rgba(6,42,26,0.78) 50%,rgba(4,16,11,0.9) 100%)",zIndex:1 }} />
+      <div style={{ position:"absolute",inset:0,background:"#07130d" }} />
+      <div style={{ position:"absolute",inset:0,backgroundImage:"url('/logo512.png')",backgroundSize:"66%",backgroundPosition:"center",backgroundRepeat:"no-repeat",filter:"brightness(0.65) saturate(1.1)",zIndex:0 }} />
+      <div style={{ position:"absolute",inset:0,background:"linear-gradient(160deg,rgba(4,16,11,0.75) 0%,rgba(6,42,26,0.55) 45%,rgba(4,16,11,0.85) 100%)",zIndex:1 }} />
       <div style={{ position:"relative",zIndex:2,display:"flex",flexDirection:"column",alignItems:"center",width:"100%" }}>
       <div style={{ position:"absolute",top:48,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6 }}>
         {[{code:"ar",flag:"🇩🇿"},{code:"fr",flag:"🇫🇷"},{code:"en",flag:"🇬🇧"}].map(l=>(
