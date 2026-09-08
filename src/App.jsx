@@ -1232,6 +1232,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const [luggageWeight,setLuggageWeight]=useState("less25");
   const [luggageDesc,setLuggageDesc]=useState("");
   const [noDrivers,setNoDrivers]=useState(false);
+  const [submittingBooking,setSubmittingBooking]=useState(false);
   const [timer,setTimer]=useState(0);
   const [passengerGPS,setPassengerGPS]=useState(null);
   const [passengerData,setPassengerData]=useState(null);
@@ -1357,7 +1358,10 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const onDestChanged=()=>{ if(destRef.current){const p=destRef.current.getPlace();if(p?.geometry){setDestPlace(p.geometry.location);setDestText(p.formatted_address||p.name);if(originPlace){const{lat:lat1,lng:lng1}=getLatLng(originPlace);const{lat:lat2,lng:lng2}=getLatLng(p.geometry.location);updateDistance(lat1,lng1,lat2,lng2);}}} };
 
   const startSearch=async(price)=>{
+    if(submittingBooking) return; // يمنع إرسال طلبين إذا ضغط المستخدم مرتين بسبب البطء المُدرَك
+    setSubmittingBooking(true);
     setTimer(0);setNoDrivers(false);setDriverLocation(null);
+    setScreen("searching"); // ننتقل فورًا؛ باقي العمل يحدث في الخلفية دون تعليق الواجهة
     const oLL=getLatLng(originPlace),dLL=getLatLng(destPlace);
     try {
       const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,passengers,luggageWeight,luggageDesc,status:"pending",createdAt:serverTimestamp() });
@@ -1378,7 +1382,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       }
       console.log(`📬 ${nearbyDrivers.length} سائق قريب`);
     } catch(e){ setBooking({originPlace,destPlace,originText,destText,rideType,price,distanceKm,passengerPhone,passengerName}); }
-    setScreen("searching");
+    setSubmittingBooking(false);
   };
 
   const cancelBooking=async()=>{ if(bookingId){try{await updateDoc(doc(db,"bookings",bookingId),{status:"cancelled"});}catch(e){}} setBookingId(null);setScreen("home"); };
@@ -1553,7 +1557,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         </div>
       </div>
       <div style={{ margin:"0 20px" }}>
-        <button onClick={()=>startSearch(offerPrice)} style={{ width:"100%",background:`linear-gradient(135deg,${C.dark},#1a2340)`,border:"1px solid #d4a01733",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:17,cursor:"pointer" }}>
+        <button onClick={()=>startSearch(offerPrice)} disabled={submittingBooking} style={{ width:"100%",background:submittingBooking?C.border:`linear-gradient(135deg,${C.dark},#1a2340)`,border:"1px solid #d4a01733",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:17,cursor:submittingBooking?"default":"pointer",opacity:submittingBooking?0.7:1 }}>
           {t.sendOffer} — {offerPrice} DA
         </button>
       </div>
