@@ -256,7 +256,7 @@ function NotificationToast({ notification, onClose }) {
   useEffect(()=>{ const t=setTimeout(onClose,5000); return()=>clearTimeout(t); },[onClose]);
   if (!notification) return null;
   return (
-    <div style={{ position:"fixed", top:20, left:"50%", transform:"translateX(-50%)", width:"calc(100% - 40px)", maxWidth:370, background:C.dark, borderRadius:16, padding:"14px 18px", boxShadow:"0 8px 32px rgba(0,0,0,0.3)", zIndex:9999, fontFamily:"Cairo,sans-serif", direction:"rtl", display:"flex", gap:12, alignItems:"center", border:`1px solid ${C.green}44`, animation:"slideDown 0.3s ease" }}>
+    <div style={{ position:"fixed", top:20, left:"50%", transform:"translateX(-50%)", width:"calc(100% - 40px)", maxWidth:370, background:C.dark, borderRadius:16, padding:"14px 18px", boxShadow:"0 8px 32px rgba(0,0,0,0.3)", zIndex:9999, fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif", direction:"rtl", display:"flex", gap:12, alignItems:"center", border:`1px solid ${C.green}44`, animation:"slideDown 0.3s ease" }}>
       <div style={{ fontSize:28 }}>🔔</div>
       <div style={{ flex:1 }}>
         <div style={{ fontWeight:800, fontSize:14, color:"#fff" }}>{notification.title}</div>
@@ -284,7 +284,7 @@ function ReportModal({ targetId, targetName, targetType, reporterId, reporterNam
   };
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:2000,backdropFilter:"blur(4px)" }}>
-      <div style={{ background:C.card,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:430,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+      <div style={{ background:C.card,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:430,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
         {done?(
           <div style={{ textAlign:"center",padding:"20px 0" }}>
             <div style={{ fontSize:56,marginBottom:12 }}>✅</div>
@@ -331,7 +331,7 @@ function PasswordResetModal({ onClose, lang }) {
   };
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,backdropFilter:"blur(4px)",padding:20 }}>
-      <div style={{ background:C.card,borderRadius:24,padding:28,width:"100%",maxWidth:380,fontFamily:"Cairo,sans-serif",direction:lang==="ar"?"rtl":"ltr" }}>
+      <div style={{ background:C.card,borderRadius:24,padding:28,width:"100%",maxWidth:380,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:lang==="ar"?"rtl":"ltr" }}>
         {sent?(
           <div style={{ textAlign:"center" }}>
             <div style={{ fontSize:56,marginBottom:12 }}>📧</div>
@@ -379,7 +379,7 @@ function RatingModal({ booking, driver, onSubmit, onSkip, lang }) {
   };
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:1000,backdropFilter:"blur(4px)" }}>
-      <div style={{ background:C.card,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:430,fontFamily:"Cairo,sans-serif",direction:lang==="ar"?"rtl":"ltr" }}>
+      <div style={{ background:C.card,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:430,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:lang==="ar"?"rtl":"ltr" }}>
         <div style={{ textAlign:"center",marginBottom:20 }}>
           <div style={{ fontSize:52,marginBottom:8 }}>🏁</div>
           <div style={{ fontWeight:900,fontSize:22,color:C.text }}>{driver?.name||"👨‍✈️"}</div>
@@ -424,7 +424,7 @@ function ChatBox({ bookingId, userId, userName, otherName, lang, onClose }) {
   };
 
   return (
-    <div style={{ position:"fixed",inset:0,background:C.bg,zIndex:1500,display:"flex",flexDirection:"column",fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ position:"fixed",inset:0,background:C.bg,zIndex:1500,display:"flex",flexDirection:"column",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {/* Header */}
       <div style={{ background:C.dark,padding:"48px 20px 16px",display:"flex",alignItems:"center",gap:12 }}>
         <button onClick={onClose} style={{ width:36,height:36,borderRadius:10,background:"#ffffff22",border:"none",color:"#fff",cursor:"pointer",fontSize:16 }}>←</button>
@@ -497,7 +497,7 @@ function WalletScreen({ userId, passengerData, lang, onBack }) {
   };
 
   return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
         <BackBtn onBack={onBack} />
         <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.wallet}</div>
@@ -668,24 +668,29 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
   const t=T[lang];
   const isRTL=lang==="ar";
   return (
-    <div style={{ minHeight:"100vh",fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,position:"relative",overflow:"hidden" }}>
+    <div style={{ minHeight:"100vh",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,position:"relative",overflow:"hidden" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+        @keyframes buraqRise{0%{opacity:0;transform:translateY(28px) scale(0.92)}100%{opacity:1;transform:translateY(0) scale(1)}}
+        @keyframes wordRise{0%{opacity:0;transform:translateY(14px)}100%{opacity:1;transform:translateY(0)}}
+        @keyframes ctaRise{0%{opacity:0;transform:translateY(18px)}100%{opacity:1;transform:translateY(0)}}
+      `}</style>
       {/* خلفية الصورة */}
-      <div style={{ position:"absolute",inset:0,backgroundImage:"url('/logo512.png')",backgroundSize:"cover",backgroundPosition:"center",backgroundRepeat:"no-repeat",filter:"brightness(0.25)",zIndex:0 }} />
-      {/* طبقة لونية فوق الخلفية */}
-      <div style={{ position:"absolute",inset:0,background:"linear-gradient(160deg,rgba(0,20,10,0.85) 0%,rgba(0,50,30,0.75) 50%,rgba(0,20,10,0.85) 100%)",zIndex:1 }} />
+      <div style={{ position:"absolute",inset:0,backgroundImage:"url('/logo512.png')",backgroundSize:"cover",backgroundPosition:"center",backgroundRepeat:"no-repeat",filter:"brightness(0.22)",zIndex:0 }} />
+      <div style={{ position:"absolute",inset:0,background:"linear-gradient(160deg,rgba(4,16,11,0.9) 0%,rgba(6,42,26,0.78) 50%,rgba(4,16,11,0.9) 100%)",zIndex:1 }} />
       <div style={{ position:"relative",zIndex:2,display:"flex",flexDirection:"column",alignItems:"center",width:"100%" }}>
       <div style={{ position:"absolute",top:48,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6 }}>
         {[{code:"ar",flag:"🇩🇿"},{code:"fr",flag:"🇫🇷"},{code:"en",flag:"🇬🇧"}].map(l=>(
           <button key={l.code} onClick={()=>setLang(l.code)} style={{ padding:"6px 12px",borderRadius:20,border:`1.5px solid ${lang===l.code?"#d4a017":"#ffffff33"}`,background:lang===l.code?"#d4a01722":"transparent",color:lang===l.code?"#d4a017":"#ffffff88",fontFamily:"inherit",fontWeight:lang===l.code?700:400,fontSize:13,cursor:"pointer" }}>{l.flag}</button>
         ))}
       </div>
-      <img src="/logo192.png" alt="AL-BURAQ" style={{ width:160,height:160,objectFit:"contain",marginBottom:16,filter:"drop-shadow(0 8px 32px rgba(212,160,23,0.6))",animation:"logoPulse 3s ease-in-out infinite" }} onError={e=>e.target.style.display="none"} />
-      <div style={{ fontSize:32,fontWeight:900,color:"#fff",marginBottom:4,letterSpacing:2 }}>AL-BURAQ</div>
-      <div style={{ fontSize:13,color:"#d4a017",marginBottom:40,fontWeight:600 }}>{t.appTagline}</div>
+      <img src="/logo192.png" alt="AL-BURAQ" style={{ width:152,height:152,objectFit:"contain",marginBottom:14,filter:"drop-shadow(0 10px 36px rgba(212,160,23,0.55))",animation:"buraqRise 0.9s cubic-bezier(0.16,1,0.3,1) both" }} onError={e=>e.target.style.display="none"} />
+      <div style={{ fontSize:34,fontWeight:700,color:"#fff",marginBottom:6,letterSpacing:3,animation:"wordRise 0.7s ease 0.25s both" }}>AL-BURAQ</div>
+      <div style={{ fontSize:13,color:"#d4a017",marginBottom:36,fontWeight:600,animation:"wordRise 0.7s ease 0.35s both" }}>{t.appTagline}</div>
 
       {/* حساب واحد للاتجاهين */}
-      <div style={{ background:"#ffffff11",borderRadius:16,padding:"12px 20px",marginBottom:24,border:"1px solid #ffffff22",textAlign:"center" }}>
-        <div style={{ fontSize:12,color:"#ffffff88" }}>
+      <div style={{ background:"#ffffff0d",borderRadius:"4px 18px 18px 18px",padding:"11px 20px",marginBottom:26,border:"1px solid #ffffff1f",textAlign:"center",animation:"wordRise 0.7s ease 0.4s both" }}>
+        <div style={{ fontSize:12,color:"#ffffff99" }}>
           {lang==="ar"?"💡 حساب واحد — يمكنك الدخول كراكب أو سائق":
            lang==="fr"?"💡 Un seul compte — passager ou chauffeur":
            "💡 One account — switch between rider & driver"}
@@ -693,22 +698,21 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
       </div>
 
       <div style={{ width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:12 }}>
-        <button onClick={()=>onSelect("passenger")} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:20,padding:"18px 24px",color:"#fff",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,boxShadow:"0 8px 24px rgba(0,179,126,0.35)" }}>
-          <span style={{ fontSize:40 }}>🧑</span>
+        <button onClick={()=>onSelect("passenger")} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:"22px 22px 22px 6px",padding:"20px 24px",color:"#fff",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,boxShadow:"0 10px 28px rgba(0,179,126,0.4)",animation:"ctaRise 0.6s ease 0.5s both" }}>
+          <span style={{ fontSize:38 }}>🧑</span>
           <div style={{ textAlign:isRTL?"right":"left" }}>
-            <div style={{ fontWeight:800,fontSize:17 }}>{t.passenger}</div>
+            <div style={{ fontWeight:700,fontSize:18 }}>{t.passenger}</div>
             <div style={{ fontSize:12,opacity:0.85 }}>{t.passengerSub}</div>
           </div>
         </button>
-        <button onClick={()=>onSelect("driver")} style={{ background:`linear-gradient(135deg,${C.orange},#ea580c)`,border:"none",borderRadius:20,padding:"18px 24px",color:"#fff",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,boxShadow:"0 8px 24px rgba(249,115,22,0.35)" }}>
-          <span style={{ fontSize:40 }}>👨‍✈️</span>
+        <button onClick={()=>onSelect("driver")} style={{ background:"#ffffff0f",border:"1.5px solid #d4a01755",borderRadius:"6px 22px 22px 22px",padding:"16px 24px",color:"#fff",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,animation:"ctaRise 0.6s ease 0.6s both" }}>
+          <span style={{ fontSize:32 }}>👨‍✈️</span>
           <div style={{ textAlign:isRTL?"right":"left" }}>
-            <div style={{ fontWeight:800,fontSize:17 }}>{t.driver}</div>
-            <div style={{ fontSize:12,opacity:0.85 }}>{t.driverSub}</div>
+            <div style={{ fontWeight:700,fontSize:16,color:"#d4a017" }}>{t.driver}</div>
+            <div style={{ fontSize:12,opacity:0.75 }}>{t.driverSub}</div>
           </div>
         </button>
       </div>
-        <style>{`@keyframes logoPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 8px 32px rgba(212,160,23,0.6))}50%{transform:scale(1.04);filter:drop-shadow(0 12px 40px rgba(212,160,23,0.9))}}`}</style>
       </div>
     </div>
   );
@@ -956,7 +960,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   const inputStyle = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:14, padding:"13px 16px", fontFamily:"inherit", fontSize:14, color:C.text, outline:"none", width:"100%", direction:isRTL?"rtl":"ltr" };
 
   return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       <FloatingLang lang={lang} setLang={setLang} side={isRTL?"left":"right"} />
 
       {/* Header */}
@@ -1391,7 +1395,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
 
   // HOME
   if(screen==="home") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       <FloatingLang lang={lang} setLang={setLang} />
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
@@ -1408,15 +1412,15 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         </div>
       </div>
       <TaxiMap origin={null} destination={null} showDrivers={true} />
-      <div style={{ margin:"14px 20px",background:C.card,borderRadius:24,padding:20,boxShadow:C.shadow }}>
-        <div style={{ fontWeight:800,fontSize:16,marginBottom:14,color:C.text }}>{t.whereGo}</div>
+      <div style={{ margin:"14px 20px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:20,boxShadow:C.shadow }}>
+        <div style={{ fontWeight:700,fontSize:16,marginBottom:14,color:C.text }}>{t.whereGo}</div>
         <div onClick={()=>setScreen("booking")} style={{ background:C.dark,borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",gap:10,cursor:"pointer" }}>
           <div style={{ width:10,height:10,borderRadius:"50%",background:C.orange }} />
           <span style={{ color:"#ffffff88",fontSize:14 }}>{t.searchDest}</span>
         </div>
-        <button onClick={()=>setScreen("booking")} style={{ width:"100%",marginTop:12,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:16,padding:"16px",color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer" }}>{t.searchCar}</button>
+        <button onClick={()=>setScreen("booking")} style={{ width:"100%",marginTop:12,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:"16px 16px 16px 6px",padding:"16px",color:"#fff",fontFamily:"inherit",fontWeight:700,fontSize:16,cursor:"pointer" }}>{t.searchCar}</button>
       </div>
-      <div style={{ margin:"0 20px",background:`linear-gradient(135deg,${C.dark},#1a2340)`,borderRadius:20,padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",border:`1px solid #d4a01733` }}>
+      <div style={{ margin:"0 20px",background:`linear-gradient(135deg,${C.dark},#1a2340)`,borderRadius:"26px 6px 26px 26px",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",border:`1px solid #d4a01733` }}>
         <div>
           <div style={{ fontSize:18,fontWeight:900,color:"#d4a017",letterSpacing:1 }}>AL-BURAQ</div>
           <div style={{ fontSize:12,color:"#d4a01799",marginTop:2 }}>{lang==="ar"?"🚕 خدمتك دائماً في الطريق":lang==="fr"?"🚕 Toujours en route pour vous":"🚕 Always on the road for you"}</div>
@@ -1431,7 +1435,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
 
   // BOOKING
   if(screen==="booking") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:30 }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:30 }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 12px",gap:12 }}>
@@ -1529,7 +1533,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
 
   // OFFER
   if(screen==="offer") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
@@ -1566,7 +1570,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
 
   // SEARCHING
   if(screen==="searching") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <TaxiMap origin={booking?.originPlace} destination={booking?.destPlace} showDrivers={true} />
@@ -1595,7 +1599,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
 
   // FOUND
   if(screen==="found") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
@@ -1650,7 +1654,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   if(screen==="ride"){
     const mins=Math.floor(elapsed/60),secs=elapsed%60;
     if(showRating) return (
-      <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+      <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
         {finalRating>0?(
           <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:24,gap:16 }}>
             <div style={{ fontSize:80 }}>{finalRating>=4?"🌟":"⭐"}</div>
@@ -1667,7 +1671,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       </div>
     );
     return (
-      <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+      <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
         {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
         {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
         {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
