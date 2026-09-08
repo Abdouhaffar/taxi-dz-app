@@ -890,6 +890,7 @@ export default function DriverDashboard({ user, onLogout }) {
   const [fcmToast,setFcmToast]=useState(null);
   const watchIdRef=useRef(null);
   const knownBookingIdsRef=useRef(new Set());
+  const [bookingsError,setBookingsError]=useState("");
 
   // تسجيل التوكن لاستقبال إشعارات Push (طلب جديد، رسالة، إلخ)
   useEffect(()=>{
@@ -981,15 +982,25 @@ export default function DriverDashboard({ user, onLogout }) {
 
   useEffect(()=>{
     if(!online||!user?.uid){setBookings([]);knownBookingIdsRef.current=new Set();return;}
-    const q=query(collection(db,"bookings"),where("status","==","pending"),orderBy("createdAt","desc"));
+    // ملاحظة: تعمّدنا عدم استخدام orderBy هنا رغم الحاجة لترتيب النتائج،
+    // لأن ذلك يتطلب فهرسًا مركّبًا (composite index) في Firestore — وإن لم
+    // يُنشأ هذا الفهرس، تفشل onSnapshot بصمت ولا تظهر أي طلبات للسائق إطلاقًا
+    // (وهذا بالضبط كان يسبب عدم ظهور الطلبات رغم وصول الإشعار). الترتيب الآن يتم يدويًا بعد الجلب.
+    const q=query(collection(db,"bookings"),where("status","==","pending"));
     const u=onSnapshot(q,snap=>{
+      setBookingsError("");
       const now=Date.now();
-      const fresh=snap.docs.map(d=>({id:d.id,...d.data()})).filter(b=>b.status==="pending"&&(now-(b.createdAt?.toMillis?.())||0)<10*60*1000);
+      const fresh=snap.docs.map(d=>({id:d.id,...d.data()}))
+        .filter(b=>b.status==="pending"&&(now-(b.createdAt?.toMillis?.())||0)<10*60*1000)
+        .sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
       const freshIds=new Set(fresh.map(b=>b.id));
       const isNew=fresh.some(b=>!knownBookingIdsRef.current.has(b.id));
       if(isNew && knownBookingIdsRef.current.size>0) alertNewBooking(); // لا ننبّه عند أول تحميل، فقط عند وصول طلب جديد فعلاً
       knownBookingIdsRef.current=freshIds;
       setBookings(fresh);
+    }, err=>{
+      console.error("bookings onSnapshot error:", err);
+      setBookingsError(err.code==="permission-denied"?"🔒 قواعد Firestore ترفض قراءة الطلبات":"⚠️ تعذر تحميل الطلبات: "+(err.message||err.code));
     });
     return()=>u();
   },[online,user?.uid]);
@@ -1094,6 +1105,7 @@ export default function DriverDashboard({ user, onLogout }) {
         {online&&<div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:10,padding:"8px 14px",fontSize:13,color:C.green,fontWeight:700,display:"flex",alignItems:"center",gap:8 }}>
           <span style={{ width:8,height:8,borderRadius:"50%",background:C.green,display:"inline-block",animation:"pulse 2s infinite" }} />🟢 متصل · {bookings.length} طلب
         </div>}
+        {bookingsError&&<div style={{ background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:10,padding:"8px 14px",fontSize:12,color:C.red,fontWeight:700,marginTop:8 }}>{bookingsError}</div>}
       </div>
 
       <div style={{ paddingBottom:100 }}>
@@ -1285,4 +1297,3 @@ export default function DriverDashboard({ user, onLogout }) {
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
-}
