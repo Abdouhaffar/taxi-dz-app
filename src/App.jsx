@@ -13,7 +13,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 // Cloud Functions منشورة على europe-west1 — غيّر المنطقة إذا نشرت في مكان آخر
 const cloudFunctions = getFunctions(undefined, "europe-west1");
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } from "@react-google-maps/api";
-import DriverDashboard from "./DriverDashboard";
+import DriverDashboard from "./DriverDashboard2";
 
 const LIBRARIES = ["places"];
 
