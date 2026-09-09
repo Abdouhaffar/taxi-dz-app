@@ -63,7 +63,7 @@ const Badge = ({ color, children }) => (
 );
 
 const StatCard = ({ icon, label, value, sub, color, trend }) => (
-  <div style={{ background: C.card, borderRadius: 12, padding: "20px 22px", border: `1px solid ${C.border}`, position: "relative", overflow: "hidden" }}>
+  <div style={{ background: C.card, borderRadius: "4px 16px 16px 16px", padding: "20px 22px", border: `1px solid ${C.border}`, position: "relative", overflow: "hidden" }}>
     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${color}, transparent)` }} />
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
       <div>
@@ -140,8 +140,8 @@ function AdminLogin({ onLogin }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cairo', sans-serif", direction: "rtl" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap'); *{box-sizing:border-box;margin:0;padding:0}`}</style>
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'IBM Plex Sans Arabic',Cairo,sans-serif", direction: "rtl" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap'); *{box-sizing:border-box;margin:0;padding:0}`}</style>
       <div style={{ width: "100%", maxWidth: 420, padding: 24 }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <div style={{ width: 64, height: 64, borderRadius: 16, background: "linear-gradient(135deg, #1f6feb, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 16px", boxShadow: "0 8px 32px #1f6feb44" }}>🛡️</div>
@@ -149,7 +149,7 @@ function AdminLogin({ onLogin }) {
           <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>لوحة التحكم الإدارية</div>
         </div>
 
-        <div style={{ background: C.card, borderRadius: 16, padding: 28, border: `1px solid ${C.border}`, boxShadow: "0 16px 48px rgba(0,0,0,0.4)" }}>
+        <div style={{ background: C.card, borderRadius: "6px 22px 22px 22px", padding: 28, border: `1px solid ${C.border}`, boxShadow: "0 16px 48px rgba(0,0,0,0.4)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
               <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6, fontWeight: 600 }}>البريد الإلكتروني</div>
@@ -260,7 +260,7 @@ function Dashboard({ drivers, passengers, admins }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 14, display: "flex", justifyContent: "space-between" }}>
             <span>⏳ أحدث الطلبات المعلقة</span>
             <Badge color={C.orange}>{pending.length}</Badge>
@@ -278,7 +278,7 @@ function Dashboard({ drivers, passengers, admins }) {
           ))}
         </div>
 
-        <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 14 }}>🕐 آخر النشاطات</div>
           {activity.map((a, i) => (
             <div key={i} style={{ display: "flex", gap: 12, alignItems: "center", padding: "9px 0", borderBottom: i < activity.length - 1 ? `1px solid ${C.border}` : "none" }}>
@@ -372,7 +372,7 @@ function DriversPanel({ drivers, isSuperAdmin }) {
             style={{ width: "100%", background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: "inherit", fontSize: 13, color: C.text, outline: "none", direction: "rtl" }} />
         </div>
 
-        <div style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+        <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", border: `1px solid ${C.border}`, overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 1fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
             <span>السائق</span>
             <span>السيارة</span>
@@ -522,7 +522,7 @@ function PassengersPanel({ passengers, isSuperAdmin }) {
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 بحث بالاسم، البريد، الهاتف..."
         style={{ width: "100%", maxWidth: 400, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: "inherit", fontSize: 13, color: C.text, outline: "none", direction: "rtl", marginBottom: 16 }} />
 
-      <div style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+      <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", border: `1px solid ${C.border}`, overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase" }}>
           <span>الراكب</span>
           <span>الهاتف</span>
@@ -612,7 +612,7 @@ function AdminsPanel({ admins, currentAdmin }) {
         {error && <div style={{ fontSize: 12, color: C.red, marginTop: 8 }}>{error}</div>}
       </div>
 
-      <div style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+      <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", border: `1px solid ${C.border}`, overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase" }}>
           <span>الاسم</span>
           <span>البريد</span>
@@ -673,7 +673,7 @@ function ReportsPanel({ drivers, passengers }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 16 }}>📍 أكثر الولايات نشاطاً</div>
           {topWilayas.length === 0 && <div style={{ color: C.textMuted, fontSize: 13 }}>لا توجد بيانات بعد</div>}
           {topWilayas.map(([wilaya, count], i) => (
@@ -689,7 +689,7 @@ function ReportsPanel({ drivers, passengers }) {
           ))}
         </div>
 
-        <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 16 }}>🚗 أكثر الماركات شيوعاً</div>
           {topBrands.length === 0 && <div style={{ color: C.textMuted, fontSize: 13 }}>لا توجد بيانات بعد</div>}
           {topBrands.map(([brand, count]) => (
@@ -773,7 +773,7 @@ function AnalyticsPanel({ bookings }) {
         <StatCard icon="⏱️" label="متوسط وقت الانتظار" value={avgWait !== null ? `${avgWait.toFixed(1)} دق` : "—"} sub="من الطلب حتى قبول سائق" color={C.blue} />
       </div>
 
-      <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
+      <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", padding: 20, border: `1px solid ${C.border}` }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 16 }}>💰 الإيرادات اليومية (آخر 7 أيام)</div>
         {totalRevenue7d === 0 && <div style={{ color: C.textMuted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>لا توجد رحلات مكتملة في هذه الفترة بعد</div>}
         <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 160, padding: "0 4px" }}>
@@ -799,7 +799,7 @@ function SettingsPanel({ admin }) {
         <div style={{ fontSize: 13, color: C.textMuted }}>إعدادات التطبيق والنظام</div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 16 }}>💰 نظام التسعير</div>
           {[
             { label: "السعر لكل كيلومتر", value: "30 دج" },
@@ -813,7 +813,7 @@ function SettingsPanel({ admin }) {
             </div>
           ))}
         </div>
-        <div style={{ background: C.card, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 16 }}>📱 معلومات التطبيق</div>
           {[
             { label: "اسم التطبيق", value: "TaxiDZ" },
@@ -885,7 +885,7 @@ function ComplaintsPanel({ reports, drivers, passengers, isSuperAdmin }) {
         ))}
       </div>
 
-      <div style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+      <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", border: `1px solid ${C.border}`, overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1.5fr 2fr 1fr 1fr", padding: "12px 16px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase" }}>
           <span>المُبلَّغ عنه</span><span>المُبلِّغ</span><span>السبب</span><span>الحالة</span><span>إجراء</span>
         </div>
@@ -1091,8 +1091,8 @@ export default function AdminApp() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cairo', sans-serif", direction: "rtl", display: "flex" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap'); *{box-sizing:border-box;margin:0;padding:0} ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:#21262d;border-radius:4px} select option{background:#0d1117;color:#e6edf3}`}</style>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'IBM Plex Sans Arabic',Cairo,sans-serif", direction: "rtl", display: "flex" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap'); *{box-sizing:border-box;margin:0;padding:0} ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:#21262d;border-radius:4px} select option{background:#0d1117;color:#e6edf3}`}</style>
 
       <Sidebar tab={tab} setTab={setTab} admin={admin} onLogout={() => setAdmin(null)} counts={counts} />
 
