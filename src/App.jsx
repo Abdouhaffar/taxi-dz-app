@@ -13,7 +13,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 // Cloud Functions منشورة على europe-west1 — غيّر المنطقة إذا نشرت في مكان آخر
 const cloudFunctions = getFunctions(undefined, "europe-west1");
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } from "@react-google-maps/api";
-import DriverDashboard from "./DriverDashboard2";
+import DriverDashboard from "./DriverDashboard";
 
 const LIBRARIES = ["places"];
 
@@ -685,7 +685,6 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
           <button key={l.code} onClick={()=>setLang(l.code)} style={{ padding:"6px 12px",borderRadius:20,border:`1.5px solid ${lang===l.code?"#d4a017":"#ffffff33"}`,background:lang===l.code?"#d4a01722":"transparent",color:lang===l.code?"#d4a017":"#ffffff88",fontFamily:"inherit",fontWeight:lang===l.code?700:400,fontSize:13,cursor:"pointer" }}>{l.flag}</button>
         ))}
       </div>
-      <img src="/logo192.png" alt="AL-BURAQ" style={{ width:152,height:152,objectFit:"contain",marginBottom:14,filter:"drop-shadow(0 10px 36px rgba(212,160,23,0.55))",animation:"buraqRise 0.9s cubic-bezier(0.16,1,0.3,1) both" }} onError={e=>e.target.style.display="none"} />
       <div style={{ fontSize:34,fontWeight:700,color:"#fff",marginBottom:6,letterSpacing:3,animation:"wordRise 0.7s ease 0.25s both" }}>AL-BURAQ</div>
       <div style={{ fontSize:13,color:"#d4a017",marginBottom:36,fontWeight:600,animation:"wordRise 0.7s ease 0.35s both" }}>{t.appTagline}</div>
 
@@ -1448,7 +1447,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         <div style={{ background:C.greenLight,borderRadius:20,padding:"6px 14px",fontSize:13,color:C.greenDark,fontWeight:700 }}>📏 {distanceKm.toFixed(1)} km</div>
         <div style={{ background:C.orangeLight,borderRadius:20,padding:"6px 14px",fontSize:14,color:C.orange,fontWeight:900 }}>💰 {suggestedPrice} DA</div>
       </div>}
-      <div style={{ margin:"14px 20px",background:C.card,borderRadius:24,padding:20,boxShadow:C.shadow }}>
+      <div style={{ margin:"14px 20px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:20,boxShadow:C.shadow }}>
         <button onClick={handleGPS} disabled={gpsLoading} style={{ width:"100%",background:gpsLoading?C.border:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",marginBottom:8,fontFamily:"inherit",fontWeight:700,fontSize:14,color:gpsLoading?C.textMuted:C.greenDark }}>
           <span style={{ fontSize:18 }}>📍</span>{gpsLoading?t.locating:t.useMyLocation}
         </button>
@@ -1541,7 +1540,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         <BackBtn onBack={()=>setScreen("booking")} />
         <div><div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.offerPrice}</div><div style={{ fontSize:12,color:C.textMuted }}>{distanceKm.toFixed(1)} كم</div></div>
       </div>
-      <div style={{ margin:"0 20px 14px",background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow,textAlign:"center" }}>
+      <div style={{ margin:"0 20px 14px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:24,boxShadow:C.shadow,textAlign:"center" }}>
         <div style={{ fontSize:13,color:C.textMuted,marginBottom:4 }}>{t.yourOffer}</div>
         <div style={{ fontSize:64,fontWeight:900,color:offerPrice>suggestedPrice?C.blue:C.green,lineHeight:1,transition:"color 0.3s" }}>{offerPrice}</div>
         <div style={{ fontSize:18,color:C.textMuted,marginBottom:20 }}>{t.dzd}</div>
@@ -1606,7 +1605,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
       {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
       <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="pickup" lang={lang} />
-      <div style={{ margin:"14px 20px",background:C.card,borderRadius:24,padding:22,boxShadow:C.shadow }}>
+      <div style={{ margin:"14px 20px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:22,boxShadow:C.shadow }}>
         <div style={{ textAlign:"center",marginBottom:16 }}>
           <div style={{ fontSize:44 }}>🎉</div>
           <div style={{ fontWeight:900,fontSize:20,color:C.text }}>{t.accepted}</div>
@@ -1627,7 +1626,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
               <div style={{ fontSize:11,color:C.textMuted }}>{booking?.distanceKm?.toFixed(1)} km</div>
             </div>
           </div>
-          <div style={{ background:C.dark,borderRadius:14,padding:12,textAlign:"center" }}>
+          <div style={{ background:C.dark,borderRadius:"14px 4px 14px 14px",padding:12,textAlign:"center" }}>
             <div style={{ fontSize:11,color:"#ffffff88",marginBottom:4 }}>{t.verifyCode} — {t.giveDriver}</div>
             <div style={{ fontSize:32,fontWeight:900,color:"#fff",letterSpacing:8 }}>{Math.floor(1000+Math.random()*9000)}</div>
           </div>
@@ -1678,7 +1677,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
         {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
         <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="ride" lang={lang} />
-        <div style={{ margin:"14px 20px",background:C.card,borderRadius:24,padding:20,boxShadow:C.shadow }}>
+        <div style={{ margin:"14px 20px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:20,boxShadow:C.shadow }}>
           <div style={{ display:"flex",justifyContent:"space-between",marginBottom:14 }}>
             <div style={{ background:C.greenLight,borderRadius:12,padding:"8px 14px" }}><div style={{ fontSize:10,color:C.green }}>{t.tripDuration}</div><div style={{ fontWeight:800,color:C.greenDark }}>{mins}:{secs.toString().padStart(2,"0")}</div></div>
             <div style={{ textAlign:"center" }}><div style={{ fontSize:11,color:C.textMuted }}>{t.dest}</div><div style={{ fontWeight:700,color:C.text,fontSize:12,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{destText}</div></div>
