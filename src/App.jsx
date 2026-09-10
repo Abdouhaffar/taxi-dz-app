@@ -891,15 +891,27 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
         setLoading(false);
         return;
       }
+      // نفس الرقم = نفس الشخص: إن كان مسجّلاً بالفعل بالدور الآخر (راكب/سائق)،
+      // نستخدم نفس الاسم المسجَّل هناك بدل اسم قد يكتبه مختلفاً بالخطأ هذه المرة
+      let finalName = name;
+      try {
+        const otherCol = isPassenger ? "drivers" : "passengers";
+        const otherSnap = await getDoc(doc(db, otherCol, u.uid));
+        if (otherSnap.exists()) {
+          const od = otherSnap.data();
+          const otherName = isPassenger ? `${od.firstName||""} ${od.lastName||""}`.trim() : od.name;
+          if (otherName) finalName = otherName;
+        }
+      } catch(e){}
       await setDoc(doc(db, col, u.uid), {
-        uid:u.uid, name, phone:phoneF, pinCode,
+        uid:u.uid, name:finalName, phone:phoneF, pinCode,
         role, status:role==="driver"?"pending":"active",
         verificationStatus:role==="driver"?"none":null,
         rating:0, totalRatings:0, totalRides:0, points:0,
         referralCode:generateReferralCode(u.uid), referralCount:0,
         createdAt:serverTimestamp()
       });
-      if (isPassenger) { localStorage.setItem("taxidz_name",name); localStorage.setItem("taxidz_phone",phoneF); }
+      if (isPassenger) { localStorage.setItem("taxidz_name",finalName); localStorage.setItem("taxidz_phone",phoneF); }
       localStorage.setItem("taxidz_role", role);
       try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,col,u.uid),{fcmToken},{merge:true}); } catch(e){}
       onSuccess(role);
