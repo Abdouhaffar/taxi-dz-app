@@ -629,7 +629,7 @@ function TaxiMap({ origin, destination, showDrivers, height=220, onMapClick, pic
   return (
     <div style={{ margin:"0 20px",borderRadius:20,overflow:"hidden",position:"relative" }}>
       {picking&&<div style={{ position:"absolute",top:10,left:"50%",transform:"translateX(-50%)",zIndex:10,background:"rgba(0,0,0,0.75)",color:"#fff",padding:"6px 16px",borderRadius:20,fontSize:12,fontWeight:700,whiteSpace:"nowrap" }}>{picking}</div>}
-      <GoogleMap mapContainerStyle={{ width:"100%",height:`${height}px`,cursor:onMapClick?"crosshair":"grab" }} center={origin||userLocation} zoom={13} onLoad={onLoad} onClick={onMapClick?e=>onMapClick(e.latLng):undefined} options={{ styles:MAP_STYLE,disableDefaultUI:true,zoomControl:true }}>
+      <GoogleMap mapContainerStyle={{ width:"100%",height:`${height}px`,cursor:onMapClick?"crosshair":"grab" }} center={origin||userLocation} zoom={13} onLoad={onLoad} onClick={onMapClick?e=>onMapClick(e.latLng):undefined} options={{ styles:MAP_STYLE,disableDefaultUI:true,zoomControl:true,clickableIcons:false }}>
         {!origin&&<Marker position={userLocation} />}
         {origin&&!directions&&<Marker position={origin} icon={{ url:makeMarker("📍",C.green),scaledSize:new window.google.maps.Size(40,40) }} />}
         {destination&&!directions&&<Marker position={destination} icon={{ url:makeMarker("🏁",C.orange),scaledSize:new window.google.maps.Size(40,40) }} />}
@@ -1237,6 +1237,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const [luggageDesc,setLuggageDesc]=useState("");
   const [noDrivers,setNoDrivers]=useState(false);
   const [submittingBooking,setSubmittingBooking]=useState(false);
+  const [restrictedMsg,setRestrictedMsg]=useState("");
   const [timer,setTimer]=useState(0);
   const [passengerGPS,setPassengerGPS]=useState(null);
   const [passengerData,setPassengerData]=useState(null);
@@ -1364,6 +1365,22 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const startSearch=async(price)=>{
     if(submittingBooking) return; // يمنع إرسال طلبين إذا ضغط المستخدم مرتين بسبب البطء المُدرَك
     setSubmittingBooking(true);
+    if(user?.uid){
+      try {
+        const pSnap = await getDoc(doc(db,"passengers",user.uid));
+        const restrictedUntil = pSnap.exists()?pSnap.data()?.restrictedUntil:null;
+        if(restrictedUntil && restrictedUntil > Date.now()){
+          const minsLeft = Math.ceil((restrictedUntil - Date.now())/60000);
+          const hrs = Math.floor(minsLeft/60), mins = minsLeft%60;
+          setRestrictedMsg(lang==="ar"?`⛔ تم تقييد حسابك مؤقتاً بسبب إلغاءات متكررة بعد قبول السائقين. يمكنك المحاولة بعد ${hrs} س ${mins} د`:
+            lang==="fr"?`⛔ Compte temporairement restreint suite à des annulations répétées. Réessayez dans ${hrs}h ${mins}min`:
+            `⛔ Account temporarily restricted due to repeated cancellations. Try again in ${hrs}h ${mins}min`);
+          setSubmittingBooking(false);
+          return;
+        }
+      } catch(e){}
+    }
+    setRestrictedMsg("");
     setTimer(0);setNoDrivers(false);setDriverLocation(null);
     setScreen("searching"); // ننتقل فورًا؛ باقي العمل يحدث في الخلفية دون تعليق الواجهة
     const oLL=getLatLng(originPlace),dLL=getLatLng(destPlace);
@@ -1389,7 +1406,38 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     setSubmittingBooking(false);
   };
 
-  const cancelBooking=async()=>{ if(bookingId){try{await updateDoc(doc(db,"bookings",bookingId),{status:"cancelled"});}catch(e){}} setBookingId(null);setScreen("home"); };
+  const LATE_CANCEL_LIMIT = 3; // عدد الإلغاءات بعد القبول المسموح بها خلال 24 ساعة قبل التقييد
+  const cancelBooking=async()=>{
+    if(!bookingId){ setBookingId(null);setScreen("home"); return; }
+    const wasAccepted = !!selectedDriver; // إن كان سائق قد قَبِل الرحلة فعلاً، هذا إلغاء "مكلف" يستحق التتبع
+    try{ await updateDoc(doc(db,"bookings",bookingId),{status:"cancelled"}); }catch(e){}
+    if(wasAccepted && user?.uid){
+      try {
+        const pRef = doc(db,"passengers",user.uid);
+        const pSnap = await getDoc(pRef);
+        const pd = pSnap.exists()?pSnap.data():{};
+        const now = Date.now();
+        const dayAgo = now - 24*60*60*1000;
+        const recent = (pd.lateCancelTimestamps||[]).filter(t=>t>dayAgo);
+        recent.push(now);
+        const update = { lateCancelTimestamps: recent };
+        if(recent.length >= LATE_CANCEL_LIMIT){
+          update.restrictedUntil = now + 24*60*60*1000; // تقييد 24 ساعة عن إنشاء طلبات جديدة
+          // تنبيه تلقائي للأدمن عبر نظام التبليغات الموجود أصلاً
+          try {
+            await addDoc(collection(db,"reports"),{
+              targetId:user.uid, targetName:passengerName||"راكب", targetType:"passenger",
+              reporterId:"system", reporterName:"النظام (تلقائي)",
+              reason:`إلغاء متكرر بعد القبول (${recent.length} مرات خلال 24 ساعة) — تم تقييد الحساب تلقائياً`,
+              status:"pending", createdAt:serverTimestamp(),
+            });
+          } catch(e){}
+        }
+        await setDoc(pRef, update, {merge:true});
+      } catch(e){}
+    }
+    setBookingId(null);setScreen("home");
+  };
   const finishRide=async()=>{ if(bookingId){try{await updateDoc(doc(db,"bookings",bookingId),{status:"completed",completedAt:serverTimestamp()});}catch(e){}} setShowRating(true); };
   const resetTrip=()=>{ setScreen("home");setShowRating(false);setDistanceKm(0);setBookingId(null);setFinalRating(0);setSelectedDriver(null);setShowChat(false);driverArrivedNotified.current=false; };
 
@@ -1561,6 +1609,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         </div>
       </div>
       <div style={{ margin:"0 20px" }}>
+        {restrictedMsg&&<div style={{ background:C.redLight||"#ef444422",border:"1px solid #ef444444",borderRadius:12,padding:"12px 14px",fontSize:13,color:"#ef4444",marginBottom:12,textAlign:"center" }}>{restrictedMsg}</div>}
         <button onClick={()=>startSearch(offerPrice)} disabled={submittingBooking} style={{ width:"100%",background:submittingBooking?C.border:`linear-gradient(135deg,${C.dark},#1a2340)`,border:"1px solid #d4a01733",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:17,cursor:submittingBooking?"default":"pointer",opacity:submittingBooking?0.7:1 }}>
           {t.sendOffer} — {offerPrice} DA
         </button>
