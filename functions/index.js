@@ -398,6 +398,45 @@ const TWILIO_VERIFY_SID = defineSecret("TWILIO_VERIFY_SERVICE_SID");
 
 const OTP_REGION = "europe-west1"; // يطابق المنطقة في App.jsx (cloudFunctions)
 
+// ===== تسجيل الدخول بكود الحساب (بدون OTP) =====
+// يُصلح خللاً جوهرياً: تسجيل الدخول القديم كان يستخدم Firebase Anonymous Auth،
+// الذي يمنح كل جلسة معرّفاً (uid) عشوائياً مختلفاً عن معرّف الحساب الحقيقي المسجَّل
+// وقت التسجيل (المرتبط برقم الهاتف عبر verifyOtpTwilio) — فيبدو الحساب "جديداً"
+// في كل تسجيل دخول رغم وجوده فعلاً. هذه الدالة تُسجّل الدخول بنفس المعرّف الحقيقي دائماً.
+exports.loginWithPin = onCall(
+  { region: OTP_REGION },
+  async (request) => {
+    const phone = normalizePhone(request.data?.phone);
+    const pin = request.data?.pin;
+    if (!phone || !pin) {
+      throw new HttpsError("invalid-argument", "بيانات ناقصة");
+    }
+    let userRecord;
+    try {
+      userRecord = await admin.auth().getUserByPhoneNumber(phone);
+    } catch (e) {
+      throw new HttpsError("not-found", "الرقم غير مسجل");
+    }
+    const uid = userRecord.uid;
+    const [driverSnap, passengerSnap] = await Promise.all([
+      admin.firestore().collection("drivers").doc(uid).get(),
+      admin.firestore().collection("passengers").doc(uid).get(),
+    ]);
+    const driverData = driverSnap.exists ? driverSnap.data() : null;
+    const passengerData = passengerSnap.exists ? passengerSnap.data() : null;
+    const pinMatches = (driverData && driverData.pinCode === pin) || (passengerData && passengerData.pinCode === pin);
+    if (!pinMatches) {
+      throw new HttpsError("invalid-argument", "كود الحساب غير صحيح");
+    }
+    const customToken = await admin.auth().createCustomToken(uid);
+    return {
+      customToken, uid,
+      hasDriver: !!driverData, hasPassenger: !!passengerData,
+      driverName: driverData?.name || null, passengerName: passengerData?.name || null,
+    };
+  }
+);
+
 // ===== التحقق من وجود حساب مسبقاً بنفس الرقم (قبل إرسال أي SMS) =====
 exports.checkPhoneRegistered = onCall(
   { region: OTP_REGION },
