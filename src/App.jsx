@@ -772,52 +772,35 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
     setLoading(true); setError("");
     try {
       const fullPhone = `+213${digits.replace(/^0/,"")}`;
-      
-      // تسجيل دخول مجهول مؤقت للوصول لـ Firestore
-      const { signInAnonymously } = await import("firebase/auth");
-      await signInAnonymously(auth);
-      
-      const cols = isPassenger ? ["passengers","drivers"] : ["drivers","passengers"];
-      let found = false;
-      for (const col of cols) {
-        const q = await getDocs(query(collection(db, col), where("phone","==",fullPhone)));
-        if (!q.empty) {
-          const docData = q.docs[0].data();
-          if (docData.pinCode === loginPin) {
-            const targetCol = isPassenger ? "passengers" : "drivers";
-            if (col !== targetCol) {
-              await setDoc(doc(db, targetCol, q.docs[0].id), {
-                ...docData, role,
-                status: role==="driver"?"pending":"active",
-                verificationStatus: role==="driver"?"none":null
-              }, { merge:true });
-            }
-            if (isPassenger) {
-              localStorage.setItem("taxidz_name", docData.name||"");
-              localStorage.setItem("taxidz_phone", fullPhone);
-            }
-            localStorage.setItem("taxidz_role", role);
-            localStorage.setItem("taxidz_uid", q.docs[0].id);
-            try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,targetCol,q.docs[0].id),{fcmToken},{merge:true}); } catch(e){}
-            found = true;
-            onSuccess(role);
-            break;
-          } else {
-            // كود خاطئ - سجّل خروج المجهول
-            await signOut(auth);
-            setError(lang==="ar"?"كود الحساب غير صحيح":"Code incorrect");
-            setLoading(false);
-            return;
-          }
-        }
+      const loginWithPin = httpsCallable(cloudFunctions, "loginWithPin");
+      const { data } = await loginWithPin({ phone: fullPhone, pin: loginPin });
+      await signInWithCustomToken(auth, data.customToken);
+      const targetCol = isPassenger ? "passengers" : "drivers";
+      const hasTarget = isPassenger ? data.hasPassenger : data.hasDriver;
+      if (!hasTarget) {
+        // أول مرة يستخدم فيها هذا الحساب هذا الدور تحديداً — أنشئ ملفاً جديداً بنفس المعرّف الحقيقي
+        // (وليس مستنداً جديداً منفصلاً)، حتى يبقى نفس الشخص/الرقم بحساب واحد موحّد دائماً
+        await setDoc(doc(db, targetCol, data.uid), {
+          uid: data.uid, phone: fullPhone,
+          role, status: role==="driver"?"pending":"active",
+          verificationStatus: role==="driver"?"none":null,
+        }, { merge:true });
       }
-      if (!found) {
-        await signOut(auth);
-        setError(lang==="ar"?"الرقم غير مسجل — أنشئ حساباً جديداً":"Numéro non inscrit");
+      if (isPassenger) {
+        localStorage.setItem("taxidz_name", data.passengerName||data.driverName||"");
+        localStorage.setItem("taxidz_phone", fullPhone);
       }
+      localStorage.setItem("taxidz_role", role);
+      localStorage.setItem("taxidz_uid", data.uid);
+      try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,targetCol,data.uid),{fcmToken},{merge:true}); } catch(e){}
+      onSuccess(role);
     } catch(e) {
       console.log("Login error:", e.code, e.message);
-      setError(lang==="ar"?`خطأ: ${e.code||e.message}`:`Erreur: ${e.code||e.message}`);
+      const notFound = e.code==="functions/not-found";
+      const wrongPin = e.code==="functions/invalid-argument";
+      setError(notFound?(lang==="ar"?"الرقم غير مسجل — أنشئ حساباً جديداً":"Numéro non inscrit"):
+        wrongPin?(lang==="ar"?"كود الحساب غير صحيح":"Code incorrect"):
+        (lang==="ar"?`خطأ: ${e.code||e.message}`:`Erreur: ${e.code||e.message}`));
     }
     setLoading(false);
   };
