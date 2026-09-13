@@ -677,16 +677,17 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
       `}</style>
       {/* خلفية الصورة */}
       <div style={{ position:"absolute",inset:0,background:"#07130d" }} />
-      <div style={{ position:"absolute",inset:0,backgroundImage:"url('/logo512.png')",backgroundSize:"66%",backgroundPosition:"center",backgroundRepeat:"no-repeat",filter:"brightness(0.65) saturate(1.1)",zIndex:0 }} />
-      <div style={{ position:"absolute",inset:0,background:"linear-gradient(160deg,rgba(4,16,11,0.75) 0%,rgba(6,42,26,0.55) 45%,rgba(4,16,11,0.85) 100%)",zIndex:1 }} />
+      <div style={{ position:"absolute",inset:0,backgroundImage:"url('/logo512.png')",backgroundSize:"cover",backgroundPosition:"center 35%",backgroundRepeat:"no-repeat",filter:"brightness(0.5) saturate(1.05)",zIndex:0 }} />
+      <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(4,16,11,0.55) 0%,rgba(6,42,26,0.5) 40%,rgba(4,16,11,0.92) 100%)",zIndex:1 }} />
       <div style={{ position:"relative",zIndex:2,display:"flex",flexDirection:"column",alignItems:"center",width:"100%" }}>
-      <div style={{ position:"absolute",top:48,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6 }}>
+      <div style={{ position:"absolute",top:16,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6 }}>
         {[{code:"ar",flag:"🇩🇿"},{code:"fr",flag:"🇫🇷"},{code:"en",flag:"🇬🇧"}].map(l=>(
-          <button key={l.code} onClick={()=>setLang(l.code)} style={{ padding:"6px 12px",borderRadius:20,border:`1.5px solid ${lang===l.code?"#d4a017":"#ffffff33"}`,background:lang===l.code?"#d4a01722":"transparent",color:lang===l.code?"#d4a017":"#ffffff88",fontFamily:"inherit",fontWeight:lang===l.code?700:400,fontSize:13,cursor:"pointer" }}>{l.flag}</button>
+          <button key={l.code} onClick={()=>setLang(l.code)} style={{ padding:"6px 12px",borderRadius:20,border:`1.5px solid ${lang===l.code?"#d4a017":"#ffffff33"}`,background:lang===l.code?"#d4a01722":"rgba(7,19,13,0.55)",color:lang===l.code?"#d4a017":"#ffffff88",fontFamily:"inherit",fontWeight:lang===l.code?700:400,fontSize:13,cursor:"pointer" }}>{l.flag}</button>
         ))}
       </div>
-      <div style={{ fontSize:34,fontWeight:700,color:"#fff",marginBottom:6,letterSpacing:3,animation:"wordRise 0.7s ease 0.25s both" }}>AL-BURAQ</div>
-      <div style={{ fontSize:13,color:"#d4a017",marginBottom:36,fontWeight:600,animation:"wordRise 0.7s ease 0.35s both" }}>{t.appTagline}</div>
+      <div style={{ height:38 }} />
+      <div style={{ fontSize:34,fontWeight:700,color:"#fff",marginBottom:6,letterSpacing:3,animation:"wordRise 0.7s ease 0.25s both",textShadow:"0 2px 12px rgba(0,0,0,0.5)" }}>AL-BURAQ</div>
+      <div style={{ fontSize:13,color:"#d4a017",marginBottom:36,fontWeight:600,animation:"wordRise 0.7s ease 0.35s both",textShadow:"0 1px 8px rgba(0,0,0,0.6)" }}>{t.appTagline}</div>
 
       {/* حساب واحد للاتجاهين */}
       <div style={{ background:"#ffffff0d",borderRadius:"4px 18px 18px 18px",padding:"11px 20px",marginBottom:26,border:"1px solid #ffffff1f",textAlign:"center",animation:"wordRise 0.7s ease 0.4s both" }}>
