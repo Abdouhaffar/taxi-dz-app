@@ -11,3 +11,12 @@ root.render(
     {isAdmin ? <AdminApp /> : <App />}
   </React.StrictMode>
 );
+
+// تسجيل Service Worker فور تحميل الصفحة (وليس فقط عند طلب إذن الإشعارات لاحقًا) —
+// هذا يُحسّن قابلية تثبيت التطبيق كـ PWA، ويجعل المتصفح جاهزًا لاستقبال Push في
+// الخلفية بأسرع وقت ممكن بدل انتظار تفاعل المستخدم أولاً.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(() => {});
+  });
+}
