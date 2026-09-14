@@ -113,6 +113,24 @@ exports.onNewBooking = functions.firestore
     const { bookingId } = context.params;
     const { originLat, originLng, price, distanceKm, passengers, luggageWeight } = booking;
 
+    // قفل يمنع الإرسال المزدوج — onCreate قد يُستدعى أكثر من مرة لنفس الحدث
+    // (موثّق رسميًا في Firebase)، وهذا كان يسبب وصول نفس الإشعار مرتين للسائق.
+    const bookingRef = db.collection("bookings").doc(bookingId);
+    try {
+      const alreadyNotified = await db.runTransaction(async (tx) => {
+        const freshSnap = await tx.get(bookingRef);
+        if (freshSnap.data()?.notifiedAt) return true; // أُرسل من قبل بالفعل
+        tx.update(bookingRef, { notifiedAt: admin.firestore.FieldValue.serverTimestamp() });
+        return false;
+      });
+      if (alreadyNotified) {
+        console.log(`⏭️ تم تجاهل استدعاء مكرر لنفس الطلب ${bookingId}`);
+        return null;
+      }
+    } catch (e) {
+      console.error("خطأ في قفل منع التكرار:", e);
+    }
+
     try {
       const driversSnap = await db.collection("drivers")
         .where("isOnline", "==", true)
