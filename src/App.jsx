@@ -188,16 +188,21 @@ const T = {
 };
 
 const MAP_STYLE = [
-  { featureType:"all", elementType:"geometry", stylers:[{color:"#efe9f0"}] },
+  { elementType:"geometry", stylers:[{color:"#f5f5f5"}] },
+  { elementType:"labels.icon", stylers:[{visibility:"off"}] },
+  { elementType:"labels.text.fill", stylers:[{color:"#616161"}] },
+  { elementType:"labels.text.stroke", stylers:[{color:"#f5f5f5"}] },
   { featureType:"road", elementType:"geometry", stylers:[{color:"#ffffff"}] },
-  { featureType:"road.arterial", elementType:"geometry", stylers:[{color:"#f8b4bd"}] },
-  { featureType:"road.highway", elementType:"geometry", stylers:[{color:"#ff5a70"}] },
-  { featureType:"water", elementType:"geometry", stylers:[{color:"#aad3df"}] },
-  { featureType:"poi.park", elementType:"geometry", stylers:[{color:"#c8e6c9"}] },
+  { featureType:"road.arterial", elementType:"labels.text.fill", stylers:[{color:"#757575"}] },
+  { featureType:"road.highway", elementType:"geometry", stylers:[{color:"#dadada"}] },
+  { featureType:"poi", elementType:"geometry", stylers:[{color:"#eeeeee"}] },
+  { featureType:"poi.park", elementType:"geometry", stylers:[{color:"#e5e5e5"}] },
+  { featureType:"transit", stylers:[{visibility:"off"}] },
+  { featureType:"water", elementType:"geometry", stylers:[{color:"#c9d6df"}] },
 ];
 
 const C = {
-  bg:"#f6f2f6", page:"linear-gradient(180deg,#0b1d4a 0%,#2d2a6e 24%,#8a3f86 50%,#e0507a 76%,#f59a4a 100%)", card:"#ffffff", dark:"#1c1a1d",
+  bg:"#f3f3f3", page:"#f3f3f3", brand:"linear-gradient(180deg,#0b1d4a 0%,#2d2a6e 24%,#8a3f86 50%,#e0507a 76%,#f59a4a 100%)", card:"#ffffff", dark:"#1c1a1d",
   green:"#c4001d", greenLight:"#fde8eb", greenDark:"#8f0015",
   orange:"#e0334d", orangeLight:"#fde8eb",
   red:"#ef4444", redLight:"#fef2f2",
@@ -206,8 +211,10 @@ const C = {
   gold:"#ff5a70", goldLight:"#fde8eb",
   googleBlue:"#1c1a1d",
   text:"#1c1a1d", textMuted:"#7a6268", textLight:"#b39ba0",
-  border:"#e6dfe8", shadow:"0 4px 24px rgba(0,0,0,0.08)",
+  border:"#e4e4e4", shadow:"0 4px 24px rgba(0,0,0,0.08)",
 };
+
+const OTP_LEN = 4; // smssak يرسل رمزاً من 4 أرقام
 
 const RIDE_TYPES_IDS = ["economy","comfort","xl"];
 const RIDE_MULTIPLIERS = { economy:1.0, comfort:1.4, xl:1.8 };
@@ -222,7 +229,7 @@ const REPORT_REASONS = {
 
 // ===== HELPERS =====
 function BackBtn({ onBack }) {
-  return <button onClick={onBack} style={{ width:40,height:40,borderRadius:12,background:C.card,border:`1px solid ${C.border}`,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>←</button>;
+  return <button onClick={onBack} style={{ width:42,height:42,borderRadius:"50%",background:C.card,border:"none",boxShadow:"0 2px 10px rgba(0,0,0,0.12)",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>←</button>;
 }
 
 function StarRating({ rating, onRate, size=32 }) {
@@ -289,7 +296,7 @@ function ReportModal({ targetId, targetName, targetType, reporterId, reporterNam
           <div style={{ textAlign:"center",padding:"20px 0" }}>
             <div style={{ fontSize:56,marginBottom:12 }}>✅</div>
             <div style={{ fontWeight:900,fontSize:18,color:C.text,marginBottom:8 }}>{lang==="ar"?"تم إرسال التبليغ":lang==="fr"?"Signalement envoyé":"Report submitted"}</div>
-            <button onClick={onClose} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:14,padding:"12px 32px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>OK</button>
+            <button onClick={onClose} style={{ background:`${C.dark}`,border:"none",borderRadius:14,padding:"12px 32px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>OK</button>
           </div>
         ):(
           <>
@@ -336,7 +343,7 @@ function PasswordResetModal({ onClose, lang }) {
           <div style={{ textAlign:"center" }}>
             <div style={{ fontSize:56,marginBottom:12 }}>📧</div>
             <div style={{ fontWeight:900,fontSize:18,color:C.text,marginBottom:8 }}>{t.resetSent}</div>
-            <button onClick={onClose} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:14,padding:"12px 32px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>OK</button>
+            <button onClick={onClose} style={{ background:`${C.dark}`,border:"none",borderRadius:14,padding:"12px 32px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>OK</button>
           </div>
         ):(
           <>
@@ -390,7 +397,7 @@ function RatingModal({ booking, driver, onSubmit, onSkip, lang }) {
         {rating>0&&<textarea value={comment} onChange={e=>setComment(e.target.value)} rows={3} style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 16px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",resize:"none",marginTop:16 }} />}
         <div style={{ display:"flex",gap:10,marginTop:16 }}>
           <button onClick={onSkip} style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:14,color:C.textMuted,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>{t.skip}</button>
-          <button onClick={handleSubmit} disabled={!rating||saving} style={{ flex:2,background:rating?`linear-gradient(135deg,${C.green},${C.greenDark})`:C.border,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:rating?"pointer":"default" }}>
+          <button onClick={handleSubmit} disabled={!rating||saving} style={{ flex:2,background:rating?`${C.dark}`:C.border,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:rating?"pointer":"default" }}>
             {saving?t.loading:t.sendRating}
           </button>
         </div>
@@ -447,7 +454,7 @@ function ChatBox({ bookingId, userId, userName, otherName, lang, onClose }) {
           const isMe=m.senderId===userId;
           return (
             <div key={m.id} style={{ display:"flex",justifyContent:isMe?(isRTL?"flex-start":"flex-end"):(isRTL?"flex-end":"flex-start") }}>
-              <div style={{ maxWidth:"75%",background:isMe?`linear-gradient(135deg,${C.green},${C.greenDark})`:"#fff",borderRadius:isMe?"18px 18px 4px 18px":"18px 18px 18px 4px",padding:"10px 14px",boxShadow:C.shadow }}>
+              <div style={{ maxWidth:"75%",background:isMe?`${C.dark}`:"#fff",borderRadius:isMe?"18px 18px 4px 18px":"18px 18px 18px 4px",padding:"10px 14px",boxShadow:C.shadow }}>
                 <div style={{ fontSize:14,color:isMe?"#fff":C.text,fontWeight:500 }}>{m.text}</div>
                 <div style={{ fontSize:10,color:isMe?"#ffffff88":C.textLight,marginTop:4,textAlign:"left" }}>
                   {m.createdAt?.toDate?.()?.toLocaleTimeString("ar",{hour:"2-digit",minute:"2-digit"})||""}
@@ -463,7 +470,7 @@ function ChatBox({ bookingId, userId, userName, otherName, lang, onClose }) {
       <div style={{ background:"#fff",padding:"12px 16px",borderTop:`1px solid ${C.border}`,display:"flex",gap:10,alignItems:"center" }}>
         <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder={t.typeMessage}
           style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:24,padding:"12px 18px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:isRTL?"rtl":"ltr" }} />
-        <button onClick={sendMsg} disabled={!text.trim()} style={{ width:46,height:46,borderRadius:"50%",background:text.trim()?`linear-gradient(135deg,${C.green},${C.greenDark})`:C.border,border:"none",cursor:text.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0 }}>
+        <button onClick={sendMsg} disabled={!text.trim()} style={{ width:46,height:46,borderRadius:"50%",background:text.trim()?`${C.dark}`:C.border,border:"none",cursor:text.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0 }}>
           {isRTL?"➤":"➤"}
         </button>
       </div>
@@ -500,11 +507,11 @@ function WalletScreen({ userId, passengerData, lang, onBack }) {
     <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
         <BackBtn onBack={onBack} />
-        <div style={{ fontWeight:800,fontSize:18,color:"#fff" }}>{t.wallet}</div>
+        <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.wallet}</div>
       </div>
 
       {/* Points card */}
-      <div style={{ margin:"0 20px 14px",background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,borderRadius:24,padding:24,color:"#fff",position:"relative",overflow:"hidden" }}>
+      <div style={{ margin:"0 20px 14px",background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,borderRadius:24,padding:24,color:C.text,position:"relative",overflow:"hidden" }}>
         <div style={{ position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:"#ff5a7022" }} />
         <div style={{ fontSize:13,color:"#ff5a7099",marginBottom:4 }}>{lang==="ar"?"نقاطك المتراكمة":"Vos points accumulés"}</div>
         <div style={{ fontSize:48,fontWeight:900,color:"#ff5a70" }}>⭐ {points}</div>
@@ -616,7 +623,7 @@ function PassengerTrackingMap({ passengerLocation, driverLocation, destinationLo
   );
 }
 
-function TaxiMap({ origin, destination, showDrivers, height=220, onMapClick, picking }) {
+function TaxiMap({ origin, destination, showDrivers, height=220, onMapClick, picking, fullscreen=false }) {
   const [directions,setDirections]=useState(null);
   const [userLocation,setUserLocation]=useState(ALGERIA_CENTER);
   const [nearbyDrivers,setNearbyDrivers]=useState([]);
@@ -627,9 +634,9 @@ function TaxiMap({ origin, destination, showDrivers, height=220, onMapClick, pic
   const onLoad=useCallback(m=>{mapRef.current=m;},[]);
   const makeMarker=(emoji,color)=>"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><circle cx='20' cy='20' r='18' fill='${color}' stroke='white' stroke-width='3'/><text x='20' y='27' text-anchor='middle' font-size='18'>${emoji}</text></svg>`);
   return (
-    <div style={{ margin:"0 20px",borderRadius:20,overflow:"hidden",position:"relative" }}>
+    <div style={fullscreen?{ position:"fixed",inset:0,zIndex:0 }:{ margin:"0 16px",borderRadius:20,overflow:"hidden",position:"relative" }}>
       {picking&&<div style={{ position:"absolute",top:10,left:"50%",transform:"translateX(-50%)",zIndex:10,background:"rgba(0,0,0,0.75)",color:"#fff",padding:"6px 16px",borderRadius:20,fontSize:12,fontWeight:700,whiteSpace:"nowrap" }}>{picking}</div>}
-      <GoogleMap mapContainerStyle={{ width:"100%",height:`${height}px`,cursor:onMapClick?"crosshair":"grab" }} center={origin||userLocation} zoom={13} onLoad={onLoad} onClick={onMapClick?e=>onMapClick(e.latLng):undefined} options={{ styles:MAP_STYLE,disableDefaultUI:true,zoomControl:true,clickableIcons:false }}>
+      <GoogleMap mapContainerStyle={{ width:"100%",height:fullscreen?"100vh":`${height}px`,cursor:onMapClick?"crosshair":"grab" }} center={origin||userLocation} zoom={fullscreen?15:13} onLoad={onLoad} onClick={onMapClick?e=>onMapClick(e.latLng):undefined} options={{ styles:MAP_STYLE,disableDefaultUI:true,zoomControl:true,clickableIcons:false }}>
         {!origin&&<Marker position={userLocation} />}
         {origin&&!directions&&<Marker position={origin} icon={{ url:makeMarker("📍",C.green),scaledSize:new window.google.maps.Size(40,40) }} />}
         {destination&&!directions&&<Marker position={destination} icon={{ url:makeMarker("🏁",C.orange),scaledSize:new window.google.maps.Size(40,40) }} />}
@@ -738,7 +745,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   const [newPin, setNewPin] = useState("");
   const [newPinConfirm, setNewPinConfirm] = useState("");
   const [step, setStep] = useState("form"); // form | otp | done
-  const [otp, setOtp] = useState(["","","","","",""]);
+  const [otp, setOtp] = useState(Array(OTP_LEN).fill(""));
   const [confirmResult, setConfirmResult] = useState(null);
   const [resendTimer, setResendTimer] = useState(0);
   const [showPin, setShowPin] = useState(false);
@@ -747,7 +754,8 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   const [otpMethod, setOtpMethod] = useState("sms"); // sms | whatsapp
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const otpRefs = [useRef(),useRef(),useRef(),useRef(),useRef(),useRef()];
+  const otpRefs = [useRef(),useRef(),useRef(),useRef()];
+  const autoSubmitRef = useRef("");
 
   const generateReferralCode = (uid) => `BRQ${uid.substring(0,6).toUpperCase()}`;
 
@@ -759,7 +767,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
 
   const switchTab = (tab) => {
     setAuthTab(tab); setError(""); setStep("form");
-    setOtp(["","","","","",""]);
+    setOtp(Array(OTP_LEN).fill(""));
     setPhone(""); setPinCode(""); setPinConfirm(""); setName("");
     setLoginPhone(""); setLoginPin("");
     setResetPhone(""); setNewPin(""); setNewPinConfirm("");
@@ -842,22 +850,52 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   };
 
   // ===== SEND OTP via WhatsApp =====
+  const fillCode = (raw) => {
+    const digits = String(raw||"").replace(/\D/g,"").slice(0,OTP_LEN);
+    if (!digits) return;
+    setOtp(Array.from({length:OTP_LEN},(_,k)=>digits[k]||""));
+    otpRefs[Math.min(digits.length,OTP_LEN)-1].current?.focus();
+  };
+
   const handleOtpChange = (i, val) => {
-    if (!/^\d*$/.test(val)) return;
-    const newOtp = [...otp]; newOtp[i] = val.slice(-1); setOtp(newOtp);
-    if (val && i < 5) otpRefs[i+1].current?.focus();
-    if (!val && i > 0) otpRefs[i-1].current?.focus();
+    const digits = val.replace(/\D/g,"");
+    // لصق كامل / ملء تلقائي من لوحة المفاتيح أو الرسالة
+    if (digits.length > 1) { fillCode(digits); return; }
+    const newOtp = [...otp]; newOtp[i] = digits.slice(-1); setOtp(newOtp);
+    if (digits && i < OTP_LEN-1) otpRefs[i+1].current?.focus();
+    if (!digits && i > 0) otpRefs[i-1].current?.focus();
   };
 
   const handleOtpPaste = (e) => {
-    const paste = e.clipboardData.getData("text").replace(/\D/g,"").slice(0,6);
-    if (paste.length === 6) { setOtp(paste.split("")); otpRefs[5].current?.focus(); }
+    const paste = e.clipboardData.getData("text").replace(/\D/g,"");
+    if (paste.length >= 2) { e.preventDefault(); fillCode(paste); }
   };
+
+  // ملء تلقائي: WebOTP API (يعمل إن كانت الرسالة تنتهي بـ @النطاق #الرمز) + autocomplete="one-time-code" لاقتراح لوحة المفاتيح
+  useEffect(() => {
+    if (step !== "otp" || !("OTPCredential" in window)) return;
+    const ac = new AbortController();
+    navigator.credentials.get({ otp:{ transport:["sms"] }, signal:ac.signal })
+      .then(c => { if (c?.code) fillCode(c.code); })
+      .catch(() => {});
+    return () => ac.abort();
+    // eslint-disable-next-line
+  }, [step]);
+
+  // إرسال تلقائي فور اكتمال الرمز
+  useEffect(() => {
+    const c = otp.join("");
+    if (step !== "otp" || c.length < OTP_LEN) { autoSubmitRef.current = ""; return; }
+    if (autoSubmitRef.current === c || loading) return;
+    autoSubmitRef.current = c;
+    (authTab==="reset" ? verifyOTPReset : verifyOTPRegister)();
+    // eslint-disable-next-line
+  }, [otp, step]);
 
   // ===== VERIFY OTP تسجيل جديد =====
   const verifyOTPRegister = async () => {
     const code = otp.join("");
-    if (code.length < 6) { setError(lang==="ar"?"أدخل الرمز كاملاً":"Code incomplet"); return; }
+    if (code.length < OTP_LEN) { setError(lang==="ar"?"أدخل الرمز كاملاً":"Code incomplet"); return; }
     setLoading(true); setError("");
 
     try {
@@ -902,7 +940,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
     } catch(e) {
       const locked = e.code==="functions/resource-exhausted"||e.details?.code==="resource-exhausted"||/قفل|resource-exhausted/i.test(e.message||"");
       setError(locked?(lang==="ar"?"تم قفل حسابك مؤقتاً 24 ساعة بسبب محاولات خاطئة متكررة":"Compte verrouillé 24h — trop de tentatives"):(lang==="ar"?"رمز التحقق خاطئ أو منتهي":"Code incorrect ou expiré"));
-      setOtp(["","","","","",""]);
+      setOtp(Array(OTP_LEN).fill(""));
       setTimeout(() => otpRefs[0].current?.focus(), 100);
     }
     setLoading(false);
@@ -911,7 +949,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   // ===== VERIFY OTP استرجاع الكود =====
   const verifyOTPReset = async () => {
     const code = otp.join("");
-    if (code.length < 6) { setError(lang==="ar"?"أدخل الرمز كاملاً":"Code incomplet"); return; }
+    if (code.length < OTP_LEN) { setError(lang==="ar"?"أدخل الرمز كاملاً":"Code incomplet"); return; }
     setLoading(true); setError("");
     try {
       const verifyOtpTwilio = httpsCallable(cloudFunctions, "verifyOtpTwilio");
@@ -926,7 +964,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
     } catch(e) {
       const locked = e.code==="functions/resource-exhausted"||e.details?.code==="resource-exhausted"||/قفل|resource-exhausted/i.test(e.message||"");
       setError(locked?(lang==="ar"?"تم قفل حسابك مؤقتاً 24 ساعة بسبب محاولات خاطئة متكررة":"Compte verrouillé 24h — trop de tentatives"):(lang==="ar"?"رمز التحقق خاطئ":"Code incorrect"));
-      setOtp(["","","","","",""]);
+      setOtp(Array(OTP_LEN).fill(""));
       setTimeout(() => otpRefs[0].current?.focus(), 100);
     }
     setLoading(false);
@@ -950,29 +988,29 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
 
   const resendOTP = () => {
     if (resendTimer > 0) return;
-    setOtp(["","","","","",""]); setError(""); setStep("form");
+    setOtp(Array(OTP_LEN).fill("")); setError(""); setStep("form");
   };
 
   const inputStyle = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:14, padding:"13px 16px", fontFamily:"inherit", fontSize:14, color:C.text, outline:"none", width:"100%", direction:isRTL?"rtl":"ltr" };
 
   return (
-    <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.brand,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       <FloatingLang lang={lang} setLang={setLang} side={isRTL?"left":"right"} />
 
       {/* Header */}
       <div style={{ background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,padding:"48px 24px 24px",textAlign:"center",position:"relative" }}>
-        <button onClick={step==="form"?onBack:()=>{if(resetGuardRef)resetGuardRef.current=false;sessionStorage.removeItem("taxidz_reset_in_progress");setStep("form");setOtp(["","","","","",""]);setError("");}}
+        <button onClick={step==="form"?onBack:()=>{if(resetGuardRef)resetGuardRef.current=false;sessionStorage.removeItem("taxidz_reset_in_progress");setStep("form");setOtp(Array(OTP_LEN).fill(""));setError("");}}
           style={{ position:"absolute",top:48,[isRTL?"right":"left"]:20,width:36,height:36,borderRadius:10,background:"#ffffff22",border:"none",color:"#fff",cursor:"pointer",fontSize:16 }}>←</button>
         <img src="/logo192.png" alt="AL-BURAQ" style={{ width:60,height:60,objectFit:"contain",marginBottom:8 }} onError={e=>e.target.style.display="none"} />
         <div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{isPassenger?t.passengerGate:t.driverGate}</div>
       </div>
 
-      <div style={{ margin:"-14px 16px 32px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:"20px 18px 28px",boxShadow:"0 10px 40px rgba(0,0,0,0.25)",position:"relative" }}>
+      <div style={{ margin:"-14px 16px 32px",background:C.card,borderRadius:20,padding:"20px 18px 28px",boxShadow:"0 10px 40px rgba(0,0,0,0.25)",position:"relative" }}>
         <LanguageSwitcher lang={lang} setLang={setLang} />
 
         {/* Tabs */}
         {step==="form"&&authTab!=="reset"&&(
-          <div style={{ background:"#e6dfe8",borderRadius:14,padding:4,display:"flex",marginBottom:16 }}>
+          <div style={{ background:"#e4e4e4",borderRadius:14,padding:4,display:"flex",marginBottom:16 }}>
             {[
               {id:"login",label:lang==="ar"?"🔑 تسجيل الدخول":lang==="fr"?"🔑 Connexion":"🔑 Login"},
               {id:"register",label:lang==="ar"?"✅ حساب جديد":lang==="fr"?"✅ Inscription":"✅ Register"},
@@ -1007,7 +1045,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
             </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
             <button onClick={handleLogin} disabled={loading||loginPhone.replace(/\D/g,"").length<9||loginPin.length<4}
-              style={{ background:loginPhone.replace(/\D/g,"").length>=9&&loginPin.length>=4?`linear-gradient(135deg,${accent},${accentDark})`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+              style={{ background:loginPhone.replace(/\D/g,"").length>=9&&loginPin.length>=4?`${C.dark}`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
               {loading?<><span style={{ width:18,height:18,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite" }} />{lang==="ar"?"جارٍ...":"..."}</>:`🚀 ${lang==="ar"?"دخول":"Connexion"}`}
             </button>
             <button onClick={()=>{setAuthTab("reset");setError("");}}
@@ -1052,17 +1090,6 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
               🔐 {lang==="ar"?"احفظ كودك جيداً — ستحتاجه عند كل دخول":"Mémorisez bien votre code"}
             </div>
             {/* اختيار قناة استلام رمز التحقق */}
-            <div>
-              <div style={{ fontSize:12,color:C.textMuted,marginBottom:6,fontWeight:600 }}>{lang==="ar"?"استلم رمز التحقق عبر:":"Recevoir le code via :"}</div>
-              <div style={{ display:"flex",gap:8 }}>
-                <button type="button" onClick={()=>setOtpMethod("sms")} style={{ flex:1,padding:"11px",borderRadius:12,border:`2px solid ${otpMethod==="sms"?accent:C.border}`,background:otpMethod==="sms"?`${accent}15`:C.bg,color:otpMethod==="sms"?accent:C.textMuted,fontFamily:"inherit",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
-                  💬 SMS
-                </button>
-                <button type="button" onClick={()=>setOtpMethod("whatsapp")} style={{ flex:1,padding:"11px",borderRadius:12,border:`2px solid ${otpMethod==="whatsapp"?"#25D366":C.border}`,background:otpMethod==="whatsapp"?"#25D36615":C.bg,color:otpMethod==="whatsapp"?"#25D366":C.textMuted,fontFamily:"inherit",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
-                  🟢 WhatsApp
-                </button>
-              </div>
-            </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
             <button onClick={()=>{
               if(!name.trim()){setError(lang==="ar"?"أدخل اسم المستخدم":"Entrez votre nom");return;}
@@ -1071,7 +1098,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
               if(pinCode!==pinConfirm){setError(lang==="ar"?"الكودان غير متطابقان":"Codes différents");return;}
               setError(""); sendOTP(phone);
             }} disabled={loading}
-              style={{ background:`linear-gradient(135deg,${accent},${accentDark})`,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+              style={{ background:`${C.dark}`,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
               {loading?<><span style={{ width:18,height:18,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite" }} />{lang==="ar"?"جارٍ...":"..."}</>:`📨 ${lang==="ar"?"إرسال رمز التحقق":"Envoyer le code"}`}
             </button>
           </div>
@@ -1092,17 +1119,6 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
               <input value={resetPhone} onChange={e=>setResetPhone(e.target.value.replace(/\D/g,""))}
                 placeholder="0XXXXXXXXX" type="tel" maxLength={10}
                 style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
-            </div>
-            <div>
-              <div style={{ fontSize:12,color:C.textMuted,marginBottom:6,fontWeight:600 }}>{lang==="ar"?"استلم رمز التحقق عبر:":"Recevoir le code via :"}</div>
-              <div style={{ display:"flex",gap:8 }}>
-                <button type="button" onClick={()=>setOtpMethod("sms")} style={{ flex:1,padding:"11px",borderRadius:12,border:`2px solid ${otpMethod==="sms"?C.blue:C.border}`,background:otpMethod==="sms"?`${C.blue}15`:C.bg,color:otpMethod==="sms"?C.blue:C.textMuted,fontFamily:"inherit",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
-                  💬 SMS
-                </button>
-                <button type="button" onClick={()=>setOtpMethod("whatsapp")} style={{ flex:1,padding:"11px",borderRadius:12,border:`2px solid ${otpMethod==="whatsapp"?"#25D366":C.border}`,background:otpMethod==="whatsapp"?"#25D36615":C.bg,color:otpMethod==="whatsapp"?"#25D366":C.textMuted,fontFamily:"inherit",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
-                  🟢 WhatsApp
-                </button>
-              </div>
             </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
             <button onClick={()=>sendOTP(resetPhone)} disabled={loading||resetPhone.replace(/\D/g,"").length<9}
@@ -1131,14 +1147,14 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
                 <input key={i} ref={otpRefs[i]} value={digit}
                   onChange={e=>handleOtpChange(i,e.target.value)}
                   onKeyDown={e=>{ if(e.key==="Backspace"&&!digit&&i>0) otpRefs[i-1].current?.focus(); }}
-                  maxLength={1} type="tel" inputMode="numeric"
-                  style={{ width:46,height:58,textAlign:"center",fontSize:24,fontWeight:900,fontFamily:"monospace",background:digit?`${accent}15`:C.bg,border:`2px solid ${digit?accent:C.border}`,borderRadius:14,color:C.text,outline:"none" }} />
+                  maxLength={i===0?OTP_LEN:1} type="tel" inputMode="numeric" autoComplete={i===0?"one-time-code":"off"} onFocus={e=>e.target.select()}
+                  style={{ width:62,height:68,textAlign:"center",fontSize:24,fontWeight:900,fontFamily:"monospace",background:digit?`${accent}15`:C.bg,border:`2px solid ${digit?accent:C.border}`,borderRadius:14,color:C.text,outline:"none" }} />
               ))}
             </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center",marginBottom:12 }}>{error}</div>}
             <button onClick={authTab==="reset"?verifyOTPReset:verifyOTPRegister}
-              disabled={loading||otp.join("").length<6}
-              style={{ width:"100%",background:otp.join("").length===6?`linear-gradient(135deg,${accent},${accentDark})`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:otp.join("").length===6?"pointer":"default",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:12 }}>
+              disabled={loading||otp.join("").length<OTP_LEN}
+              style={{ width:"100%",background:otp.join("").length===OTP_LEN?`${C.dark}`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:otp.join("").length===OTP_LEN?"pointer":"default",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:12 }}>
               {loading?<><span style={{ width:18,height:18,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 1s linear infinite" }} />{lang==="ar"?"جارٍ...":"..."}
               </>:`✅ ${lang==="ar"?"تأكيد":"Confirmer"}`}
             </button>
@@ -1179,7 +1195,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
             </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
             <button onClick={saveNewPin} disabled={loading||newPin.length<4||newPin!==newPinConfirm}
-              style={{ background:newPin.length>=4&&newPin===newPinConfirm?`linear-gradient(135deg,${C.green},${C.greenDark})`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+              style={{ background:newPin.length>=4&&newPin===newPinConfirm?`${C.dark}`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
               {loading?"...":`✅ ${lang==="ar"?"حفظ الكود الجديد":"Sauvegarder"}`}
             </button>
           </div>
@@ -1192,7 +1208,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
             <div style={{ fontWeight:900,fontSize:20,color:C.text,marginBottom:8 }}>{lang==="ar"?"تم تحديث الكود!":"Code mis à jour!"}</div>
             <div style={{ fontSize:13,color:C.textMuted,marginBottom:24 }}>{lang==="ar"?"يمكنك الآن الدخول بكودك الجديد":"Connectez-vous avec votre nouveau code"}</div>
             <button onClick={()=>{ if(resetGuardRef) resetGuardRef.current=false; onSuccess(role); }}
-              style={{ background:`linear-gradient(135deg,${accent},${accentDark})`,border:"none",borderRadius:14,padding:"14px 32px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>
+              style={{ background:`${C.dark}`,border:"none",borderRadius:14,padding:"14px 32px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>
               🔑 {lang==="ar"?"الدخول للتطبيق":"Accéder à l'app"}
             </button>
           </div>
@@ -1437,39 +1453,40 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const finishRide=async()=>{ if(bookingId){try{await updateDoc(doc(db,"bookings",bookingId),{status:"completed",completedAt:serverTimestamp()});}catch(e){}} setShowRating(true); };
   const resetTrip=()=>{ setScreen("home");setShowRating(false);setDistanceKm(0);setBookingId(null);setFinalRating(0);setSelectedDriver(null);setShowChat(false);driverArrivedNotified.current=false; };
 
-  // HOME
+  // HOME — أسلوب Uber: خريطة بملء الشاشة + لوحة سفلية
   if(screen==="home") return (
-    <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.page,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       <FloatingLang lang={lang} setLang={setLang} />
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
-      <div style={{ padding:"48px 20px 12px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-        <div>
-          <div style={{ fontSize:13,color:"rgba(255,255,255,0.8)" }}>{t.hello}</div>
-          <div style={{ fontSize:18,fontWeight:800,color:"#fff" }}>{passengerName}</div>
-          {passengerPhone&&<div style={{ fontSize:12,color:"rgba(255,255,255,0.8)",marginTop:2 }}>📱 {passengerPhone}</div>}
-          {passengerData?.points>0&&<div style={{ fontSize:11,color:C.gold,marginTop:2 }}>⭐ {passengerData.points} {lang==="ar"?"نقطة":"points"}</div>}
+      <TaxiMap origin={null} destination={null} showDrivers={true} fullscreen />
+      {/* شريط علوي عائم */}
+      <div style={{ position:"fixed",top:0,left:0,right:0,zIndex:20,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",pointerEvents:"none" }}>
+        <div style={{ display:"flex",gap:10,pointerEvents:"auto" }}>
+          <button onClick={onLogout} aria-label="logout" style={{ width:46,height:46,borderRadius:"50%",background:"#fff",border:"none",boxShadow:"0 4px 16px rgba(0,0,0,0.18)",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center" }}>{t.logout}</button>
         </div>
-        <div style={{ display:"flex",gap:8,alignItems:"center" }}>
-          <button onClick={()=>setScreen("wallet")} style={{ width:40,height:40,borderRadius:12,background:C.goldLight,border:`1px solid ${C.gold}44`,cursor:"pointer",fontSize:18 }}>💰</button>
-          <button onClick={onLogout} style={{ width:40,height:40,borderRadius:12,background:C.redLight,border:"none",cursor:"pointer",fontSize:18 }}>{t.logout}</button>
-        </div>
+        <div style={{ width:46 }} />
       </div>
-      <TaxiMap origin={null} destination={null} showDrivers={true} />
-      <div style={{ margin:"14px 20px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:20,boxShadow:C.shadow }}>
-        <div style={{ fontWeight:700,fontSize:16,marginBottom:14,color:C.text }}>{t.whereGo}</div>
-        <div onClick={()=>setScreen("booking")} style={{ background:C.dark,borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",gap:10,cursor:"pointer" }}>
-          <div style={{ width:10,height:10,borderRadius:"50%",background:C.orange }} />
-          <span style={{ color:"#ffffff88",fontSize:14 }}>{t.searchDest}</span>
+      {/* اللوحة السفلية */}
+      <div style={{ position:"fixed",left:0,right:0,bottom:0,zIndex:20,background:"#fff",borderRadius:"28px 28px 0 0",boxShadow:"0 -8px 32px rgba(0,0,0,0.16)",padding:"10px 20px 24px" }}>
+        <div style={{ width:40,height:4,borderRadius:2,background:"#d4d4d4",margin:"0 auto 14px" }} />
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+          <div>
+            <div style={{ fontSize:13,color:C.textMuted }}>{t.hello}</div>
+            <div style={{ fontSize:22,fontWeight:800,color:C.text,letterSpacing:-0.3 }}>{passengerName}</div>
+          </div>
+          {passengerData?.points>0&&<div style={{ background:"#f3f3f3",borderRadius:20,padding:"6px 12px",fontSize:12,fontWeight:700,color:C.text }}>⭐ {passengerData.points}</div>}
         </div>
-        <button onClick={()=>setScreen("booking")} style={{ width:"100%",marginTop:12,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:"16px 16px 16px 6px",padding:"16px",color:"#fff",fontFamily:"inherit",fontWeight:700,fontSize:16,cursor:"pointer" }}>{t.searchCar}</button>
-      </div>
-      <div style={{ margin:"0 20px",background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,borderRadius:"26px 6px 26px 26px",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",border:`1px solid #ff5a7033` }}>
-        <div>
-          <div style={{ fontSize:18,fontWeight:900,color:"#ff5a70",letterSpacing:1 }}>AL-BURAQ</div>
-          <div style={{ fontSize:12,color:"#ff5a7099",marginTop:2 }}>{lang==="ar"?"🚕 خدمتك دائماً في الطريق":lang==="fr"?"🚕 Toujours en route pour vous":"🚕 Always on the road for you"}</div>
+        <div onClick={()=>setScreen("booking")} style={{ background:"#f3f3f3",borderRadius:14,padding:"16px 18px",display:"flex",alignItems:"center",gap:14,cursor:"pointer" }}>
+          <div style={{ width:10,height:10,background:C.dark,borderRadius:2,flexShrink:0 }} />
+          <span style={{ fontSize:17,fontWeight:700,color:C.text,flex:1 }}>{t.whereGo}</span>
+          <span style={{ fontSize:13,color:C.textMuted }}>{t.searchDest}</span>
         </div>
-        <img src="/logo192.png" alt="AL-BURAQ" style={{ width:60,height:60,objectFit:"contain",filter:"drop-shadow(0 4px 12px rgba(255,90,112,0.5))" }} onError={e=>e.target.style.display="none"} />
+        <div style={{ display:"flex",gap:10,marginTop:12 }}>
+          <button onClick={()=>setScreen("booking")} style={{ flex:1,background:C.dark,border:"none",borderRadius:14,padding:"15px",color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:15,cursor:"pointer" }}>🚕 {lang==="ar"?"اطلب سيارة الآن":lang==="fr"?"Commander maintenant":"Request a ride"}</button>
+          <button onClick={()=>setScreen("wallet")} style={{ width:56,background:"#f3f3f3",border:"none",borderRadius:14,fontSize:22,cursor:"pointer" }}>💰</button>
+        </div>
+        {passengerPhone&&<div style={{ textAlign:"center",fontSize:11,color:C.textLight,marginTop:12 }}>📱 {passengerPhone} · <span style={{ color:C.red,fontWeight:800,letterSpacing:1 }}>AL-BURAQ</span></div>}
       </div>
     </div>
   );
@@ -1484,14 +1501,14 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 12px",gap:12 }}>
         <BackBtn onBack={()=>setScreen("home")} />
-        <div style={{ fontWeight:800,fontSize:18,color:"#fff" }}>{t.tripDetails}</div>
+        <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.tripDetails}</div>
       </div>
       <TaxiMap origin={originPlace} destination={destPlace} showDrivers={false} onMapClick={handleMapPick} picking={pickMode==="origin"?(lang==="ar"?"📍 اضغط على الخريطة لتحديد نقطة الانطلاق":lang==="fr"?"📍 Touchez la carte pour le départ":"📍 Tap the map to set pickup"):pickMode==="destination"?(lang==="ar"?"🏁 اضغط على الخريطة لتحديد الوجهة":lang==="fr"?"🏁 Touchez la carte pour la destination":"🏁 Tap the map to set destination"):null} />
       {distanceKm>0&&<div style={{ display:"flex",gap:8,margin:"10px 20px 0",justifyContent:"center" }}>
         <div style={{ background:C.greenLight,borderRadius:20,padding:"6px 14px",fontSize:13,color:C.greenDark,fontWeight:700 }}>📏 {distanceKm.toFixed(1)} km</div>
         <div style={{ background:C.orangeLight,borderRadius:20,padding:"6px 14px",fontSize:14,color:C.orange,fontWeight:900 }}>💰 {suggestedPrice} DA</div>
       </div>}
-      <div style={{ margin:"14px 20px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:20,boxShadow:C.shadow }}>
+      <div style={{ margin:"14px 20px",background:C.card,borderRadius:20,padding:20,boxShadow:C.shadow }}>
         <button onClick={handleGPS} disabled={gpsLoading} style={{ width:"100%",background:gpsLoading?C.border:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",marginBottom:8,fontFamily:"inherit",fontWeight:700,fontSize:14,color:gpsLoading?C.textMuted:C.greenDark }}>
           <span style={{ fontSize:18 }}>📍</span>{gpsLoading?t.locating:t.useMyLocation}
         </button>
@@ -1568,7 +1585,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           placeholder={lang==="ar"?"نوع الحمولة: مثال: حقائب، مواد بناء...":lang==="fr"?"Type de bagages: Ex: valises, matériaux...":"Luggage type: e.g. bags, materials..."}
           style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 16px",fontFamily:"inherit",fontSize:13,color:C.text,outline:"none",textAlign:isRTL?"right":"left",marginBottom:14 }} />
 
-        <button onClick={()=>{if(originPlace&&destPlace)setScreen("offer");}} style={{ width:"100%",marginTop:4,background:originPlace&&destPlace?`linear-gradient(135deg,${C.green},${C.greenDark})`:C.border,border:"none",borderRadius:16,padding:16,color:originPlace&&destPlace?"#fff":C.textMuted,fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:originPlace&&destPlace?"pointer":"default" }}>
+        <button onClick={()=>{if(originPlace&&destPlace)setScreen("offer");}} style={{ width:"100%",marginTop:4,background:originPlace&&destPlace?`${C.dark}`:C.border,border:"none",borderRadius:16,padding:16,color:originPlace&&destPlace?"#fff":C.textMuted,fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:originPlace&&destPlace?"pointer":"default" }}>
           {originPlace&&destPlace?`${t.sendOffer} (${suggestedPrice} DA)`:t.searchDest}
         </button>
       </div>
@@ -1582,10 +1599,10 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
         <BackBtn onBack={()=>setScreen("booking")} />
-        <div><div style={{ fontWeight:800,fontSize:18,color:"#fff" }}>{t.offerPrice}</div><div style={{ fontSize:12,color:"rgba(255,255,255,0.8)" }}>{distanceKm.toFixed(1)} كم</div></div>
+        <div><div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.offerPrice}</div><div style={{ fontSize:12,color:C.textMuted }}>{distanceKm.toFixed(1)} كم</div></div>
       </div>
-      <div style={{ margin:"0 20px 14px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:24,boxShadow:C.shadow,textAlign:"center" }}>
-        <div style={{ fontSize:13,color:"rgba(255,255,255,0.8)",marginBottom:4 }}>{t.yourOffer}</div>
+      <div style={{ margin:"0 20px 14px",background:C.card,borderRadius:20,padding:24,boxShadow:C.shadow,textAlign:"center" }}>
+        <div style={{ fontSize:13,color:C.textMuted,marginBottom:4 }}>{t.yourOffer}</div>
         <div style={{ fontSize:64,fontWeight:900,color:offerPrice>suggestedPrice?C.blue:C.green,lineHeight:1,transition:"color 0.3s" }}>{offerPrice}</div>
         <div style={{ fontSize:18,color:C.textMuted,marginBottom:20 }}>{t.dzd}</div>
         <input type="range" min={suggestedPrice} max={Math.round(suggestedPrice*2)} step={10} value={offerPrice} onChange={e=>setOfferPrice(Number(e.target.value))} style={{ width:"100%",accentColor:C.green,cursor:"pointer",marginBottom:8,height:6 }} />
@@ -1650,7 +1667,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
       {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
       <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="pickup" lang={lang} />
-      <div style={{ margin:"14px 20px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:22,boxShadow:C.shadow }}>
+      <div style={{ margin:"14px 20px",background:C.card,borderRadius:20,padding:22,boxShadow:C.shadow }}>
         <div style={{ textAlign:"center",marginBottom:16 }}>
           <div style={{ fontSize:44 }}>🎉</div>
           <div style={{ fontWeight:900,fontSize:20,color:C.text }}>{t.accepted}</div>
@@ -1688,7 +1705,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         <div style={{ display:"flex",gap:8 }}>
           <button onClick={()=>setShowReport(true)} style={{ flex:1,background:`${C.orange}15`,border:`1px solid ${C.orange}44`,borderRadius:12,padding:12,color:C.orange,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>🚨</button>
           <button onClick={cancelBooking} style={{ flex:1,background:C.redLight,border:"none",borderRadius:12,padding:12,color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer" }}>{t.cancelBtn}</button>
-          <button onClick={()=>{setElapsed(0);setScreen("ride");}} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:12,padding:12,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>{t.trackTrip}</button>
+          <button onClick={()=>{setElapsed(0);setScreen("ride");}} style={{ flex:2,background:`${C.dark}`,border:"none",borderRadius:12,padding:12,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>{t.trackTrip}</button>
         </div>
       </div>
       <SOSButton passengerName={passengerName} bookingId={bookingId} />
@@ -1703,12 +1720,12 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         {finalRating>0?(
           <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:24,gap:16 }}>
             <div style={{ fontSize:80 }}>{finalRating>=4?"🌟":"⭐"}</div>
-            <div style={{ fontWeight:900,fontSize:24,color:"#fff" }}>{t.thankRating}</div>
+            <div style={{ fontWeight:900,fontSize:24,color:C.text }}>{t.thankRating}</div>
             <div style={{ background:C.goldLight,borderRadius:16,padding:"16px 24px",textAlign:"center",border:`1px solid ${C.gold}44` }}>
               <div style={{ fontSize:13,color:C.gold,fontWeight:700 }}>🎁 {lang==="ar"?"ربحت 5 نقاط على هذه الرحلة!":"Vous avez gagné 5 points!"}</div>
               <div style={{ fontSize:20,fontWeight:900,color:C.gold,marginTop:4 }}>⭐ {(passengerData?.points||0)} {lang==="ar"?"نقطة":"points"}</div>
             </div>
-            <button onClick={resetTrip} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:16,padding:"16px 40px",color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",marginTop:8 }}>{t.backHome}</button>
+            <button onClick={resetTrip} style={{ background:`${C.dark}`,border:"none",borderRadius:16,padding:"16px 40px",color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",marginTop:8 }}>{t.backHome}</button>
           </div>
         ):(
           <RatingModal booking={{...booking,id:bookingId,passengerId:user?.uid,driverId:selectedDriver?.uid}} driver={selectedDriver} onSubmit={r=>setFinalRating(r)} onSkip={resetTrip} lang={lang} />
@@ -1722,7 +1739,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
         {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
         <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="ride" lang={lang} />
-        <div style={{ margin:"14px 20px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:20,boxShadow:C.shadow }}>
+        <div style={{ margin:"14px 20px",background:C.card,borderRadius:20,padding:20,boxShadow:C.shadow }}>
           <div style={{ display:"flex",justifyContent:"space-between",marginBottom:14 }}>
             <div style={{ background:C.greenLight,borderRadius:12,padding:"8px 14px" }}><div style={{ fontSize:10,color:C.green }}>{t.tripDuration}</div><div style={{ fontWeight:800,color:C.greenDark }}>{mins}:{secs.toString().padStart(2,"0")}</div></div>
             <div style={{ textAlign:"center" }}><div style={{ fontSize:11,color:C.textMuted }}>{t.dest}</div><div style={{ fontWeight:700,color:C.text,fontSize:12,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{destText}</div></div>
@@ -1735,7 +1752,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
             <button onClick={()=>setShowReport(true)} style={{ width:44,background:`${C.orange}15`,border:`1px solid ${C.orange}44`,borderRadius:12,padding:"10px",color:C.orange,fontFamily:"inherit",cursor:"pointer",fontSize:16 }}>🚨</button>
           </div>
           {destPlace&&<button onClick={()=>{ const d=getLatLng(destPlace); openNavigation(d.lat,d.lng); }} style={{ width:"100%",background:`linear-gradient(135deg,${C.googleBlue},#000000)`,border:"none",borderRadius:14,padding:13,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}><span style={{ fontSize:18 }}>🗺️</span>{t.trackRoute}</button>}
-          <button onClick={finishRide} style={{ width:"100%",background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer" }}>{t.arrived}</button>
+          <button onClick={finishRide} style={{ width:"100%",background:`${C.dark}`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer" }}>{t.arrived}</button>
         </div>
         <SOSButton passengerName={passengerName} bookingId={bookingId} />
       </div>
@@ -1811,4 +1828,4 @@ export default function App() {
       {screen==="app"&&role==="driver"&&<DriverDashboard user={user} onLogout={handleLogout} />}
     </div>
   );
-}
+} 
