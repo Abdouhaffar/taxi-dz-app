@@ -188,7 +188,7 @@ const T = {
 };
 
 const MAP_STYLE = [
-  { featureType:"all", elementType:"geometry", stylers:[{color:"#fbe4e7"}] },
+  { featureType:"all", elementType:"geometry", stylers:[{color:"#efe9f0"}] },
   { featureType:"road", elementType:"geometry", stylers:[{color:"#ffffff"}] },
   { featureType:"road.arterial", elementType:"geometry", stylers:[{color:"#f8b4bd"}] },
   { featureType:"road.highway", elementType:"geometry", stylers:[{color:"#ff5a70"}] },
@@ -197,7 +197,7 @@ const MAP_STYLE = [
 ];
 
 const C = {
-  bg:"#fdeff1", card:"#ffffff", dark:"#1c1a1d",
+  bg:"#f6f2f6", page:"linear-gradient(180deg,#0b1d4a 0%,#2d2a6e 24%,#8a3f86 50%,#e0507a 76%,#f59a4a 100%)", card:"#ffffff", dark:"#1c1a1d",
   green:"#c4001d", greenLight:"#fde8eb", greenDark:"#8f0015",
   orange:"#e0334d", orangeLight:"#fde8eb",
   red:"#ef4444", redLight:"#fef2f2",
@@ -206,7 +206,7 @@ const C = {
   gold:"#ff5a70", goldLight:"#fde8eb",
   googleBlue:"#1c1a1d",
   text:"#1c1a1d", textMuted:"#7a6268", textLight:"#b39ba0",
-  border:"#f3d3d8", shadow:"0 4px 24px rgba(0,0,0,0.08)",
+  border:"#e6dfe8", shadow:"0 4px 24px rgba(0,0,0,0.08)",
 };
 
 const RIDE_TYPES_IDS = ["economy","comfort","xl"];
@@ -497,10 +497,10 @@ function WalletScreen({ userId, passengerData, lang, onBack }) {
   };
 
   return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
         <BackBtn onBack={onBack} />
-        <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.wallet}</div>
+        <div style={{ fontWeight:800,fontSize:18,color:"#fff" }}>{t.wallet}</div>
       </div>
 
       {/* Points card */}
@@ -956,7 +956,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   const inputStyle = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:14, padding:"13px 16px", fontFamily:"inherit", fontSize:14, color:C.text, outline:"none", width:"100%", direction:isRTL?"rtl":"ltr" };
 
   return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       <FloatingLang lang={lang} setLang={setLang} side={isRTL?"left":"right"} />
 
       {/* Header */}
@@ -967,12 +967,12 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
         <div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{isPassenger?t.passengerGate:t.driverGate}</div>
       </div>
 
-      <div style={{ padding:"20px 20px 40px" }}>
+      <div style={{ margin:"-14px 16px 32px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:"20px 18px 28px",boxShadow:"0 10px 40px rgba(0,0,0,0.25)",position:"relative" }}>
         <LanguageSwitcher lang={lang} setLang={setLang} />
 
         {/* Tabs */}
         {step==="form"&&authTab!=="reset"&&(
-          <div style={{ background:"#f3d3d8",borderRadius:14,padding:4,display:"flex",marginBottom:16 }}>
+          <div style={{ background:"#e6dfe8",borderRadius:14,padding:4,display:"flex",marginBottom:16 }}>
             {[
               {id:"login",label:lang==="ar"?"🔑 تسجيل الدخول":lang==="fr"?"🔑 Connexion":"🔑 Login"},
               {id:"register",label:lang==="ar"?"✅ حساب جديد":lang==="fr"?"✅ Inscription":"✅ Register"},
@@ -1439,15 +1439,15 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
 
   // HOME
   if(screen==="home") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       <FloatingLang lang={lang} setLang={setLang} />
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ padding:"48px 20px 12px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
         <div>
-          <div style={{ fontSize:13,color:C.textMuted }}>{t.hello}</div>
-          <div style={{ fontSize:18,fontWeight:800,color:C.text }}>{passengerName}</div>
-          {passengerPhone&&<div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>📱 {passengerPhone}</div>}
+          <div style={{ fontSize:13,color:"rgba(255,255,255,0.8)" }}>{t.hello}</div>
+          <div style={{ fontSize:18,fontWeight:800,color:"#fff" }}>{passengerName}</div>
+          {passengerPhone&&<div style={{ fontSize:12,color:"rgba(255,255,255,0.8)",marginTop:2 }}>📱 {passengerPhone}</div>}
           {passengerData?.points>0&&<div style={{ fontSize:11,color:C.gold,marginTop:2 }}>⭐ {passengerData.points} {lang==="ar"?"نقطة":"points"}</div>}
         </div>
         <div style={{ display:"flex",gap:8,alignItems:"center" }}>
@@ -1479,12 +1479,12 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
 
   // BOOKING
   if(screen==="booking") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:30 }}>
+    <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:30 }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 12px",gap:12 }}>
         <BackBtn onBack={()=>setScreen("home")} />
-        <div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.tripDetails}</div>
+        <div style={{ fontWeight:800,fontSize:18,color:"#fff" }}>{t.tripDetails}</div>
       </div>
       <TaxiMap origin={originPlace} destination={destPlace} showDrivers={false} onMapClick={handleMapPick} picking={pickMode==="origin"?(lang==="ar"?"📍 اضغط على الخريطة لتحديد نقطة الانطلاق":lang==="fr"?"📍 Touchez la carte pour le départ":"📍 Tap the map to set pickup"):pickMode==="destination"?(lang==="ar"?"🏁 اضغط على الخريطة لتحديد الوجهة":lang==="fr"?"🏁 Touchez la carte pour la destination":"🏁 Tap the map to set destination"):null} />
       {distanceKm>0&&<div style={{ display:"flex",gap:8,margin:"10px 20px 0",justifyContent:"center" }}>
@@ -1577,15 +1577,15 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
 
   // OFFER
   if(screen==="offer") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
+    <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
         <BackBtn onBack={()=>setScreen("booking")} />
-        <div><div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.offerPrice}</div><div style={{ fontSize:12,color:C.textMuted }}>{distanceKm.toFixed(1)} كم</div></div>
+        <div><div style={{ fontWeight:800,fontSize:18,color:"#fff" }}>{t.offerPrice}</div><div style={{ fontSize:12,color:"rgba(255,255,255,0.8)" }}>{distanceKm.toFixed(1)} كم</div></div>
       </div>
       <div style={{ margin:"0 20px 14px",background:C.card,borderRadius:"6px 26px 26px 26px",padding:24,boxShadow:C.shadow,textAlign:"center" }}>
-        <div style={{ fontSize:13,color:C.textMuted,marginBottom:4 }}>{t.yourOffer}</div>
+        <div style={{ fontSize:13,color:"rgba(255,255,255,0.8)",marginBottom:4 }}>{t.yourOffer}</div>
         <div style={{ fontSize:64,fontWeight:900,color:offerPrice>suggestedPrice?C.blue:C.green,lineHeight:1,transition:"color 0.3s" }}>{offerPrice}</div>
         <div style={{ fontSize:18,color:C.textMuted,marginBottom:20 }}>{t.dzd}</div>
         <input type="range" min={suggestedPrice} max={Math.round(suggestedPrice*2)} step={10} value={offerPrice} onChange={e=>setOfferPrice(Number(e.target.value))} style={{ width:"100%",accentColor:C.green,cursor:"pointer",marginBottom:8,height:6 }} />
@@ -1615,7 +1615,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
 
   // SEARCHING
   if(screen==="searching") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
+    <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr",paddingBottom:40 }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <TaxiMap origin={booking?.originPlace} destination={booking?.destPlace} showDrivers={true} />
@@ -1644,7 +1644,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
 
   // FOUND
   if(screen==="found") return (
-    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+    <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
@@ -1699,11 +1699,11 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   if(screen==="ride"){
     const mins=Math.floor(elapsed/60),secs=elapsed%60;
     if(showRating) return (
-      <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+      <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
         {finalRating>0?(
           <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:24,gap:16 }}>
             <div style={{ fontSize:80 }}>{finalRating>=4?"🌟":"⭐"}</div>
-            <div style={{ fontWeight:900,fontSize:24,color:C.text }}>{t.thankRating}</div>
+            <div style={{ fontWeight:900,fontSize:24,color:"#fff" }}>{t.thankRating}</div>
             <div style={{ background:C.goldLight,borderRadius:16,padding:"16px 24px",textAlign:"center",border:`1px solid ${C.gold}44` }}>
               <div style={{ fontSize:13,color:C.gold,fontWeight:700 }}>🎁 {lang==="ar"?"ربحت 5 نقاط على هذه الرحلة!":"Vous avez gagné 5 points!"}</div>
               <div style={{ fontSize:20,fontWeight:900,color:C.gold,marginTop:4 }}>⭐ {(passengerData?.points||0)} {lang==="ar"?"نقطة":"points"}</div>
@@ -1716,7 +1716,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       </div>
     );
     return (
-      <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
+      <div style={{ minHeight:"100vh",background:C.page,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
         {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
         {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
         {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
