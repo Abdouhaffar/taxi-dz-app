@@ -1312,4 +1312,39 @@ export default function DriverDashboard({ user, onLogout }) {
             <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
               <button onClick={()=>setShowSubscription(true)} style={{ background:`linear-gradient(135deg,${C.goldLight},#fde8eb)`,border:`1px solid ${C.gold}44`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
                 <span style={{ fontSize:22 }}>💳</span>
-                <div style={{ flex:1 }}><div styl
+                <div style={{ flex:1 }}><div style={{ fontWeight:700, color:C.gold }}>الاشتراكات والعروض</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>🎁 مجاني حالياً خلال فترة الإطلاق</div></div>
+                <span style={{ color:C.textMuted }}>←</span>
+              </button>
+              <button onClick={()=>setShowEarnings(true)} style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
+                <span style={{ fontSize:22 }}>📊</span>
+                <div style={{ flex:1 }}><div style={{ fontWeight:700 }}>الإيرادات والرحلات</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>إحصاءات مفصلة بالفترات</div></div>
+                <span style={{ color:C.textMuted }}>←</span>
+              </button>
+              <button onClick={()=>setShowChangeVehicle(true)} style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
+                <span style={{ fontSize:22 }}>🚗</span>
+                <div style={{ flex:1 }}><div style={{ fontWeight:700 }}>تغيير السيارة</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>تحديث بيانات سيارتك</div></div>
+                <span style={{ color:C.textMuted }}>←</span>
+              </button>
+              <button onClick={()=>setShowReset(true)} style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
+                <span style={{ fontSize:22 }}>🔐</span>
+                <div style={{ flex:1 }}><div style={{ fontWeight:700 }}>تغيير / استرجاع كلمة المرور</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>إرسال رابط الاسترجاع لبريدك</div></div>
+                <span style={{ color:C.textMuted }}>←</span>
+              </button>
+              <button onClick={onLogout} style={{ background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:16,padding:16,color:C.red,fontFamily:"inherit",fontWeight:800,fontSize:15,cursor:"pointer" }}>🚪 تسجيل الخروج</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:C.card,borderTop:`1px solid ${C.border}`,display:"flex",padding:"8px 0 20px",zIndex:100 }}>
+        {[{id:"home",label:"الرئيسية",icon:"🏠"},{id:"profile",label:"حسابي",icon:"👤"}].map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{ flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"8px 0" }}>
+            <div style={{ fontSize:22,opacity:tab===t.id?1:0.4 }}>{t.icon}</div>
+            <div style={{ fontSize:10,color:tab===t.id?C.green:C.textLight,fontWeight:tab===t.id?700:400 }}>{t.label}</div>
+          </button>
+        ))}
+      </div>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap'); @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
