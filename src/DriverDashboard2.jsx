@@ -11,14 +11,14 @@ const generateSessionId = () => `${Date.now()}-${Math.random().toString(36).subs
 const SESSION_KEY = "taxidz_session_id";
 
 const C = {
-  bg:"#0f1117", card:"#1a1d27", border:"#2a2d3e",
-  green:"#00b37e", greenLight:"#00b37e22", greenDark:"#007a55",
-  orange:"#f97316", orangeDark:"#ea580c",
+  bg:"#141012", card:"#201a1d", border:"#3a2a2f",
+  green:"#c4001d", greenLight:"#c4001d22", greenDark:"#8f0015",
+  orange:"#e0334d", orangeDark:"#8f0015",
   red:"#ef4444", redLight:"#ef444422",
-  blue:"#3b82f6", blueLight:"#3b82f615",
-  yellow:"#f59e0b", yellowLight:"#f59e0b22",
-  gold:"#d4a017", goldLight:"#d4a01722",
-  text:"#ffffff", textMuted:"#94a3b8", textLight:"#64748b",
+  blue:"#1c1a1d", blueLight:"#1c1a1d15",
+  yellow:"#e0334d", yellowLight:"#e0334d22",
+  gold:"#ff5a70", goldLight:"#ff5a7022",
+  text:"#ffffff", textMuted:"#c7a9ae", textLight:"#9a7f85",
 };
 
 const BASE_PRICE=40, PRICE_PER_KM=30, MIN_PRICE=100;
@@ -202,7 +202,7 @@ function DriverPinChange({ uid, phone, currentPin, onClose }) {
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,marginBottom:12 }}>{error}</div>}
             <div style={{ display:"flex",gap:10 }}>
               <button onClick={onClose} style={{ flex:1,background:C.border,border:"none",borderRadius:14,padding:14,color:C.text,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>إلغاء</button>
-              <button onClick={checkOldPin} style={{ flex:2,background:`linear-gradient(135deg,#3b82f6,#1d4ed8)`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>متابعة</button>
+              <button onClick={checkOldPin} style={{ flex:2,background:`linear-gradient(135deg,#1c1a1d,#8f0015)`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>متابعة</button>
             </div>
           </>)}
 
@@ -535,7 +535,7 @@ function EarningsScreen({ uid, driverData, onBack }) {
           <div style={{ fontSize:28,fontWeight:900,color:"#fff" }}>{totalEarnings.toLocaleString()} دج</div>
           <div style={{ fontSize:12,color:"#ffffff88",marginTop:4 }}>إجمالي الإيرادات</div>
         </div>
-        <div style={{ background:`linear-gradient(135deg,${C.blue},#1d4ed8)`,borderRadius:20,padding:20,textAlign:"center" }}>
+        <div style={{ background:`linear-gradient(135deg,${C.blue},#8f0015)`,borderRadius:20,padding:20,textAlign:"center" }}>
           <div style={{ fontSize:28,fontWeight:900,color:"#fff" }}>{filtered.length}</div>
           <div style={{ fontSize:12,color:"#ffffff88",marginTop:4 }}>عدد الرحلات</div>
         </div>
@@ -823,7 +823,7 @@ function DriverGPSMap({ driverLocation, passengerLocation, destLocation, mode })
         {driverLocation&&target&&<span style={{ fontSize:12,color:mode==="pickup"?C.orange:C.green,fontWeight:700 }}>{getDistKm(driverLocation.lat,driverLocation.lng,target.lat,target.lng).toFixed(1)} كم</span>}
       </div>
       <GoogleMap mapContainerStyle={{ width:"100%",height:"220px" }} center={driverLocation||passengerLocation||{lat:36.737,lng:3.086}} zoom={15} onLoad={m=>mapRef.current=m} options={{ disableDefaultUI:true,zoomControl:true }}>
-        {driverLocation&&<Marker position={driverLocation} icon={{ url:makeMarker("🚕","#0a0f1e"),scaledSize:new window.google.maps.Size(44,44) }} />}
+        {driverLocation&&<Marker position={driverLocation} icon={{ url:makeMarker("🚕","#141012"),scaledSize:new window.google.maps.Size(44,44) }} />}
         {passengerLocation&&mode==="pickup"&&<Marker position={passengerLocation} icon={{ url:makeMarker("📍",C.green),scaledSize:new window.google.maps.Size(44,44) }} />}
         {destLocation&&mode==="ride"&&<Marker position={destLocation} icon={{ url:makeMarker("🏁",C.blue),scaledSize:new window.google.maps.Size(44,44) }} />}
         {directions&&<DirectionsRenderer directions={directions} options={{ polylineOptions:{ strokeColor:mode==="pickup"?C.orange:C.green,strokeWeight:5,strokeOpacity:0.85 },suppressMarkers:true }} />}
@@ -1191,7 +1191,7 @@ export default function DriverDashboard({ user, onLogout }) {
                 <button onClick={()=>setShowChat(true)} style={{ width:"100%",background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:12,padding:"10px",color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
                   <span style={{ fontSize:16 }}>💬</span> محادثة مع الراكب
                 </button>
-                <button onClick={()=>passengerLoc&&openNavigation(passengerLoc.lat,passengerLoc.lng)} style={{ width:"100%",background:`linear-gradient(135deg,#1a73e8,#1557b0)`,border:"none",borderRadius:10,padding:"12px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+                <button onClick={()=>passengerLoc&&openNavigation(passengerLoc.lat,passengerLoc.lng)} style={{ width:"100%",background:`linear-gradient(135deg,#1c1a1d,#000000)`,border:"none",borderRadius:10,padding:"12px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
                   <span style={{ fontSize:18 }}>🗺️</span> انطلق — Google Maps
                 </button>
                 <div style={{ display:"flex",gap:8 }}>
@@ -1221,7 +1221,7 @@ export default function DriverDashboard({ user, onLogout }) {
                 <button onClick={()=>setShowChat(true)} style={{ width:"100%",background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:12,padding:"10px",color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
                   <span style={{ fontSize:16 }}>💬</span> محادثة مع الراكب
                 </button>
-                <button onClick={()=>destLoc&&openNavigation(destLoc.lat,destLoc.lng)} style={{ width:"100%",background:`linear-gradient(135deg,#1a73e8,#1557b0)`,border:"none",borderRadius:10,padding:"12px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+                <button onClick={()=>destLoc&&openNavigation(destLoc.lat,destLoc.lng)} style={{ width:"100%",background:`linear-gradient(135deg,#1c1a1d,#000000)`,border:"none",borderRadius:10,padding:"12px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
                   <span style={{ fontSize:18 }}>🗺️</span> تتبع مسار الرحلة — Google Maps
                 </button>
                 <div style={{ display:"flex",gap:8 }}>
@@ -1310,41 +1310,6 @@ export default function DriverDashboard({ user, onLogout }) {
             </div>
 
             <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
-              <button onClick={()=>setShowSubscription(true)} style={{ background:`linear-gradient(135deg,${C.goldLight},#fff8e1)`,border:`1px solid ${C.gold}44`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
+              <button onClick={()=>setShowSubscription(true)} style={{ background:`linear-gradient(135deg,${C.goldLight},#fde8eb)`,border:`1px solid ${C.gold}44`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
                 <span style={{ fontSize:22 }}>💳</span>
-                <div style={{ flex:1 }}><div style={{ fontWeight:700, color:C.gold }}>الاشتراكات والعروض</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>🎁 مجاني حالياً خلال فترة الإطلاق</div></div>
-                <span style={{ color:C.textMuted }}>←</span>
-              </button>
-              <button onClick={()=>setShowEarnings(true)} style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
-                <span style={{ fontSize:22 }}>📊</span>
-                <div style={{ flex:1 }}><div style={{ fontWeight:700 }}>الإيرادات والرحلات</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>إحصاءات مفصلة بالفترات</div></div>
-                <span style={{ color:C.textMuted }}>←</span>
-              </button>
-              <button onClick={()=>setShowChangeVehicle(true)} style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
-                <span style={{ fontSize:22 }}>🚗</span>
-                <div style={{ flex:1 }}><div style={{ fontWeight:700 }}>تغيير السيارة</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>تحديث بيانات سيارتك</div></div>
-                <span style={{ color:C.textMuted }}>←</span>
-              </button>
-              <button onClick={()=>setShowReset(true)} style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
-                <span style={{ fontSize:22 }}>🔐</span>
-                <div style={{ flex:1 }}><div style={{ fontWeight:700 }}>تغيير / استرجاع كلمة المرور</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>إرسال رابط الاسترجاع لبريدك</div></div>
-                <span style={{ color:C.textMuted }}>←</span>
-              </button>
-              <button onClick={onLogout} style={{ background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:16,padding:16,color:C.red,fontFamily:"inherit",fontWeight:800,fontSize:15,cursor:"pointer" }}>🚪 تسجيل الخروج</button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div style={{ position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:C.card,borderTop:`1px solid ${C.border}`,display:"flex",padding:"8px 0 20px",zIndex:100 }}>
-        {[{id:"home",label:"الرئيسية",icon:"🏠"},{id:"profile",label:"حسابي",icon:"👤"}].map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{ flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"8px 0" }}>
-            <div style={{ fontSize:22,opacity:tab===t.id?1:0.4 }}>{t.icon}</div>
-            <div style={{ fontSize:10,color:tab===t.id?C.green:C.textLight,fontWeight:tab===t.id?700:400 }}>{t.label}</div>
-          </button>
-        ))}
-      </div>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap'); @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  );
-}
+                <div style={{ flex:1 }}><div styl
