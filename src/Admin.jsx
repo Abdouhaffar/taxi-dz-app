@@ -32,29 +32,29 @@ const showErr = (e, action) => {
 };
 
 const C = {
-  bg: "#070b14",
-  sidebar: "#0d1117",
-  card: "#0d1117",
-  cardHover: "#161b22",
-  border: "#21262d",
-  green: "#238636",
-  greenLight: "#2ea043",
-  greenGlow: "#23863622",
-  orange: "#d97706",
-  orangeLight: "#f59e0b",
+  bg: "#0f0b0d",
+  sidebar: "#161113",
+  card: "#161113",
+  cardHover: "#211a1d",
+  border: "#33262b",
+  green: "#c4001d",
+  greenLight: "#e0334d",
+  greenGlow: "#c4001d22",
+  orange: "#e0334d",
+  orangeLight: "#e0334d",
   red: "#da3633",
   redLight: "#f85149",
   redGlow: "#da363322",
-  blue: "#1f6feb",
-  blueLight: "#388bfd",
-  blueGlow: "#1f6feb22",
-  purple: "#8b5cf6",
-  purpleGlow: "#8b5cf622",
-  yellow: "#e3b341",
-  text: "#e6edf3",
-  textMuted: "#8b949e",
-  textDim: "#484f58",
-  accent: "#58a6ff",
+  blue: "#c4001d",
+  blueLight: "#e0334d",
+  blueGlow: "#c4001d22",
+  purple: "#ff8fa0",
+  purpleGlow: "#ff8fa022",
+  yellow: "#ff5a70",
+  text: "#fff5f6",
+  textMuted: "#c7a9ae",
+  textDim: "#7a5c62",
+  accent: "#ff5a70",
 };
 
 // ===== HELPERS =====
@@ -78,7 +78,7 @@ const StatCard = ({ icon, label, value, sub, color, trend }) => (
 );
 
 const Avatar = ({ src, name, size = 40 }) => (
-  <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, #1f6feb, #8b5cf6)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.4, overflow: "hidden", flexShrink: 0, border: `2px solid ${C.border}` }}>
+  <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, #c4001d, #ff8fa0)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.4, overflow: "hidden", flexShrink: 0, border: `2px solid ${C.border}` }}>
     {src ? <img src={src} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (name?.[0] || "?").toUpperCase()}
   </div>
 );
@@ -144,7 +144,7 @@ function AdminLogin({ onLogin }) {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap'); *{box-sizing:border-box;margin:0;padding:0}`}</style>
       <div style={{ width: "100%", maxWidth: 420, padding: 24 }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <div style={{ width: 64, height: 64, borderRadius: 16, background: "linear-gradient(135deg, #1f6feb, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 16px", boxShadow: "0 8px 32px #1f6feb44" }}>🛡️</div>
+          <div style={{ width: 64, height: 64, borderRadius: 16, background: "linear-gradient(135deg, #c4001d, #ff8fa0)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 16px", boxShadow: "0 8px 32px #c4001d44" }}>🛡️</div>
           <div style={{ fontSize: 24, fontWeight: 900, color: C.text }}>TaxiDZ Admin</div>
           <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>لوحة التحكم الإدارية</div>
         </div>
@@ -163,7 +163,7 @@ function AdminLogin({ onLogin }) {
             </div>
             {error && <div style={{ background: C.redGlow, border: `1px solid ${C.red}44`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: C.redLight, textAlign: "center" }}>{error}</div>}
             <button onClick={handle} disabled={loading}
-              style={{ background: "linear-gradient(135deg, #1f6feb, #8b5cf6)", border: "none", borderRadius: 8, padding: "13px", color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer", opacity: loading ? 0.7 : 1, boxShadow: "0 4px 16px #1f6feb44" }}>
+              style={{ background: "linear-gradient(135deg, #c4001d, #ff8fa0)", border: "none", borderRadius: 8, padding: "13px", color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer", opacity: loading ? 0.7 : 1, boxShadow: "0 4px 16px #c4001d44" }}>
               {loading ? "جارٍ الدخول..." : "🔑 دخول"}
             </button>
           </div>
@@ -193,7 +193,7 @@ function Sidebar({ tab, setTab, admin, onLogout, counts }) {
     <div style={{ width: 220, minHeight: "100vh", background: C.sidebar, borderLeft: `1px solid ${C.border}`, display: "flex", flexDirection: "column", position: "fixed", right: 0, top: 0, bottom: 0, zIndex: 100 }}>
       <div style={{ padding: "20px 16px", borderBottom: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#1f6feb,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🛡️</div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#c4001d,#ff8fa0)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🛡️</div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>TaxiDZ</div>
             <div style={{ fontSize: 10, color: C.textMuted }}>Admin Panel</div>
@@ -1092,7 +1092,7 @@ export default function AdminApp() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'IBM Plex Sans Arabic',Cairo,sans-serif", direction: "rtl", display: "flex" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap'); *{box-sizing:border-box;margin:0;padding:0} ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:#21262d;border-radius:4px} select option{background:#0d1117;color:#e6edf3}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap'); *{box-sizing:border-box;margin:0;padding:0} ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:#33262b;border-radius:4px} select option{background:#161113;color:#fff5f6}`}</style>
 
       <Sidebar tab={tab} setTab={setTab} admin={admin} onLogout={() => setAdmin(null)} counts={counts} />
 
