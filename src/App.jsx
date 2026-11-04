@@ -14,6 +14,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 const cloudFunctions = getFunctions(undefined, "europe-west1");
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } from "@react-google-maps/api";
 import DriverDashboard from "./DriverDashboard2";
+import { ShareButton, TierProgress } from "./ReferralShare";
 
 const LIBRARIES = ["places"];
 
@@ -485,7 +486,13 @@ function WalletScreen({ userId, passengerData, lang, onBack }) {
   const [rides,setRides]=useState([]);
   const points=passengerData?.points||0;
   const totalRides=passengerData?.totalRides||0;
-  const referralCode=passengerData?.referralCode||"—";
+  const [referralCode,setReferralCode]=useState(passengerData?.referralCode||"");
+  useEffect(()=>{
+    if(referralCode||!userId) return;
+    const c=`BRQ${userId.substring(0,6).toUpperCase()}`;
+    setReferralCode(c);
+    updateDoc(doc(db,"passengers",userId),{referralCode:c}).catch(()=>{});
+  },[userId]);
 
   useEffect(()=>{
     const fetchRides=async()=>{
@@ -533,22 +540,15 @@ function WalletScreen({ userId, passengerData, lang, onBack }) {
       <div style={{ margin:"0 20px 14px",background:C.card,borderRadius:20,padding:20,boxShadow:C.shadow }}>
         <div style={{ fontWeight:800,fontSize:15,color:C.text,marginBottom:4 }}>{t.referral}</div>
         <div style={{ fontSize:13,color:C.textMuted,marginBottom:14 }}>{t.referralDesc}</div>
-        <div style={{ background:`linear-gradient(135deg,${C.goldLight},#fde8eb)`,border:`2px dashed ${C.gold}`,borderRadius:16,padding:"14px 20px",textAlign:"center",marginBottom:12 }}>
-          <div style={{ fontSize:12,color:C.gold,fontWeight:600,marginBottom:4 }}>{lang==="ar"?"كود الإحالة الخاص بك":"Votre code de parrainage"}</div>
-          <div style={{ fontSize:28,fontWeight:900,color:C.gold,letterSpacing:4 }}>{referralCode}</div>
+        <div style={{ background:C.dark,border:`2px dashed ${C.red}`,borderRadius:16,padding:"14px 20px",textAlign:"center",marginBottom:16 }}>
+          <div style={{ fontSize:12,color:"#ffffffaa",fontWeight:600,marginBottom:4 }}>{lang==="ar"?"كود الإحالة الخاص بك":"Votre code de parrainage"}</div>
+          <div style={{ fontSize:28,fontWeight:900,color:"#fff",letterSpacing:4 }}>{referralCode||"—"}</div>
         </div>
-        <div style={{ display:"flex",gap:8 }}>
-          <button onClick={copyCode} style={{ flex:1,background:C.goldLight,border:`1px solid ${C.gold}44`,borderRadius:14,padding:"12px",color:C.gold,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:13 }}>
-            📋 {lang==="ar"?"نسخ الكود":"Copier"}
-          </button>
-          <button onClick={()=>{ const msg=lang==="ar"?`انضم لتطبيق البراق واستخدم كودي ${referralCode} للحصول على خصم! 🚕`:`Rejoignez AL-BURAQ avec mon code ${referralCode}! 🚕`; window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`,"_blank"); }}
-            style={{ flex:1,background:"#25d36622",border:"1px solid #25d36644",borderRadius:14,padding:"12px",color:"#25d366",fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:13 }}>
-            📤 {lang==="ar"?"مشاركة":"Partager"}
-          </button>
-        </div>
-        <div style={{ background:C.greenLight,borderRadius:12,padding:"10px 14px",marginTop:12,fontSize:12,color:C.greenDark }}>
-          🎁 {lang==="ar"?"احصل على 50 نقطة مقابل كل صديق يسجل بكودك":"Gagnez 50 points pour chaque ami parrainé"}
-        </div>
+        {referralCode&&<ShareButton code={referralCode} lang={lang==="ar"||lang==="fr"||lang==="en"?lang:"ar"} />}
+      </div>
+
+      <div style={{ margin:"0 20px 14px" }}>
+        <TierProgress count={passengerData?.referralCount||0} lang={lang==="ar"||lang==="fr"||lang==="en"?lang:"ar"} />
       </div>
 
       {/* Trip history */}
@@ -727,6 +727,57 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
 }
 
 // ===== AUTH =====
+// ===== حركة التحقق من الرمز: الصناديق تلتحم في مربع وتُضاء الخطوط =====
+function OtpVerifyingGrid({ digits }) {
+  const F=[[0,0],[96,0],[0,84],[96,84]];          // المواضع النهائية (شبكة 2×2)
+  const I=[-48,16,80,144];                         // المواضع الأولية (صف واحد)
+  return (
+    <div style={{ display:"flex",justifyContent:"center",margin:"10px 0 26px" }}>
+      <style>{`
+        @keyframes otpFly{from{transform:translate(var(--dx),var(--dy))}to{transform:none}}
+        @keyframes otpWireH{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+        @keyframes otpWireV{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+        @keyframes otpGlow{0%,100%{box-shadow:0 0 0 0 rgba(196,0,29,0.0)}50%{box-shadow:0 0 18px 3px rgba(196,0,29,0.45)}}
+        @keyframes otpBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+      `}</style>
+      <div style={{ position:"relative",width:152,height:144,animation:"otpBreath 1.6s ease-in-out 1.3s infinite" }}>
+        {[[56,28,40,2,"H"],[56,112,40,2,"H"],[27,60,2,24,"V"],[123,60,2,24,"V"]].map(([l,t,w,h,d],k)=>(
+          <div key={k} style={{ position:"absolute",left:l,top:t,width:w,height:h,background:C.red,borderRadius:2,boxShadow:"0 0 8px rgba(196,0,29,0.7)",transformOrigin:d==="H"?"left center":"center top",animation:`${d==="H"?"otpWireH":"otpWireV"} 0.4s ease ${0.7+k*0.12}s both` }} />
+        ))}
+        {F.map(([x,y],i)=>(
+          <div key={i} style={{ "--dx":`${I[i]-x}px`,"--dy":`${42-y}px`,position:"absolute",left:x,top:y,width:56,height:60,borderRadius:14,background:"#fff",border:`2px solid ${C.red}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:900,fontFamily:"monospace",color:C.text,animation:`otpFly 0.65s cubic-bezier(.77,0,.18,1) both, otpGlow 1.4s ease ${1.1+i*0.12}s infinite` }}>{digits[i]}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ===== حركة النجاح =====
+function OtpSuccess({ lang }) {
+  const dots=Array.from({length:10},(_,i)=>i);
+  return (
+    <div style={{ display:"flex",flexDirection:"column",alignItems:"center",padding:"14px 0 26px" }}>
+      <style>{`
+        @keyframes okPop{0%{transform:scale(0.4);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1)}}
+        @keyframes okRing{0%{transform:scale(0.6);opacity:0.7}100%{transform:scale(2.1);opacity:0}}
+        @keyframes okDraw{to{stroke-dashoffset:0}}
+        @keyframes okDot{0%{transform:rotate(var(--a)) translateY(0) scale(1);opacity:1}100%{transform:rotate(var(--a)) translateY(-70px) scale(0.2);opacity:0}}
+        @keyframes okText{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+      `}</style>
+      <div style={{ position:"relative",width:96,height:96,display:"flex",alignItems:"center",justifyContent:"center" }}>
+        <div style={{ position:"absolute",inset:0,borderRadius:"50%",border:`2px solid ${C.red}`,animation:"okRing 1s ease-out 0.15s both" }} />
+        <div style={{ position:"absolute",inset:0,borderRadius:"50%",border:`2px solid ${C.red}`,animation:"okRing 1s ease-out 0.45s both" }} />
+        {dots.map(i=><div key={i} style={{ "--a":`${i*36}deg`,position:"absolute",left:"50%",top:"50%",width:6,height:6,marginLeft:-3,marginTop:-3,borderRadius:"50%",background:i%2?C.red:C.dark,animation:"okDot 0.9s ease-out 0.3s both" }} />)}
+        <div style={{ width:72,height:72,borderRadius:"50%",background:C.dark,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 10px 28px rgba(0,0,0,0.3)",animation:"okPop 0.5s cubic-bezier(.2,.8,.2,1) both" }}>
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" strokeDasharray="24" strokeDashoffset="24" style={{ animation:"okDraw 0.45s ease 0.35s forwards" }} /></svg>
+        </div>
+      </div>
+      <div style={{ fontSize:20,fontWeight:900,color:C.text,marginTop:18,animation:"okText 0.5s ease 0.5s both" }}>{lang==="ar"?"تم التحقق بنجاح":lang==="fr"?"Vérifié avec succès":"Verified successfully"}</div>
+      <div style={{ fontSize:13,color:C.textMuted,marginTop:4,animation:"okText 0.5s ease 0.65s both" }}>{lang==="ar"?"جارٍ إدخالك إلى التطبيق…":lang==="fr"?"Connexion en cours…":"Signing you in…"}</div>
+    </div>
+  );
+}
+
 function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   const t = T[lang];
   const isRTL = lang === "ar";
@@ -739,6 +790,14 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   const [name, setName] = useState("");
   const [pinCode, setPinCode] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
+  // كود الإحالة: يُملأ تلقائياً من رابط الدعوة (?ref=CODE) إن وُجد
+  const [refCode, setRefCode] = useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search).get("ref");
+      if (p) localStorage.setItem("taxidz_ref", p.toUpperCase());
+      return (p || localStorage.getItem("taxidz_ref") || "").toUpperCase();
+    } catch (e) { return ""; }
+  });
   const [loginPhone, setLoginPhone] = useState("");
   const [loginPin, setLoginPin] = useState("");
   const [resetPhone, setResetPhone] = useState("");
@@ -756,6 +815,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   const [error, setError] = useState("");
   const otpRefs = [useRef(),useRef(),useRef(),useRef()];
   const autoSubmitRef = useRef("");
+  const [verified, setVerified] = useState(false);
   const [blade, setBlade] = useState(null); // انتقال الشفرة القطرية بين الدخول والتسجيل
   const goTab = (tab) => {
     if (blade || tab === authTab) return;
@@ -937,14 +997,18 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
         role, status:role==="driver"?"pending":"active",
         verificationStatus:role==="driver"?"none":null,
         rating:0, totalRatings:0, totalRides:0, points:0,
-        referralCode:generateReferralCode(u.uid), referralCount:0,
+        referralCode:generateReferralCode(u.uid), referralCount:0, referredBy:(refCode||"").trim().toUpperCase()||null,
         createdAt:serverTimestamp()
       });
       if (isPassenger) { localStorage.setItem("taxidz_name",finalName); localStorage.setItem("taxidz_phone",phoneF); }
       localStorage.setItem("taxidz_role", role);
       try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,col,u.uid),{fcmToken},{merge:true}); } catch(e){}
+      try{ localStorage.removeItem("taxidz_ref"); }catch(e){}
+      setVerified(true);
+      await new Promise(r=>setTimeout(r,1600)); // عرض حركة النجاح قبل الدخول
       onSuccess(role);
     } catch(e) {
+      setVerified(false);
       const locked = e.code==="functions/resource-exhausted"||e.details?.code==="resource-exhausted"||/قفل|resource-exhausted/i.test(e.message||"");
       setError(locked?(lang==="ar"?"تم قفل حسابك مؤقتاً 24 ساعة بسبب محاولات خاطئة متكررة":"Compte verrouillé 24h — trop de tentatives"):(lang==="ar"?"رمز التحقق خاطئ أو منتهي":"Code incorrect ou expiré"));
       setOtp(Array(OTP_LEN).fill(""));
@@ -997,6 +1061,8 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
     if (resendTimer > 0) return;
     setOtp(Array(OTP_LEN).fill("")); setError(""); setStep("form");
   };
+
+  const otpStage = verified ? "success" : loading ? "verifying" : "entry";
 
   const inputStyle = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:14, padding:"13px 16px", fontFamily:"inherit", fontSize:14, color:C.text, outline:"none", width:"100%", direction:isRTL?"rtl":"ltr" };
 
@@ -1109,6 +1175,9 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
                 {showPinConfirm?"🙈":"👁️"}
               </button>
             </div>
+            <input value={refCode} onChange={e=>setRefCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,""))}
+              placeholder={lang==="ar"?"كود الدعوة (اختياري) — تحصل على 20 نقطة هدية":lang==="fr"?"Code de parrainage (optionnel) — 20 pts offerts":"Referral code (optional) — get 20 pts"}
+              maxLength={12} style={{ width:"100%",background:C.bg,border:`1px solid ${refCode?C.red:C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:"ltr",textAlign:"center",letterSpacing:2,fontWeight:700 }} />
             <div style={{ background:C.blueLight,borderRadius:12,padding:"10px 14px",fontSize:12,color:C.blue }}>
               🔐 {lang==="ar"?"احفظ كودك جيداً — ستحتاجه عند كل دخول":"Mémorisez bien votre code"}
             </div>
@@ -1157,6 +1226,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
         {/* ===== OTP ===== */}
         {step==="otp"&&(
           <div style={{ background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow }}>
+            {otpStage==="entry"&&(
             <div style={{ textAlign:"center",marginBottom:16 }}>
               <div style={{ fontSize:40,marginBottom:8 }}>{otpMethod==="whatsapp"?"🟢":"💬"}</div>
               <div style={{ fontSize:13,color:C.textMuted }}>
@@ -1165,16 +1235,20 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
                 </span>
               </div>
             </div>
+            )}
+            {otpStage==="entry"?(
             <div style={{ display:"flex",gap:8,justifyContent:"center",marginBottom:20,direction:"ltr" }} onPaste={handleOtpPaste}>
               {otp.map((digit,i)=>(
                 <input key={i} ref={otpRefs[i]} value={digit}
                   onChange={e=>handleOtpChange(i,e.target.value)}
                   onKeyDown={e=>{ if(e.key==="Backspace"&&!digit&&i>0) otpRefs[i-1].current?.focus(); }}
                   maxLength={i===0?OTP_LEN:1} type="tel" inputMode="numeric" autoComplete={i===0?"one-time-code":"off"} onFocus={e=>e.target.select()}
-                  style={{ width:62,height:68,textAlign:"center",fontSize:24,fontWeight:900,fontFamily:"monospace",background:digit?`${accent}15`:C.bg,border:`2px solid ${digit?accent:C.border}`,borderRadius:14,color:C.text,outline:"none" }} />
+                  style={{ width:62,height:68,textAlign:"center",fontSize:24,fontWeight:900,fontFamily:"monospace",background:digit?"#fff":C.bg,border:`2px solid ${digit?C.red:C.border}`,boxShadow:digit?"0 0 0 4px rgba(196,0,29,0.10), 0 6px 16px rgba(196,0,29,0.18)":"none",transform:digit?"translateY(-2px)":"none",transition:"all 0.2s cubic-bezier(.2,.8,.2,1)",borderRadius:14,color:C.text,outline:"none" }} />
               ))}
             </div>
+            ):otpStage==="verifying"?<OtpVerifyingGrid digits={otp} />:<OtpSuccess lang={lang} />}
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center",marginBottom:12 }}>{error}</div>}
+            {otpStage==="entry"&&(<>
             <button onClick={authTab==="reset"?verifyOTPReset:verifyOTPRegister}
               disabled={loading||otp.join("").length<OTP_LEN}
               style={{ width:"100%",background:otp.join("").length===OTP_LEN?`${C.dark}`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:otp.join("").length===OTP_LEN?"pointer":"default",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:12 }}>
@@ -1190,6 +1264,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
                 </button>
               )}
             </div>
+            </>)}
           </div>
         )}
 
