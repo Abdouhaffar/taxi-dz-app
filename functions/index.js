@@ -1,16 +1,15 @@
 /**
  * AL-BURAQ - Firebase Cloud Functions
  * (1) الإشعارات التلقائية لكل أحداث التطبيق (FCM)
- * (2) نظام OTP عبر Twilio Verify
+ * (2) نظام OTP عبر smssak
  *
  * تثبيت:
  * npm install -g firebase-tools
  * firebase login
  * firebase init functions (اختر JavaScript)
  * ضع هذا الملف في مجلد functions/
- * firebase functions:secrets:set TWILIO_ACCOUNT_SID
- * firebase functions:secrets:set TWILIO_AUTH_TOKEN
- * firebase functions:secrets:set TWILIO_VERIFY_SERVICE_SID
+ * firebase functions:secrets:set SMSSAK_API_KEY
+ * firebase functions:secrets:set SMSSAK_PROJECT_ID
  * firebase deploy --only functions
  */
 
@@ -18,7 +17,6 @@ const functions = require("firebase-functions");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
-const twilio = require("twilio");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -406,13 +404,115 @@ exports.onNewReport = functions.firestore
     return null;
   });
 
+
 // ============================================================
-// ==================  2) نظام OTP (Twilio Verify)  =============
+// ==================  3) نظام الإحالة بالنقاط  =================
+// ============================================================
+// كلما زاد عدد المدعوين زادت نقاط كل دعوة (يجب أن تطابق ReferralShare.jsx في الواجهة)
+const REFERRAL_BONUSES = { 5: 50, 15: 150, 30: 400 };
+const REFERRAL_WELCOME = 20;
+function referralPerInvite(n) { return n >= 30 ? 60 : n >= 15 ? 50 : n >= 5 ? 40 : 30; }
+
+async function processReferral(snap, collectionName) {
+  const data = snap.data() || {};
+  const code = String(data.referredBy || "").trim().toUpperCase();
+  if (!code || data.referralRewarded) return null;
+
+  // ابحث عن صاحب الكود في الركاب ثم السائقين
+  let refDoc = null;
+  for (const col of ["passengers", "drivers"]) {
+    const q = await db.collection(col).where("referralCode", "==", code).limit(1).get();
+    if (!q.empty) { refDoc = q.docs[0]; break; }
+  }
+  const invalid = !refDoc || refDoc.id === snap.id ||
+    (refDoc.data().phone && data.phone && refDoc.data().phone === data.phone);
+  if (invalid) {
+    await snap.ref.set({ referralRewarded: true, referralInvalid: true }, { merge: true });
+    return null;
+  }
+
+  let reward = null;
+  await db.runTransaction(async (tx) => {
+    const fresh = await tx.get(snap.ref);
+    if (fresh.data()?.referralRewarded) return;             // منع التكرار
+    const refSnap = await tx.get(refDoc.ref);
+    const count = (refSnap.data().referralCount || 0) + 1;
+    const per = referralPerInvite(count);
+    const bonus = REFERRAL_BONUSES[count] || 0;
+    reward = { count, per, bonus, total: per + bonus, token: refSnap.data().fcmToken || null };
+    const FV = admin.firestore.FieldValue;
+    tx.update(refDoc.ref, { referralCount: count, points: FV.increment(per + bonus) });
+    tx.update(snap.ref, { referralRewarded: true, points: FV.increment(REFERRAL_WELCOME) });
+    const log = db.collection("point_transactions");
+    tx.set(log.doc(), { uid: refDoc.id, type: "referral", points: per, from: snap.id, createdAt: FV.serverTimestamp() });
+    if (bonus) tx.set(log.doc(), { uid: refDoc.id, type: "bonus", points: bonus, milestone: count, createdAt: FV.serverTimestamp() });
+    tx.set(log.doc(), { uid: snap.id, type: "welcome", points: REFERRAL_WELCOME, createdAt: FV.serverTimestamp() });
+  });
+
+  if (reward?.token) {
+    await sendNotification(
+      reward.token,
+      "🎉 صديقك انضم بكودك!",
+      `+${reward.total} نقطة${reward.bonus ? ` (منها مكافأة ${reward.bonus})` : ""} · عدد دعواتك: ${reward.count}`,
+      { type: "referral_reward", screen: "wallet" }
+    );
+  }
+  return null;
+}
+
+exports.onPassengerReferral = functions.firestore
+  .document("passengers/{id}")
+  .onCreate((snap) => processReferral(snap, "passengers").catch((e) => { console.error("referral error:", e); return null; }));
+
+exports.onDriverReferral = functions.firestore
+  .document("drivers/{id}")
+  .onCreate((snap) => processReferral(snap, "drivers").catch((e) => { console.error("referral error:", e); return null; }));
+
+// ============================================================
+// ==================  2) نظام OTP (smssak)  ====================
 // ============================================================
 
-const TWILIO_SID = defineSecret("TWILIO_ACCOUNT_SID");
-const TWILIO_TOKEN = defineSecret("TWILIO_AUTH_TOKEN");
-const TWILIO_VERIFY_SID = defineSecret("TWILIO_VERIFY_SERVICE_SID");
+const SMSSAK_KEY = defineSecret("SMSSAK_API_KEY");
+const SMSSAK_PROJECT_ID = defineSecret("SMSSAK_PROJECT_ID");
+
+// عناوين smssak (Cloud Run). الاسم الثاني احتياطي إن كان أحد الحرفين (l / 1) مقروءاً خطأً.
+const SMSSAK_SEND_URLS = [
+  "https://sendotp-47lvvvrp4a-uc.a.run.app",
+  "https://sendotp-471vvvrp4a-uc.a.run.app",
+];
+const SMSSAK_VERIFY_URLS = [
+  "https://verifyotp-47lvvvrp4a-uc.a.run.app",
+  "https://verifyotp-471vvvrp4a-uc.a.run.app",
+];
+// صيغة الرقم المرسل إلى smssak: "local" = 0XXXXXXXXX ، "nozero" = XXXXXXXXX ، "intl" = +213XXXXXXXXX
+const SMSSAK_PHONE_FORMAT = "local";
+function toSmssakPhone(e164) {
+  const nine = e164.replace("+213", "");
+  if (SMSSAK_PHONE_FORMAT === "intl") return e164;
+  if (SMSSAK_PHONE_FORMAT === "nozero") return nine;
+  return "0" + nine;
+}
+
+// POST إلى smssak مع تجربة العنوان الاحتياطي عند فشل الاتصال (DNS/شبكة) فقط
+async function smssakPost(urls, body) {
+  let lastErr;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", key: SMSSAK_KEY.value() },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch (_) {}
+      return { ok: res.status === 200, status: res.status, text, json };
+    } catch (e) {
+      lastErr = e; // فشل اتصال → جرّب العنوان التالي
+    }
+  }
+  throw lastErr;
+}
 
 const OTP_REGION = "europe-west1"; // يطابق المنطقة في App.jsx (cloudFunctions)
 
@@ -483,12 +583,11 @@ exports.checkPhoneRegistered = onCall(
   }
 );
 
-// ===== إرسال رمز التحقق (SMS أو WhatsApp) =====
+// ===== إرسال رمز التحقق (SMS عبر smssak) =====
 exports.sendOtpTwilio = onCall(
-  { region: OTP_REGION, secrets: [TWILIO_SID, TWILIO_TOKEN, TWILIO_VERIFY_SID] },
+  { region: OTP_REGION, secrets: [SMSSAK_KEY, SMSSAK_PROJECT_ID] },
   async (request) => {
     const phone = normalizePhone(request.data?.phone);
-    const channel = request.data?.channel === "whatsapp" ? "whatsapp" : "sms";
     if (!phone) {
       throw new HttpsError("invalid-argument", "رقم هاتف غير صحيح");
     }
@@ -503,14 +602,19 @@ exports.sendOtpTwilio = onCall(
       }
     }
 
-    const client = twilio(TWILIO_SID.value(), TWILIO_TOKEN.value());
     try {
-      await client.verify.v2
-        .services(TWILIO_VERIFY_SID.value())
-        .verifications.create({ to: phone, channel });
+      const r = await smssakPost(SMSSAK_SEND_URLS, {
+        country: "dz",
+        projectId: SMSSAK_PROJECT_ID.value(),
+        phone: toSmssakPhone(phone),
+      });
+      if (!r.ok) {
+        console.error("smssak send failed:", r.status, r.text);
+        throw new Error("smssak " + r.status);
+      }
       return { success: true };
     } catch (e) {
-      console.error("Twilio send error:", e);
+      console.error("smssak send error:", e);
       throw new HttpsError("internal", "فشل إرسال رمز التحقق");
     }
   }
@@ -518,7 +622,7 @@ exports.sendOtpTwilio = onCall(
 
 // ===== التحقق من الرمز + إنشاء/تسجيل الدخول في Firebase =====
 exports.verifyOtpTwilio = onCall(
-  { region: OTP_REGION, secrets: [TWILIO_SID, TWILIO_TOKEN, TWILIO_VERIFY_SID] },
+  { region: OTP_REGION, secrets: [SMSSAK_KEY, SMSSAK_PROJECT_ID] },
   async (request) => {
     const phone = normalizePhone(request.data?.phone);
     const code = request.data?.code;
@@ -534,16 +638,24 @@ exports.verifyOtpTwilio = onCall(
       throw new HttpsError("resource-exhausted", "تم قفل حسابك مؤقتاً بسبب محاولات خاطئة متكررة");
     }
 
-    const client = twilio(TWILIO_SID.value(), TWILIO_TOKEN.value());
-    let check;
+    let approved = false;
     try {
-      check = await client.verify.v2
-        .services(TWILIO_VERIFY_SID.value())
-        .verificationChecks.create({ to: phone, code });
+      const r = await smssakPost(SMSSAK_VERIFY_URLS, {
+        country: "dz",
+        phone: toSmssakPhone(phone),
+        projectId: SMSSAK_PROJECT_ID.value(),
+        otp: String(code),
+      });
+      console.log("smssak verify:", r.status, r.text);
+      if (r.status >= 500) throw new Error("smssak " + r.status);
+      const j = r.json || {};
+      approved = r.ok && j.success !== false && j.verified !== false &&
+                 j.valid !== false && !j.error;
     } catch (e) {
-      console.error("Twilio verify error:", e);
+      console.error("smssak verify error:", e);
       throw new HttpsError("internal", "فشل التحقق من الرمز");
     }
+    const check = { status: approved ? "approved" : "denied" };
 
     if (check.status !== "approved") {
       const newFailCount = (attemptsData.failCount || 0) + 1;
