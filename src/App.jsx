@@ -756,6 +756,13 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   const [error, setError] = useState("");
   const otpRefs = [useRef(),useRef(),useRef(),useRef()];
   const autoSubmitRef = useRef("");
+  const [blade, setBlade] = useState(null); // انتقال الشفرة القطرية بين الدخول والتسجيل
+  const goTab = (tab) => {
+    if (blade || tab === authTab) return;
+    setBlade({ key:Date.now(), dir: tab==='register' ? 1 : -1, tab });
+    setTimeout(() => switchTab(tab), 430);
+    setTimeout(() => setBlade(null), 950);
+  };
 
   const generateReferralCode = (uid) => `BRQ${uid.substring(0,6).toUpperCase()}`;
 
@@ -996,16 +1003,32 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   return (
     <div style={{ minHeight:"100vh",background:C.brand,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       <FloatingLang lang={lang} setLang={setLang} side={isRTL?"left":"right"} />
+      <style>{`
+        @keyframes bladeR{from{transform:translateX(100vw) skewX(-14deg)}to{transform:translateX(-225vw) skewX(-14deg)}}
+        @keyframes bladeL{from{transform:translateX(-200vw) skewX(-14deg)}to{transform:translateX(125vw) skewX(-14deg)}}
+        @keyframes bladeText{0%,28%{opacity:0;transform:translateY(14px)}46%,58%{opacity:1;transform:none}78%,100%{opacity:0;transform:translateY(-10px)}}
+        @keyframes bladeFormIn{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+      `}</style>
+      {blade&&(
+        <div key={blade.key} style={{ position:"fixed",inset:0,zIndex:9500,pointerEvents:"none",overflow:"hidden" }}>
+          <div style={{ position:"absolute",top:"-5%",bottom:"-5%",left:0,width:"200vw",background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,borderLeft:`7px solid ${C.red}`,animation:`${blade.dir>0?"bladeR":"bladeL"} 0.95s cubic-bezier(.77,0,.18,1) forwards` }} />
+          <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:32,color:"#fff",animation:"bladeText 0.95s ease forwards" }}>
+            <div style={{ fontSize:12,letterSpacing:3,color:C.red,fontWeight:800,marginBottom:10 }}>AL-BURAQ</div>
+            <div style={{ fontSize:34,fontWeight:900,lineHeight:1.2 }}>{blade.tab==="register"?(lang==="ar"?"ابدأ رحلتك الأولى.":lang==="fr"?"Commencez votre premier trajet.":"Start your first ride."):(lang==="ar"?"مرحباً بعودتك.":lang==="fr"?"Bon retour.":"Welcome back.")}</div>
+            <div style={{ fontSize:14,color:"#ffffffaa",marginTop:10,maxWidth:260 }}>{blade.tab==="register"?(lang==="ar"?"حساب واحد برقم هاتفك يكفي.":lang==="fr"?"Un seul compte avec votre numéro.":"One account with your phone number."):(lang==="ar"?"رحلاتك وبياناتك كما تركتها.":lang==="fr"?"Vos trajets, comme vous les avez laissés.":"Your trips, just as you left them.")}</div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
-      <div style={{ background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,padding:"48px 24px 24px",textAlign:"center",position:"relative" }}>
+      <div style={{ background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,padding:"48px 24px 54px",textAlign:"center",position:"relative",clipPath:authTab==="register"?"polygon(0 0,100% 0,100% 84%,0 100%)":"polygon(0 0,100% 0,100% 100%,0 84%)",transition:"clip-path 0.7s cubic-bezier(.77,0,.18,1)" }}>
         <button onClick={step==="form"?onBack:()=>{if(resetGuardRef)resetGuardRef.current=false;sessionStorage.removeItem("taxidz_reset_in_progress");setStep("form");setOtp(Array(OTP_LEN).fill(""));setError("");}}
           style={{ position:"absolute",top:48,[isRTL?"right":"left"]:20,width:36,height:36,borderRadius:10,background:"#ffffff22",border:"none",color:"#fff",cursor:"pointer",fontSize:16 }}>←</button>
         <img src="/logo192.png" alt="AL-BURAQ" style={{ width:60,height:60,objectFit:"contain",marginBottom:8 }} onError={e=>e.target.style.display="none"} />
         <div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{isPassenger?t.passengerGate:t.driverGate}</div>
       </div>
 
-      <div style={{ margin:"-14px 16px 32px",background:C.card,borderRadius:20,padding:"20px 18px 28px",boxShadow:"0 10px 40px rgba(0,0,0,0.25)",position:"relative" }}>
+      <div key={authTab+step} style={{ margin:"-22px 16px 32px",animation:"bladeFormIn 0.6s cubic-bezier(.2,.8,.2,1) both",background:C.card,borderRadius:20,padding:"20px 18px 28px",boxShadow:"0 10px 40px rgba(0,0,0,0.25)",position:"relative" }}>
         <LanguageSwitcher lang={lang} setLang={setLang} />
 
         {/* Tabs */}
@@ -1015,7 +1038,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
               {id:"login",label:lang==="ar"?"🔑 تسجيل الدخول":lang==="fr"?"🔑 Connexion":"🔑 Login"},
               {id:"register",label:lang==="ar"?"✅ حساب جديد":lang==="fr"?"✅ Inscription":"✅ Register"},
             ].map(m=>(
-              <button key={m.id} onClick={()=>switchTab(m.id)}
+              <button key={m.id} onClick={()=>goTab(m.id)}
                 style={{ flex:1,padding:10,borderRadius:11,border:"none",background:authTab===m.id?C.card:"transparent",color:authTab===m.id?C.text:C.textMuted,cursor:"pointer",fontFamily:"inherit",fontWeight:700,fontSize:13 }}>{m.label}</button>
             ))}
           </div>
@@ -1828,4 +1851,4 @@ export default function App() {
       {screen==="app"&&role==="driver"&&<DriverDashboard user={user} onLogout={handleLogout} />}
     </div>
   );
-} 
+}
