@@ -3,6 +3,7 @@ import { doc, onSnapshot, updateDoc, setDoc, getDoc, serverTimestamp, collection
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer } from "@react-google-maps/api";
 import { db, requestNotificationPermission, onForegroundMessage } from "./firebase";
 import { getFunctions, httpsCallable } from "firebase/functions";
+import { ShareButton, TierProgress } from "./ReferralShare";
 
 const cloudFunctions = getFunctions(undefined, "europe-west1");
 
@@ -893,6 +894,86 @@ function DriverNotificationToast({ notification, onClose }) {
 }
 
 // ===== MAIN DASHBOARD =====
+// ===== محفظة السائق: النقاط + كود الدعوة + المستوى =====
+function DriverWalletScreen({ uid, driverData, onBack, onOpenEarnings }) {
+  const [code,setCode]=useState(driverData?.referralCode||"");
+  const [log,setLog]=useState([]);
+  const points=driverData?.points||0;
+  const count=driverData?.referralCount||0;
+  useEffect(()=>{
+    if(code||!uid) return;
+    const c=`BRQ${uid.substring(0,6).toUpperCase()}`;
+    setCode(c);
+    updateDoc(doc(db,"drivers",uid),{referralCode:c}).catch(()=>{});
+  },[uid]);
+  useEffect(()=>{
+    (async()=>{
+      try {
+        const snap=await getDocs(query(collection(db,"point_transactions"),where("uid","==",uid),limit(30)));
+        const rows=snap.docs.map(d=>({id:d.id,...d.data()}));
+        rows.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+        setLog(rows);
+      } catch(e){ console.log("point log:",e); }
+    })();
+  },[uid]);
+  const reasonLabel={ referral:"👥 دعوة صديق", bonus:"🎁 مكافأة مستوى", welcome:"🎉 هدية التسجيل بكود دعوة" };
+  return (
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:"rtl",paddingBottom:40 }}>
+      <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
+        <button onClick={onBack} style={{ width:42,height:42,borderRadius:"50%",background:C.card,border:`1px solid ${C.border}`,color:C.text,cursor:"pointer",fontSize:18 }}>→</button>
+        <div style={{ fontWeight:800,fontSize:18,color:C.text }}>💰 المحفظة والإحالة</div>
+      </div>
+
+      <div style={{ margin:"0 20px 14px",background:`linear-gradient(135deg,#2b1a1e,${C.bg})`,border:`1px solid ${C.border}`,borderRadius:24,padding:24,position:"relative",overflow:"hidden" }}>
+        <div style={{ position:"absolute",top:-24,left:-24,width:120,height:120,borderRadius:"50%",background:"#c4001d33" }} />
+        <div style={{ fontSize:13,color:"#c7a9ae",marginBottom:4 }}>نقاطك المتراكمة</div>
+        <div style={{ fontSize:48,fontWeight:900,color:"#ff5a70" }}>⭐ {points}</div>
+        <div style={{ display:"flex",gap:18,marginTop:14 }}>
+          <div><div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{count}</div><div style={{ fontSize:11,color:"#c7a9ae" }}>دعوة ناجحة</div></div>
+          <div style={{ width:1,background:"#ffffff22" }} />
+          <div><div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{driverData?.totalRides||0}</div><div style={{ fontSize:11,color:"#c7a9ae" }}>رحلة</div></div>
+        </div>
+      </div>
+
+      <div style={{ margin:"0 20px 14px",background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:20 }}>
+        <div style={{ fontWeight:800,fontSize:15,color:C.text,marginBottom:4 }}>🎁 ادعُ أصدقاءك واكسب نقاطاً</div>
+        <div style={{ fontSize:13,color:C.textMuted,marginBottom:14 }}>كلما دعوت عدداً أكبر ارتفع مستواك وزادت نقاط كل دعوة.</div>
+        <div style={{ background:"#c4001d18",border:"2px dashed #c4001d",borderRadius:16,padding:"14px 20px",textAlign:"center",marginBottom:16 }}>
+          <div style={{ fontSize:12,color:C.textMuted,fontWeight:600,marginBottom:4 }}>كود الإحالة الخاص بك</div>
+          <div style={{ fontSize:28,fontWeight:900,color:"#fff",letterSpacing:4 }}>{code||"—"}</div>
+        </div>
+        {code&&<ShareButton code={code} lang="ar" accent="#c4001d" labelColor="#c7a9ae" />}
+      </div>
+
+      <div style={{ margin:"0 20px 14px" }}>
+        <TierProgress count={count} lang="ar" dark />
+      </div>
+
+      <div style={{ margin:"0 20px 14px" }}>
+        <button onClick={onOpenEarnings} style={{ width:"100%",background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
+          <span style={{ fontSize:22 }}>📊</span>
+          <div style={{ flex:1 }}><div>الإيرادات والرحلات</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>أرباحك من الرحلات بالفترات</div></div>
+          <span style={{ color:C.textMuted }}>←</span>
+        </button>
+      </div>
+
+      <div style={{ margin:"0 20px" }}>
+        <div style={{ fontWeight:800,fontSize:15,color:C.text,marginBottom:10 }}>سجل النقاط</div>
+        {log.length===0&&<div style={{ textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:13 }}>لا توجد حركات بعد — شارك كودك لتبدأ</div>}
+        {log.map(r=>(
+          <div key={r.id} style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+            <div>
+              <div style={{ fontSize:13,color:C.text,fontWeight:600 }}>{reasonLabel[r.type]||"نقاط"}</div>
+              <div style={{ fontSize:11,color:C.textMuted,marginTop:2 }}>{r.createdAt?.toDate?.()?.toLocaleDateString("ar-DZ")||""}</div>
+            </div>
+            <div style={{ fontSize:16,fontWeight:900,color:"#ff5a70" }}>+{r.points}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DriverDashboard({ user, onLogout }) {
   const {isLoaded}=useJsApiLoader({googleMapsApiKey:process.env.REACT_APP_GOOGLE_MAPS_KEY||"",libraries:LIBRARIES,language:"ar",region:"DZ"});
   const {status,data,loading}=useDriverStatus(user?.uid);
@@ -924,6 +1005,7 @@ export default function DriverDashboard({ user, onLogout }) {
   const [showChangeVehicle,setShowChangeVehicle]=useState(false);
   const [showChat,setShowChat]=useState(false);
   const [showEarnings,setShowEarnings]=useState(false);
+  const [showWallet,setShowWallet]=useState(false);
   const [showSubscription,setShowSubscription]=useState(false);
   const [showRatePassenger,setShowRatePassenger]=useState(false);
   const [fcmToast,setFcmToast]=useState(null);
@@ -1087,6 +1169,7 @@ export default function DriverDashboard({ user, onLogout }) {
   if(status==="rejected") return <RejectedView data={data} onRetry={handleRetry} />;
   if(status==="pending") return <PendingView onLogout={onLogout} />;
   if(showChangeVehicle) return <DriverVerificationForm uid={user?.uid} userEmail={user?.email} existingData={data} onDone={()=>setShowChangeVehicle(false)} isUpdate={true} />;
+  if(showWallet) return <DriverWalletScreen uid={user?.uid} driverData={data} onBack={()=>setShowWallet(false)} onOpenEarnings={()=>{setShowWallet(false);setShowEarnings(true);}} />;
   if(showEarnings) return <EarningsScreen uid={user?.uid} driverData={data} onBack={()=>setShowEarnings(false)} />;
   if(showSubscription) return <SubscriptionScreen uid={user?.uid} driverData={data} subscriptionEnabled={false} onBack={()=>setShowSubscription(false)} />;
 
@@ -1162,7 +1245,7 @@ export default function DriverDashboard({ user, onLogout }) {
         {tab==="home"&&(<>
           <div style={{ padding:"14px 20px 0",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
             {stats.map((s,i)=>(
-              <div key={i} onClick={i===0?()=>setShowEarnings(true):undefined} style={{ background:C.card,borderRadius:16,padding:16,border:`1px solid ${C.border}`,cursor:i===0?"pointer":"default" }}>
+              <div key={i} onClick={i===0?()=>setShowEarnings(true):i===3?()=>setShowWallet(true):undefined} style={{ background:C.card,borderRadius:16,padding:16,border:`1px solid ${C.border}`,cursor:(i===0||i===3)?"pointer":"default" }}>
                 <div style={{ fontSize:22,marginBottom:6 }}>{s.icon}</div>
                 <div style={{ fontSize:18,fontWeight:900,color:s.color }}>{s.value}</div>
                 <div style={{ fontSize:11,color:C.textMuted,marginTop:4 }}>{s.label}</div>
@@ -1310,6 +1393,11 @@ export default function DriverDashboard({ user, onLogout }) {
             </div>
 
             <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
+              <button onClick={()=>setShowWallet(true)} style={{ background:"linear-gradient(135deg,#c4001d,#8f0015)",border:"none",borderRadius:16,padding:"16px 20px",color:"#fff",fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
+                <span style={{ fontSize:22 }}>💰</span>
+                <div style={{ flex:1 }}><div style={{ fontWeight:800 }}>المحفظة والإحالة</div><div style={{ fontSize:12,opacity:0.85,marginTop:2 }}>⭐ {data?.points||0} نقطة · شارك كودك واكسب المزيد</div></div>
+                <span>←</span>
+              </button>
               <button onClick={()=>setShowSubscription(true)} style={{ background:`linear-gradient(135deg,${C.goldLight},#fde8eb)`,border:`1px solid ${C.gold}44`,borderRadius:16,padding:"16px 20px",color:C.text,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
                 <span style={{ fontSize:22 }}>💳</span>
                 <div style={{ flex:1 }}><div style={{ fontWeight:700, color:C.gold }}>الاشتراكات والعروض</div><div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>🎁 مجاني حالياً خلال فترة الإطلاق</div></div>
