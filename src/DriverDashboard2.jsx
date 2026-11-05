@@ -6,6 +6,9 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import { ShareButton, TierProgress } from "./ReferralShare";
 import { Avatar } from "./ProfilePhoto";
 import { RideCodeGate, TagPicker } from "./TripKit";
+import { useVoiceCall, CallButtons, CallOverlay } from "./CallKit";
+import { useAccountBlock, AccountBlockedScreen } from "./AccountGuard";
+import { EarningsPro, MissionsScreen, DemandMap } from "./DriverFinance";
 
 const cloudFunctions = getFunctions(undefined, "europe-west1");
 
@@ -58,22 +61,23 @@ const unlockAudio=()=>{
   try { navigator.vibrate?.(1); } catch(e){}
 };
 const alertNewBooking=()=>{
-  try { navigator.vibrate?.([300,100,300,100,300]); } catch(e){}
+  try { navigator.vibrate?.([500,150,500,150,500,150,500]); } catch(e){}
   try {
     if(!sharedAudioCtx) return; // لم يُفعَّل السياق الصوتي بعد (لم يضغط المستخدم على أي شيء بعد)
     if(sharedAudioCtx.state==="suspended") sharedAudioCtx.resume();
     const ctx = sharedAudioCtx;
-    [0,0.25,0.5].forEach(delay=>{
+    // صفارة قوية: موجة مربعة تتناوب بين نغمتين (أعلى وضوحاً من النغمة الناعمة القديمة)
+    [[0,988],[0.28,740],[0.56,988],[0.84,740],[1.12,988]].forEach(([delay,freq])=>{
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = 880;
+      osc.type = "square";
+      osc.frequency.value = freq;
       gain.gain.setValueAtTime(0.0001, ctx.currentTime+delay);
-      gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime+delay+0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+delay+0.2);
+      gain.gain.exponentialRampToValueAtTime(0.7, ctx.currentTime+delay+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+delay+0.26);
       osc.connect(gain); gain.connect(ctx.destination);
       osc.start(ctx.currentTime+delay);
-      osc.stop(ctx.currentTime+delay+0.22);
+      osc.stop(ctx.currentTime+delay+0.28);
     });
   } catch(e){}
 };
@@ -325,6 +329,7 @@ function SubscriptionScreen({ uid, driverData, subscriptionEnabled, onBack }) {
     reader.readAsDataURL(file);
   };
 
+  const credit = Math.min(driverData?.compensationCredit || 0, selected?.price || 0);
   const submitRequest = async () => {
     if (!selected || !receipt) return;
     setSaving(true);
@@ -334,6 +339,8 @@ function SubscriptionScreen({ uid, driverData, subscriptionEnabled, onBack }) {
           planId: selected.id,
           planLabel: selected.label,
           price: selected.price,
+          creditApplied: credit,
+          payable: selected.price - credit,
           duration: selected.duration,
           receipt,
           status: "pending",
@@ -443,6 +450,16 @@ function SubscriptionScreen({ uid, driverData, subscriptionEnabled, onBack }) {
               <span style={{ color:C.textMuted }}>المبلغ</span>
               <span style={{ color:selected.color, fontWeight:900, fontSize:18 }}>{selected.price} دج</span>
             </div>
+            {credit>0&&<>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
+                <span style={{ color:"#ffd24d" }}>🎁 رصيد التعويض</span>
+                <span style={{ color:"#ffd24d", fontWeight:900 }}>-{credit} دج</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
+                <span style={{ color:C.text, fontWeight:700 }}>المطلوب دفعه</span>
+                <span style={{ color:C.text, fontWeight:900, fontSize:18 }}>{selected.price-credit} دج</span>
+              </div>
+            </>}
             <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 0" }}>
               <span style={{ color:C.textMuted }}>المدة</span>
               <span style={{ color:C.text, fontWeight:700 }}>{selected.duration} يوم</span>
@@ -926,7 +943,7 @@ function DriverWalletScreen({ uid, driverData, onBack, onOpenEarnings }) {
       } catch(e){ console.log("point log:",e); }
     })();
   },[uid]);
-  const reasonLabel={ referral:"👥 دعوة صديق", bonus:"🎁 مكافأة مستوى", welcome:"🎉 هدية التسجيل بكود دعوة" };
+  const reasonLabel={ referral:"👥 دعوة صديق", bonus:"🎁 مكافأة مستوى", welcome:"🎉 هدية التسجيل بكود دعوة", mission:"🎯 مكافأة مهمة" };
   return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:"rtl",paddingBottom:40 }}>
       <div style={{ display:"flex",alignItems:"center",padding:"48px 20px 16px",gap:12 }}>
@@ -1147,7 +1164,27 @@ export default function DriverDashboard({ user, onLogout }) {
     return()=>u();
   },[online,user?.uid]);
 
+  // رنين متكرر طالما توجد طلبات معلّقة ولم يقبل السائق أحدها؛ ويبقى الشاشة مضاءة أثناء الاتصال
+  useEffect(()=>{
+    if(!online||acceptedBooking||bookings.length===0) return;
+    const t=setInterval(alertNewBooking,3500);
+    return()=>clearInterval(t);
+  },[online,!!acceptedBooking,bookings.length>0]);
+  useEffect(()=>{
+    if(!online||!navigator.wakeLock) return;
+    let lock=null, dead=false;
+    const get=async()=>{ try{ lock=await navigator.wakeLock.request("screen"); }catch(e){} };
+    get();
+    const vis=()=>{ if(document.visibilityState==="visible"&&!dead) get(); };
+    document.addEventListener("visibilitychange",vis);
+    return()=>{ dead=true; document.removeEventListener("visibilitychange",vis); try{lock?.release();}catch(e){} };
+  },[online]);
+  const [showMissions,setShowMissions]=useState(false);
+  const [showDemand,setShowDemand]=useState(false);
   const [showCodeGate,setShowCodeGate]=useState(false);
+  const call=useVoiceCall({ bookingId:acceptedBooking?.id, meUid:user?.uid, meName:data?.name||"السائق", otherUid:acceptedBooking?.passengerId });
+  const block=useAccountBlock("drivers",user?.uid);
+  useEffect(()=>{ if(block.blocked&&user?.uid) setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true}).catch(()=>{}); },[block.blocked]);
   const startRide=async()=>{ setShowCodeGate(false); if(acceptedBooking?.id){ try{ await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"arrived",arrivedAt:serverTimestamp(),codeVerified:true}); }catch(e){} } setDriverScreen("ride"); };
   const acceptBooking=async(booking)=>{
     try {
@@ -1182,8 +1219,11 @@ export default function DriverDashboard({ user, onLogout }) {
   if(status==="rejected") return <RejectedView data={data} onRetry={handleRetry} />;
   if(status==="pending") return <PendingView onLogout={onLogout} />;
   if(showChangeVehicle) return <DriverVerificationForm uid={user?.uid} userEmail={user?.email} existingData={data} onDone={()=>setShowChangeVehicle(false)} isUpdate={true} />;
+  if(block.blocked) return <AccountBlockedScreen info={block} onLogout={onLogout} lang="ar" />;
   if(showWallet) return <DriverWalletScreen uid={user?.uid} driverData={data} onBack={()=>setShowWallet(false)} onOpenEarnings={()=>{setShowWallet(false);setShowEarnings(true);}} />;
-  if(showEarnings) return <EarningsScreen uid={user?.uid} driverData={data} onBack={()=>setShowEarnings(false)} />;
+  if(showEarnings) return <EarningsPro C={C} uid={user?.uid} driverData={data} onBack={()=>setShowEarnings(false)} />;
+  if(showMissions) return <MissionsScreen C={C} uid={user?.uid} onBack={()=>setShowMissions(false)} />;
+  if(showDemand) return <DemandMap C={C} driverLocation={driverLocation} onBack={()=>setShowDemand(false)} />;
   if(showSubscription) return <SubscriptionScreen uid={user?.uid} driverData={data} subscriptionEnabled={false} onBack={()=>setShowSubscription(false)} />;
 
   const passengerLoc=acceptedBooking?{lat:acceptedBooking.originLat,lng:acceptedBooking.originLng}:null;
@@ -1228,6 +1268,7 @@ export default function DriverDashboard({ user, onLogout }) {
           </div>
         </div>
       )}
+      <CallOverlay call={call} otherName={acceptedBooking?.passengerName||"الراكب"} phone={acceptedBooking?.passengerPhone} />
       {showCodeGate&&acceptedBooking&&<RideCodeGate code={acceptedBooking.rideCode} passengerName={acceptedBooking.passengerName} onOk={startRide} onCancel={()=>setShowCodeGate(false)} />}
       {showReport&&acceptedBooking&&<DriverReportModal targetId={acceptedBooking.passengerId} targetName={acceptedBooking.passengerName||"الراكب"} driverId={user?.uid} driverName={data?.name||"السائق"} onClose={()=>setShowReport(false)} />}
       {showReset&&<DriverPinChange uid={user?.uid} phone={data?.phone} currentPin={data?.pinCode} onClose={()=>setShowReset(false)} />}
@@ -1266,6 +1307,11 @@ export default function DriverDashboard({ user, onLogout }) {
               </div>
             ))}
           </div>
+          <div style={{ padding:"10px 20px 0",display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10 }}>
+            {[["🎯","المهام",()=>setShowMissions(true)],["🔥","مناطق الطلب",()=>setShowDemand(true)],["🔔","اختبر الصوت",()=>{unlockAudio();alertNewBooking();}]].map(([ic,l,f],i)=>(
+              <button key={i} onClick={f} style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"12px 4px",color:C.text,fontFamily:"inherit",fontWeight:700,fontSize:12,cursor:"pointer" }}><div style={{ fontSize:22,marginBottom:4 }}>{ic}</div>{l}</button>
+            ))}
+          </div>
 
           {/* شاشة التوجه للراكب */}
           {acceptedBooking&&driverScreen==="pickup"&&isLoaded&&(
@@ -1279,11 +1325,8 @@ export default function DriverDashboard({ user, onLogout }) {
                 <div style={{ display:"flex",alignItems:"center",gap:10,fontSize:14,fontWeight:700,color:C.text,marginBottom:8 }}><Avatar src={acceptedBooking.passengerPhoto} name={acceptedBooking.passengerName||"راكب"} size={40} />{acceptedBooking.passengerName}</div>
                 <div style={{ fontSize:12,color:C.textMuted,marginBottom:8 }}>📍 {acceptedBooking.originText}</div>
                 {distToTarget&&<div style={{ background:`${C.green}22`,borderRadius:10,padding:"6px 12px",fontSize:13,color:C.green,fontWeight:700,marginBottom:10,display:"inline-block" }}>{distToTarget<1?`${Math.round(distToTarget*1000)} م`:`${distToTarget.toFixed(1)} كم`} متبقية</div>}
-                <a href={`tel:${acceptedBooking.passengerPhone}`} style={{ display:"flex",alignItems:"center",gap:10,background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:12,padding:"10px 14px",marginBottom:10,textDecoration:"none" }}>
-                  <span style={{ fontSize:20 }}>📞</span>
-                  <div style={{ flex:1 }}><div style={{ fontSize:11,color:C.textMuted }}>رقم الراكب</div><div style={{ fontSize:15,fontWeight:900,color:C.green,direction:"ltr" }}>{acceptedBooking.passengerPhone}</div></div>
-                  <div style={{ background:C.green,borderRadius:8,padding:"5px 10px",fontSize:12,color:"#fff",fontWeight:700 }}>☎️</div>
-                </a>
+                <div style={{ fontSize:12,color:C.textMuted,marginBottom:6 }}>📞 رقم الراكب: <b style={{ color:C.green,direction:"ltr",display:"inline-block" }}>{acceptedBooking.passengerPhone}</b></div>
+                <div style={{ marginBottom:10 }}><CallButtons call={call} phone={acceptedBooking.passengerPhone} /></div>
                 {/* Chat */}
                 <button onClick={()=>setShowChat(true)} style={{ width:"100%",background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:12,padding:"10px",color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
                   <span style={{ fontSize:16 }}>💬</span> محادثة مع الراكب
@@ -1315,6 +1358,7 @@ export default function DriverDashboard({ user, onLogout }) {
                   <div style={{ flex:1,background:`${C.green}22`,borderRadius:10,padding:"8px",textAlign:"center" }}><div style={{ fontSize:18,fontWeight:900,color:C.green }}>{acceptedBooking.price} دج</div><div style={{ fontSize:10,color:C.textMuted }}>السعر</div></div>
                   <div style={{ flex:1,background:`${C.orange}22`,borderRadius:10,padding:"8px",textAlign:"center" }}><div style={{ fontSize:18,fontWeight:900,color:C.orange }}>🟢</div><div style={{ fontSize:10,color:C.textMuted }}>GPS نشط</div></div>
                 </div>
+                <div style={{ marginBottom:8 }}><CallButtons call={call} phone={acceptedBooking.passengerPhone} /></div>
                 <button onClick={()=>setShowChat(true)} style={{ width:"100%",background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:12,padding:"10px",color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
                   <span style={{ fontSize:16 }}>💬</span> محادثة مع الراكب
                 </button>
@@ -1352,7 +1396,7 @@ export default function DriverDashboard({ user, onLogout }) {
                         {r.luggageWeight&&` · 🧳 ${r.luggageWeight==="less25"?"<25كغ":r.luggageWeight==="25to40"?"25-40كغ":">40كغ"}`}
                       </div>
                       {r.luggageDesc&&<div style={{ fontSize:11,color:C.textMuted }}>📦 {r.luggageDesc}</div>}
-                      <div style={{ fontSize:11,color:r.price>=calcPrice(r.distanceKm,r.rideType)?C.green:C.red,marginTop:3 }}>المعيار: {calcPrice(r.distanceKm,r.rideType)} دج {r.price>=calcPrice(r.distanceKm,r.rideType)?"✅":"⚠️"}</div>
+                      <div style={{ fontSize:11,color:(r.originalPrice||r.price)>=calcPrice(r.distanceKm,r.rideType)?C.green:C.red,marginTop:3 }}>المعيار: {calcPrice(r.distanceKm,r.rideType)} دج {(r.originalPrice||r.price)>=calcPrice(r.distanceKm,r.rideType)?"✅":"⚠️"}</div>
                     </div>
                     </div>
                     <div style={{ textAlign:"left" }}>
