@@ -16,6 +16,7 @@ import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } f
 import DriverDashboard from "./DriverDashboard2";
 import { ShareButton, TierProgress } from "./ReferralShare";
 import { Avatar, PhotoSheet } from "./ProfilePhoto";
+import { makeRideCode, TagPicker, ShareTripSheet, useShareSync, createShare } from "./TripKit";
 
 const LIBRARIES = ["places"];
 
@@ -386,12 +387,14 @@ function RatingModal({ booking, driver, onSubmit, onSkip, lang }) {
   const t=T[lang];
   const [rating,setRating]=useState(0);
   const [comment,setComment]=useState("");
+  const [tags,setTags]=useState([]);
   const [saving,setSaving]=useState(false);
+  useEffect(()=>{ setTags([]); },[rating>=4]);
   const handleSubmit=async()=>{
     if(!rating) return;
     setSaving(true);
     try {
-      await addDoc(collection(db,"ratings"),{ bookingId:booking?.id,driverId:booking?.driverId,passengerId:booking?.passengerId,rating,comment,type:"passenger_to_driver",createdAt:serverTimestamp() });
+      await addDoc(collection(db,"ratings"),{ bookingId:booking?.id,driverId:booking?.driverId,passengerId:booking?.passengerId,rating,comment,tags,type:"passenger_to_driver",createdAt:serverTimestamp() });
       if(booking?.driverId){
         const dSnap=await getDoc(doc(db,"drivers",booking.driverId));
         if(dSnap.exists()){const d=dSnap.data();const n=(d.totalRatings||0)+1;await updateDoc(doc(db,"drivers",booking.driverId),{rating:Math.round(((d.rating||0)*(d.totalRatings||0)+rating)/n*10)/10,totalRatings:n});}
@@ -412,6 +415,7 @@ function RatingModal({ booking, driver, onSubmit, onSkip, lang }) {
           <div style={{ background:C.goldLight,borderRadius:12,padding:"6px 14px",marginTop:8,display:"inline-block",fontSize:12,color:C.gold,fontWeight:700 }}>🌟 +5 نقاط للتقييم!</div>
         </div>
         <StarRating rating={rating} onRate={setRating} size={40} />
+        <TagPicker kind="driver" stars={rating} value={tags} onChange={setTags} lang={lang} />
         {rating>0&&<textarea value={comment} onChange={e=>setComment(e.target.value)} rows={3} style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 16px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",resize:"none",marginTop:16 }} />}
         <div style={{ display:"flex",gap:10,marginTop:16 }}>
           <button onClick={onSkip} style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:14,color:C.textMuted,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>{t.skip}</button>
@@ -1370,6 +1374,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const [passengerGPS,setPassengerGPS]=useState(null);
   const [passengerData,setPassengerData]=useState(null);
   const [showPhoto,setShowPhoto]=useState(false);
+  const [shareToken,setShareToken]=useState(null);
+  const [showShare,setShowShare]=useState(false);
   const savePhoto=async(dataUrl)=>{ await updateDoc(doc(db,"passengers",user.uid),{photoURL:dataUrl}); setPassengerData(d=>({...(d||{}),photoURL:dataUrl})); };
   const [fcmToast,setFcmToast]=useState(null);
   const [showReport,setShowReport]=useState(false);
@@ -1420,6 +1426,17 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   useEffect(()=>{ if(!bookingId||screen!=="searching") return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo){setSelectedDriver(d.driverInfo);setScreen("found");} }); return()=>u(); },[bookingId,screen]);
   useEffect(()=>{ if(screen!=="searching") return; const t=setInterval(()=>setTimer(p=>p+1),1000); return()=>clearInterval(t); },[screen]);
   useEffect(()=>{ if(screen==="searching"&&timer===60) setNoDrivers(true); },[timer,screen]);
+  useShareSync({ token:shareToken, active:screen==="found"||(screen==="ride"&&!showRating), phase:screen==="ride"?"ride":"pickup", driverLocation, ended:!!shareToken&&(screen==="home"||showRating) });
+  const openShare=async()=>{
+    if(!shareToken){
+      try{
+        const tk=await createShare({ bookingId, passengerName, driver:selectedDriver, originText, destText, origin:passengerGPS||(originPlace?getLatLng(originPlace):null), dest:destPlace?getLatLng(destPlace):null });
+        setShareToken(tk);
+      }catch(e){ console.log(e); return; }
+    }
+    setShowShare(true);
+  };
+  const saveContacts=async(list)=>{ try{ await updateDoc(doc(db,"passengers",user.uid),{trustedContacts:list}); setPassengerData(d=>({...(d||{}),trustedContacts:list})); }catch(e){} };
   useEffect(()=>{ if(screen!=="ride") return; const t=setInterval(()=>setElapsed(p=>p+1),1000); return()=>clearInterval(t); },[screen]);
 
   const handleForceLogoutCancel = () => {
@@ -1515,9 +1532,10 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     setScreen("searching"); // ننتقل فورًا؛ باقي العمل يحدث في الخلفية دون تعليق الواجهة
     const oLL=getLatLng(originPlace),dLL=getLatLng(destPlace);
     try {
-      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,passengers,luggageWeight,luggageDesc,status:"pending",createdAt:serverTimestamp() });
+      const rideCode=makeRideCode();
+      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,rideCode,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,passengers,luggageWeight,luggageDesc,status:"pending",createdAt:serverTimestamp() });
       setBookingId(ref.id);
-      setBooking({originPlace,destPlace,originText,destText,rideType,price,distanceKm,passengerPhone,passengerName,id:ref.id});
+      setBooking({originPlace,destPlace,originText,destText,rideType,price,distanceKm,passengerPhone,passengerName,rideCode,id:ref.id});setShareToken(null);setShowShare(false);
       const snap=await getDocs(query(collection(db,"drivers"),where("isOnline","==",true),where("verificationStatus","==","approved")));
       const nearbyDrivers=[];
       snap.docs.forEach(d=>{ const dd=d.data();if(dd.location&&dd.fcmToken){ const dist=getDistanceKm(oLL.lat,oLL.lng,dd.location.lat,dd.location.lng);if(dist<=1.0) nearbyDrivers.push({driverId:d.id,fcmToken:dd.fcmToken}); } });
@@ -1791,6 +1809,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
       {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
+      {showShare&&shareToken&&<ShareTripSheet link={`${window.location.origin}/track/${shareToken}`} passengerName={passengerName} contacts={passengerData?.trustedContacts||[]} onSaveContacts={saveContacts} onClose={()=>setShowShare(false)} lang={lang==="fr"||lang==="en"?lang:"ar"} />}
       <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="pickup" lang={lang} />
       <div style={{ margin:"14px 20px",background:C.card,borderRadius:20,padding:22,boxShadow:C.shadow }}>
         <div style={{ textAlign:"center",marginBottom:16 }}>
@@ -1800,12 +1819,14 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         </div>
         <div style={{ background:C.bg,borderRadius:16,padding:16,marginBottom:14 }}>
           <div style={{ display:"flex",gap:12,alignItems:"center",marginBottom:10 }}>
+            {selectedDriver?.selfieUrl&&<img src={selectedDriver.selfieUrl} alt="" style={{ width:52,height:52,borderRadius:"50%",objectFit:"cover",border:`2px solid ${C.border}`,flexShrink:0 }} />}
             <div style={{ width:52,height:52,borderRadius:12,background:C.dark,overflow:"hidden",border:`2px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24 }}>
-              {selectedDriver?.carFrontUrl?<img src={selectedDriver.carFrontUrl} alt="سيارة" style={{ width:"100%",height:"100%",objectFit:"cover" }} />:selectedDriver?.selfieUrl?<img src={selectedDriver.selfieUrl} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} />:"🚗"}
+              {selectedDriver?.carFrontUrl?<img src={selectedDriver.carFrontUrl} alt="سيارة" style={{ width:"100%",height:"100%",objectFit:"cover" }} />:"🚗"}
             </div>
             <div style={{ flex:1 }}>
               <div style={{ fontWeight:800,fontSize:15,color:C.text }}>{selectedDriver?.name||"السائق"}</div>
-              <div style={{ fontSize:12,color:C.textMuted }}>{selectedDriver?.carBrand} {selectedDriver?.carModel}</div>
+              <div style={{ fontSize:12,color:C.textMuted }}>{selectedDriver?.carBrand} {selectedDriver?.carModel} {selectedDriver?.carColor}</div>
+              {selectedDriver?.plateNumber&&<div style={{ display:"inline-block",margin:"4px 0",background:"#fff",border:"2px solid #111",borderRadius:6,padding:"1px 9px",fontWeight:900,fontSize:14,letterSpacing:1.5,direction:"ltr",color:"#111" }}>{selectedDriver.plateNumber}</div>}
               {selectedDriver?.rating>0&&<StarRating rating={Math.round(selectedDriver.rating)} size={14} />}
             </div>
             <div style={{ textAlign:"left" }}>
@@ -1815,7 +1836,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           </div>
           <div style={{ background:C.dark,borderRadius:"14px 4px 14px 14px",padding:12,textAlign:"center" }}>
             <div style={{ fontSize:11,color:"#ffffff88",marginBottom:4 }}>{t.verifyCode} — {t.giveDriver}</div>
-            <div style={{ fontSize:32,fontWeight:900,color:"#fff",letterSpacing:8 }}>{Math.floor(1000+Math.random()*9000)}</div>
+            <div style={{ fontSize:32,fontWeight:900,color:"#fff",letterSpacing:8 }}>{booking?.rideCode||"----"}</div>
           </div>
         </div>
         {selectedDriver?.phone&&<a href={`tel:${selectedDriver.phone}`} style={{ display:"flex",alignItems:"center",gap:10,background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:12,padding:"12px 14px",marginBottom:10,textDecoration:"none" }}>
@@ -1823,6 +1844,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           <div style={{ flex:1 }}><div style={{ fontSize:11,color:C.textMuted }}>{t.driverPhone}</div><div style={{ fontSize:16,fontWeight:900,color:C.green,direction:"ltr" }}>{selectedDriver.phone}</div></div>
           <div style={{ background:C.green,borderRadius:8,padding:"6px 12px",fontSize:12,color:"#fff",fontWeight:700 }}>{t.call}</div>
         </a>}
+        <button onClick={openShare} style={{ width:"100%",background:"#fff",border:"1.5px solid #111",borderRadius:12,padding:"11px",color:"#111",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>📡 {lang==="ar"?"شارك رحلتي مع شخص موثوق":lang==="fr"?"Partager mon trajet":"Share my trip"}</button>
         {/* Chat Button */}
         <button onClick={()=>setShowChat(true)} style={{ width:"100%",background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:12,padding:"12px",color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
           <span style={{ fontSize:18 }}>💬</span>{t.chat}
@@ -1863,6 +1885,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
         {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
         {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
+      {showShare&&shareToken&&<ShareTripSheet link={`${window.location.origin}/track/${shareToken}`} passengerName={passengerName} contacts={passengerData?.trustedContacts||[]} onSaveContacts={saveContacts} onClose={()=>setShowShare(false)} lang={lang==="fr"||lang==="en"?lang:"ar"} />}
         <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="ride" lang={lang} />
         <div style={{ margin:"14px 20px",background:C.card,borderRadius:20,padding:20,boxShadow:C.shadow }}>
           <div style={{ display:"flex",justifyContent:"space-between",marginBottom:14 }}>
@@ -1876,7 +1899,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
             </button>
             <button onClick={()=>setShowReport(true)} style={{ width:44,background:`${C.orange}15`,border:`1px solid ${C.orange}44`,borderRadius:12,padding:"10px",color:C.orange,fontFamily:"inherit",cursor:"pointer",fontSize:16 }}>🚨</button>
           </div>
-          {destPlace&&<button onClick={()=>{ const d=getLatLng(destPlace); openNavigation(d.lat,d.lng); }} style={{ width:"100%",background:`linear-gradient(135deg,${C.googleBlue},#000000)`,border:"none",borderRadius:14,padding:13,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}><span style={{ fontSize:18 }}>🗺️</span>{t.trackRoute}</button>}
+          <button onClick={openShare} style={{ width:"100%",background:"#fff",border:"1.5px solid #111",borderRadius:12,padding:"11px",color:"#111",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>📡 {lang==="ar"?"شارك رحلتي مع شخص موثوق":lang==="fr"?"Partager mon trajet":"Share my trip"}</button>
+        {destPlace&&<button onClick={()=>{ const d=getLatLng(destPlace); openNavigation(d.lat,d.lng); }} style={{ width:"100%",background:`linear-gradient(135deg,${C.googleBlue},#000000)`,border:"none",borderRadius:14,padding:13,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}><span style={{ fontSize:18 }}>🗺️</span>{t.trackRoute}</button>}
           <button onClick={finishRide} style={{ width:"100%",background:`${C.dark}`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer" }}>{t.arrived}</button>
         </div>
         <SOSButton passengerName={passengerName} bookingId={bookingId} />
