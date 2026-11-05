@@ -5,6 +5,7 @@ import { db, requestNotificationPermission, onForegroundMessage } from "./fireba
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { ShareButton, TierProgress } from "./ReferralShare";
 import { Avatar } from "./ProfilePhoto";
+import { RideCodeGate, TagPicker } from "./TripKit";
 
 const cloudFunctions = getFunctions(undefined, "europe-west1");
 
@@ -843,12 +844,14 @@ function DriverGPSMap({ driverLocation, passengerLocation, destLocation, mode })
 function RatePassengerModal({ booking, onDone }) {
   const [stars,setStars]=useState(0);
   const [comment,setComment]=useState("");
+  const [tags,setTags]=useState([]);
   const [saving,setSaving]=useState(false);
+  useEffect(()=>{ setTags([]); },[stars>=4]);
   const submit=async(skip=false)=>{
     setSaving(true);
     try {
       if(!skip && stars>0 && booking?.passengerId){
-        await addDoc(collection(db,"ratings"),{ type:"driver_to_passenger", targetId:booking.passengerId, driverId:booking.driverId, bookingId:booking.id, rating:stars, comment:comment||null, createdAt:serverTimestamp() });
+        await addDoc(collection(db,"ratings"),{ type:"driver_to_passenger", targetId:booking.passengerId, driverId:booking.driverId, bookingId:booking.id, rating:stars, tags, comment:comment||null, createdAt:serverTimestamp() });
         try {
           const pSnap=await getDocs(query(collection(db,"passengers"),where("__name__","==",booking.passengerId)));
           const pDoc=pSnap.docs[0];
@@ -875,6 +878,7 @@ function RatePassengerModal({ booking, onDone }) {
             <span key={n} onClick={()=>setStars(n)} style={{ fontSize:32,cursor:"pointer",opacity:n<=stars?1:0.25 }}>⭐</span>
           ))}
         </div>
+        <TagPicker kind="passenger" stars={stars} value={tags} onChange={setTags} lang="ar" dark />
         <textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="ملاحظة (اختياري)" rows={2} style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px",fontFamily:"inherit",fontSize:13,color:C.text,outline:"none",resize:"none",direction:"rtl",marginBottom:16 }} />
         <div style={{ display:"flex",gap:10 }}>
           <button onClick={()=>submit(true)} disabled={saving} style={{ flex:1,background:C.border,border:"none",borderRadius:14,padding:14,color:C.text,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>تخطّي</button>
@@ -1143,6 +1147,8 @@ export default function DriverDashboard({ user, onLogout }) {
     return()=>u();
   },[online,user?.uid]);
 
+  const [showCodeGate,setShowCodeGate]=useState(false);
+  const startRide=async()=>{ setShowCodeGate(false); if(acceptedBooking?.id){ try{ await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"arrived",arrivedAt:serverTimestamp(),codeVerified:true}); }catch(e){} } setDriverScreen("ride"); };
   const acceptBooking=async(booking)=>{
     try {
       await updateDoc(doc(db,"bookings",booking.id),{status:"accepted",driverId:user.uid,driverInfo:{name:data?.name||"السائق",phone:data?.phone||"",carBrand:data?.carBrand||"",carModel:data?.carModel||"",carColor:data?.carColor||"",plateNumber:data?.plateNumber||"",rating:data?.rating||null,selfieUrl:data?.selfieUrl||null,carFrontUrl:data?.carFrontUrl||null,uid:user.uid},acceptedAt:serverTimestamp()});
@@ -1222,6 +1228,7 @@ export default function DriverDashboard({ user, onLogout }) {
           </div>
         </div>
       )}
+      {showCodeGate&&acceptedBooking&&<RideCodeGate code={acceptedBooking.rideCode} passengerName={acceptedBooking.passengerName} onOk={startRide} onCancel={()=>setShowCodeGate(false)} />}
       {showReport&&acceptedBooking&&<DriverReportModal targetId={acceptedBooking.passengerId} targetName={acceptedBooking.passengerName||"الراكب"} driverId={user?.uid} driverName={data?.name||"السائق"} onClose={()=>setShowReport(false)} />}
       {showReset&&<DriverPinChange uid={user?.uid} phone={data?.phone} currentPin={data?.pinCode} onClose={()=>setShowReset(false)} />}
 
@@ -1288,7 +1295,7 @@ export default function DriverDashboard({ user, onLogout }) {
                   <button onClick={()=>setShowReport(true)} style={{ flex:1,background:`${C.orange}22`,border:`1px solid ${C.orange}44`,borderRadius:10,padding:"11px",color:C.orange,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>🚨 بلّغ</button>
                   <button onClick={sendSOS} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>🆘 SOS</button>
                   <button onClick={finishRide} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>❌ إلغاء</button>
-                  <button onClick={async()=>{ if(acceptedBooking?.id){ try{ await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"arrived",arrivedAt:serverTimestamp()}); }catch(e){} } setDriverScreen("ride"); }} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>✅ وصلت</button>
+                  <button onClick={()=>{ if(acceptedBooking?.rideCode) setShowCodeGate(true); else startRide(); }} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>✅ وصلت</button>
                 </div>
               </div>
             </div>
