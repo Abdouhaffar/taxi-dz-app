@@ -684,3 +684,28 @@ exports.verifyOtpTwilio = onCall(
     return { customToken, uid: userRecord.uid };
   }
 );
+
+// ============ دخول الأدمن الثانوي (آمن، من جهة الخادم) ============
+// يستبدل مقارنة الرمز داخل المتصفح. الرمز لا يغادر الخادم، وبعد النجاح يُصدر توكن مخصص يحمل admin:true
+const crypto = require("crypto");
+exports.adminSignIn = onCall({ region: "europe-west1" }, async (req) => {
+  const email = String(req.data?.email || "").trim().toLowerCase();
+  const code = String(req.data?.code || "");
+  if (!email || !code) throw new HttpsError("invalid-argument", "أدخل البريد والرمز");
+  const snap = await db.collection("admins").where("email", "==", email).limit(1).get();
+  const generic = new HttpsError("permission-denied", "البريد أو الرمز غير صحيح، أو لم يتم قبولك بعد");
+  if (snap.empty) throw generic;
+  const ref = snap.docs[0].ref, a = snap.docs[0].data();
+  const lockedUntil = a.lockedUntil?.toMillis?.() || 0;
+  if (lockedUntil > Date.now()) throw new HttpsError("resource-exhausted", "الحساب مقفل مؤقتاً بعد محاولات خاطئة، حاول لاحقاً");
+  const A = Buffer.from(String(a.code || "")), B = Buffer.from(code);
+  const ok = a.approved === true && A.length === B.length && A.length > 0 && crypto.timingSafeEqual(A, B);
+  if (!ok) {
+    const fails = (a.failedAttempts || 0) + 1;
+    await ref.update({ failedAttempts: fails, ...(fails >= 5 ? { failedAttempts: 0, lockedUntil: admin.firestore.Timestamp.fromMillis(Date.now() + 15 * 60000) } : {}) });
+    throw generic;
+  }
+  await ref.update({ failedAttempts: 0, lastLoginAt: admin.firestore.FieldValue.serverTimestamp() });
+  const token = await admin.auth().createCustomToken("admin_" + snap.docs[0].id, { admin: true, subAdmin: true });
+  return { token, name: a.name || email, id: snap.docs[0].id };
+});
