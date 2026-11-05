@@ -16,6 +16,7 @@ import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } f
 import DriverDashboard from "./DriverDashboard2";
 import { ShareButton, TierProgress } from "./ReferralShare";
 import { Avatar, PhotoSheet } from "./ProfilePhoto";
+import { SavedPlacesBar, SchedulePicker, scheduleToTimestamp, scheduleValid, PromoBox, OffersBanner, UpcomingRides, HistoryScreen } from "./PassengerExtras";
 import { makeRideCode, TagPicker, ShareTripSheet, useShareSync, createShare } from "./TripKit";
 
 const LIBRARIES = ["places"];
@@ -1374,6 +1375,9 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const [passengerGPS,setPassengerGPS]=useState(null);
   const [passengerData,setPassengerData]=useState(null);
   const [showPhoto,setShowPhoto]=useState(false);
+  const [scheduleAt,setScheduleAt]=useState("");
+  const [promo,setPromo]=useState(null);
+  const [promoPrefill,setPromoPrefill]=useState("");
   const [shareToken,setShareToken]=useState(null);
   const [showShare,setShowShare]=useState(false);
   const savePhoto=async(dataUrl)=>{ await updateDoc(doc(db,"passengers",user.uid),{photoURL:dataUrl}); setPassengerData(d=>({...(d||{}),photoURL:dataUrl})); };
@@ -1426,7 +1430,32 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   useEffect(()=>{ if(!bookingId||screen!=="searching") return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo){setSelectedDriver(d.driverInfo);setScreen("found");} }); return()=>u(); },[bookingId,screen]);
   useEffect(()=>{ if(screen!=="searching") return; const t=setInterval(()=>setTimer(p=>p+1),1000); return()=>clearInterval(t); },[screen]);
   useEffect(()=>{ if(screen==="searching"&&timer===60) setNoDrivers(true); },[timer,screen]);
+  useEffect(()=>{ setPromo(null); },[offerPrice,rideType]);
   useShareSync({ token:shareToken, active:screen==="found"||(screen==="ride"&&!showRating), phase:screen==="ride"?"ride":"pickup", driverLocation, ended:!!shareToken&&(screen==="home"||showRating) });
+  const savePlaces=async(list)=>{ try{ await updateDoc(doc(db,"passengers",user.uid),{savedPlaces:list}); setPassengerData(d=>({...(d||{}),savedPlaces:list})); }catch(e){} };
+  const pickSavedPlace=(pl)=>{
+    const ll={lat:pl.lat,lng:pl.lng};
+    if(pickMode==="origin"){ setOriginPlace(ll); setOriginText(pl.text); setPassengerGPS(ll); if(destPlace){const d=getLatLng(destPlace);updateDistance(ll.lat,ll.lng,d.lat,d.lng);} }
+    else { setDestPlace(ll); setDestText(pl.text); if(originPlace){const o=getLatLng(originPlace);updateDistance(o.lat,o.lng,ll.lat,ll.lng);} }
+    setPickMode(null);
+  };
+  const rebook=(r)=>{
+    const o={lat:r.originLat,lng:r.originLng}, d={lat:r.destLat,lng:r.destLng};
+    setOriginPlace(o); setOriginText(r.originText||""); setPassengerGPS(o);
+    setDestPlace(d); setDestText(r.destText||"");
+    setRideType(r.rideType||"economy"); setPassengers(r.passengers||1);
+    if(r.luggageWeight) setLuggageWeight(r.luggageWeight);
+    setLuggageDesc(r.luggageDesc||"");
+    updateDistance(o.lat,o.lng,d.lat,d.lng);
+    setScheduleAt(""); setPromo(null); setScreen("booking");
+  };
+  const resumeBooking=(b)=>{
+    const o={lat:b.originLat,lng:b.originLng}, d={lat:b.destLat,lng:b.destLng};
+    setBookingId(b.id); setBooking({...b,originPlace:o,destPlace:d,id:b.id});
+    setOriginPlace(o); setOriginText(b.originText||""); setDestPlace(d); setDestText(b.destText||"");
+    setDistanceKm(b.distanceKm||0); setSelectedDriver(b.driverInfo||null);
+    setScreen("found");
+  };
   const openShare=async()=>{
     if(!shareToken){
       try{
@@ -1510,7 +1539,12 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const onDestChanged=()=>{ if(destRef.current){const p=destRef.current.getPlace();if(p?.geometry){setDestPlace(p.geometry.location);setDestText(p.formatted_address||p.name);if(originPlace){const{lat:lat1,lng:lng1}=getLatLng(originPlace);const{lat:lat2,lng:lng2}=getLatLng(p.geometry.location);updateDistance(lat1,lng1,lat2,lng2);}}} };
 
   const startSearch=async(price)=>{
-    if(submittingBooking) return; // يمنع إرسال طلبين إذا ضغط المستخدم مرتين بسبب البطء المُدرَك
+    if(submittingBooking) return;
+    const sched = scheduleAt ? scheduleToTimestamp(scheduleAt) : null;
+    if(scheduleAt && !scheduleValid(scheduleAt)) return;
+    const rawPrice = price;
+    const promoNow = promo;
+    price = Math.max(50, rawPrice - (promoNow?.discount||0)); // يمنع إرسال طلبين إذا ضغط المستخدم مرتين بسبب البطء المُدرَك
     setSubmittingBooking(true);
     if(user?.uid){
       try {
@@ -1529,11 +1563,17 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     }
     setRestrictedMsg("");
     setTimer(0);setNoDrivers(false);setDriverLocation(null);
-    setScreen("searching"); // ننتقل فورًا؛ باقي العمل يحدث في الخلفية دون تعليق الواجهة
+    if(!sched) setScreen("searching"); // ننتقل فورًا؛ باقي العمل يحدث في الخلفية دون تعليق الواجهة
     const oLL=getLatLng(originPlace),dLL=getLatLng(destPlace);
     try {
       const rideCode=makeRideCode();
-      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,rideCode,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,passengers,luggageWeight,luggageDesc,status:"pending",createdAt:serverTimestamp() });
+      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,rideCode,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,passengers,luggageWeight,luggageDesc,status:sched?"scheduled":"pending",...(sched?{scheduledAt:sched}:{}),...(promoNow?{promoCode:promoNow.code,discount:promoNow.discount,originalPrice:rawPrice}:{}),createdAt:serverTimestamp() });
+      if(sched){
+        setSubmittingBooking(false); setScheduleAt(""); setPromo(null); setScreen("home");
+        setFcmToast({title:lang==="ar"?"🗓️ تم حجز رحلتك":lang==="fr"?"🗓️ Course planifiée":"🗓️ Ride scheduled",body:lang==="ar"?"سنبحث عن سائق قبل موعدك بـ 15 دقيقة":lang==="fr"?"Nous chercherons un chauffeur 15 min avant":"We'll find a driver 15 min before pickup"});
+        return;
+      }
+      setPromo(null);
       setBookingId(ref.id);
       setBooking({originPlace,destPlace,originText,destText,rideType,price,distanceKm,passengerPhone,passengerName,rideCode,id:ref.id});setShareToken(null);setShowShare(false);
       const snap=await getDocs(query(collection(db,"drivers"),where("isOnline","==",true),where("verificationStatus","==","approved")));
@@ -1550,7 +1590,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         } catch(e){}
       }
       console.log(`📬 ${nearbyDrivers.length} سائق قريب`);
-    } catch(e){ setBooking({originPlace,destPlace,originText,destText,rideType,price,distanceKm,passengerPhone,passengerName}); }
+    } catch(e){ if(sched){ setRestrictedMsg(lang==="ar"?"تعذر إتمام الحجز، حاول مجدداً":"Échec de la réservation"); setSubmittingBooking(false); return; } setBooking({originPlace,destPlace,originText,destText,rideType,price,distanceKm,passengerPhone,passengerName}); }
     setSubmittingBooking(false);
   };
 
@@ -1620,6 +1660,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           </div>
           {passengerData?.points>0&&<div style={{ background:"#f3f3f3",borderRadius:20,padding:"6px 12px",fontSize:12,fontWeight:700,color:C.text }}>⭐ {passengerData.points}</div>}
         </div>
+        <OffersBanner lang={lang==="fr"||lang==="en"?lang:"ar"} onUse={c=>{setPromoPrefill(c);setScreen("booking");}} />
+        <UpcomingRides userId={user?.uid} lang={lang==="fr"||lang==="en"?lang:"ar"} onResume={resumeBooking} />
         <div onClick={()=>setScreen("booking")} style={{ background:"#f3f3f3",borderRadius:14,padding:"16px 18px",display:"flex",alignItems:"center",gap:14,cursor:"pointer" }}>
           <div style={{ width:10,height:10,background:C.dark,borderRadius:2,flexShrink:0 }} />
           <span style={{ fontSize:17,fontWeight:700,color:C.text,flex:1 }}>{t.whereGo}</span>
@@ -1627,6 +1669,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         </div>
         <div style={{ display:"flex",gap:10,marginTop:12 }}>
           <button onClick={()=>setScreen("booking")} style={{ flex:1,background:C.dark,border:"none",borderRadius:14,padding:"15px",color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:15,cursor:"pointer" }}>🚕 {lang==="ar"?"اطلب سيارة الآن":lang==="fr"?"Commander maintenant":"Request a ride"}</button>
+          <button onClick={()=>setScreen("history")} style={{ width:56,background:"#f3f3f3",border:"none",borderRadius:14,fontSize:22,cursor:"pointer" }}>🧾</button>
           <button onClick={()=>setScreen("wallet")} style={{ width:56,background:"#f3f3f3",border:"none",borderRadius:14,fontSize:22,cursor:"pointer" }}>💰</button>
         </div>
         {passengerPhone&&<div style={{ textAlign:"center",fontSize:11,color:C.textLight,marginTop:12 }}>📱 {passengerPhone} · <span style={{ color:C.red,fontWeight:800,letterSpacing:1 }}>AL-BURAQ</span></div>}
@@ -1635,6 +1678,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   );
 
   // WALLET
+  if(screen==="history") return <HistoryScreen userId={user?.uid} passengerName={passengerName} lang={lang==="fr"||lang==="en"?lang:"ar"} onBack={()=>setScreen("home")} onRebook={rebook} />;
   if(screen==="wallet") return <WalletScreen userId={user?.uid} passengerData={passengerData} lang={lang} onBack={()=>setScreen("home")} />;
 
   // BOOKING
@@ -1664,6 +1708,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
             🏁 {lang==="ar"?"حدّد الوجهة من الخريطة":lang==="fr"?"Destination sur la carte":"Pick destination on map"}
           </button>
         </div>
+        <SavedPlacesBar places={passengerData?.savedPlaces||[]} current={destPlace&&destText?{text:destText,...getLatLng(destPlace)}:null} onUse={pickSavedPlace} onSave={savePlaces} lang={lang==="fr"||lang==="en"?lang:"ar"} />
         <div style={{ display:"flex",flexDirection:"column",gap:10,marginBottom:16 }}>
           <div style={{ background:C.greenLight,borderRadius:14,padding:"10px 16px",display:"flex",gap:10,alignItems:"center" }}>
             <div style={{ width:10,height:10,borderRadius:"50%",background:C.green,flexShrink:0 }} />
@@ -1764,10 +1809,12 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           ))}
         </div>
       </div>
+      <SchedulePicker value={scheduleAt} onChange={setScheduleAt} lang={lang==="fr"||lang==="en"?lang:"ar"} />
+      <PromoBox price={offerPrice} rideType={rideType} applied={promo} onApply={setPromo} onClear={()=>setPromo(null)} initialCode={promoPrefill} lang={lang==="fr"||lang==="en"?lang:"ar"} />
       <div style={{ margin:"0 20px" }}>
         {restrictedMsg&&<div style={{ background:C.redLight||"#ef444422",border:"1px solid #ef444444",borderRadius:12,padding:"12px 14px",fontSize:13,color:"#ef4444",marginBottom:12,textAlign:"center" }}>{restrictedMsg}</div>}
-        <button onClick={()=>startSearch(offerPrice)} disabled={submittingBooking} style={{ width:"100%",background:submittingBooking?C.border:`linear-gradient(135deg,${C.dark},#2b1a1e)`,border:"1px solid #ff5a7033",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:17,cursor:submittingBooking?"default":"pointer",opacity:submittingBooking?0.7:1 }}>
-          {t.sendOffer} — {offerPrice} DA
+        <button onClick={()=>startSearch(offerPrice)} disabled={submittingBooking||!scheduleValid(scheduleAt)} style={{ width:"100%",background:submittingBooking?C.border:`linear-gradient(135deg,${C.dark},#2b1a1e)`,border:"1px solid #ff5a7033",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:17,cursor:submittingBooking?"default":"pointer",opacity:submittingBooking?0.7:1 }}>
+          {scheduleAt?(lang==="ar"?"🗓️ احجز الرحلة":lang==="fr"?"🗓️ Planifier":"🗓️ Schedule ride"):t.sendOffer} — {promo?<><s style={{opacity:0.5}}>{offerPrice}</s> {Math.max(50,offerPrice-promo.discount)}</>:offerPrice} DA
         </button>
       </div>
     </div>
