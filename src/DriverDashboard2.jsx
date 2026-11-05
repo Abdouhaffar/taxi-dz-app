@@ -4,6 +4,7 @@ import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer } from "@react-go
 import { db, requestNotificationPermission, onForegroundMessage } from "./firebase";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { ShareButton, TierProgress } from "./ReferralShare";
+import { Avatar } from "./ProfilePhoto";
 
 const cloudFunctions = getFunctions(undefined, "europe-west1");
 
@@ -22,8 +23,13 @@ const C = {
   text:"#ffffff", textMuted:"#c7a9ae", textLight:"#9a7f85",
 };
 
-const BASE_PRICE=40, PRICE_PER_KM=30, MIN_PRICE=100;
-const calcPrice=(km)=>{ if(!km||km<=0) return MIN_PRICE; const p=Math.round(BASE_PRICE+km*PRICE_PER_KM); return km<2?Math.max(p,MIN_PRICE):p; };
+const PRICING={ perKm:30, base:40, min:100, mult:{ economy:1, comfort:1.4, xl:1.8 } };
+const pricingListeners=new Set();
+try{ onSnapshot(doc(db,"settings","pricing"),snap=>{ if(!snap.exists())return; const d=snap.data();
+  if(d.perKm>0)PRICING.perKm=d.perKm; if(d.base>=0)PRICING.base=d.base; if(d.min>0)PRICING.min=d.min; if(d.mult)PRICING.mult={...PRICING.mult,...d.mult};
+  pricingListeners.forEach(f=>f()); },()=>{}); }catch(e){}
+const usePricing=()=>{ const [,setV]=useState(0); useEffect(()=>{ const f=()=>setV(v=>v+1); pricingListeners.add(f); return ()=>pricingListeners.delete(f); },[]); };
+const calcPrice=(km,rideType)=>{ if(!km||km<=0) return PRICING.min; const p=Math.round((PRICING.base+km*PRICING.perKm)*(PRICING.mult[rideType]||1)); return km<2?Math.max(p,PRICING.min):p; };
 const getDistKm=(lat1,lng1,lat2,lng2)=>{ const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2; return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); };
 const openNavigation=(lat,lng)=>window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving&dir_action=navigate`,"_blank");
 
@@ -975,6 +981,7 @@ function DriverWalletScreen({ uid, driverData, onBack, onOpenEarnings }) {
 }
 
 export default function DriverDashboard({ user, onLogout }) {
+  usePricing();
   const {isLoaded}=useJsApiLoader({googleMapsApiKey:process.env.REACT_APP_GOOGLE_MAPS_KEY||"",libraries:LIBRARIES,language:"ar",region:"DZ"});
   const {status,data,loading}=useDriverStatus(user?.uid);
   const [passengerPrefill,setPassengerPrefill]=useState(null);
@@ -1262,7 +1269,7 @@ export default function DriverDashboard({ user, onLogout }) {
                   <div style={{ fontWeight:800,fontSize:14,color:C.orange }}>🚶 في طريقك للراكب</div>
                   {eta&&<div style={{ background:`${C.orange}22`,borderRadius:20,padding:"4px 12px",fontSize:13,color:C.orange,fontWeight:700 }}>⏱ ~{eta} دق</div>}
                 </div>
-                <div style={{ fontSize:14,fontWeight:700,color:C.text,marginBottom:4 }}>👤 {acceptedBooking.passengerName}</div>
+                <div style={{ display:"flex",alignItems:"center",gap:10,fontSize:14,fontWeight:700,color:C.text,marginBottom:8 }}><Avatar src={acceptedBooking.passengerPhoto} name={acceptedBooking.passengerName||"راكب"} size={40} />{acceptedBooking.passengerName}</div>
                 <div style={{ fontSize:12,color:C.textMuted,marginBottom:8 }}>📍 {acceptedBooking.originText}</div>
                 {distToTarget&&<div style={{ background:`${C.green}22`,borderRadius:10,padding:"6px 12px",fontSize:13,color:C.green,fontWeight:700,marginBottom:10,display:"inline-block" }}>{distToTarget<1?`${Math.round(distToTarget*1000)} م`:`${distToTarget.toFixed(1)} كم`} متبقية</div>}
                 <a href={`tel:${acceptedBooking.passengerPhone}`} style={{ display:"flex",alignItems:"center",gap:10,background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:12,padding:"10px 14px",marginBottom:10,textDecoration:"none" }}>
@@ -1323,6 +1330,8 @@ export default function DriverDashboard({ user, onLogout }) {
               {bookings.map(r=>(
                 <div key={r.id} style={{ background:C.card,borderRadius:"6px 20px 20px 20px",padding:16,marginBottom:10,border:`1px solid ${C.orange}44` }}>
                   <div style={{ display:"flex",justifyContent:"space-between",marginBottom:10 }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                      <Avatar src={r.passengerPhoto} name={r.passengerName||"راكب"} size={44} />
                     <div>
                       <div style={{ fontWeight:700,fontSize:14,color:C.text }}>{r.passengerName||"راكب"}</div>
                           <div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>📍 {r.originText?.substring(0,30)}...</div>
@@ -1336,7 +1345,8 @@ export default function DriverDashboard({ user, onLogout }) {
                         {r.luggageWeight&&` · 🧳 ${r.luggageWeight==="less25"?"<25كغ":r.luggageWeight==="25to40"?"25-40كغ":">40كغ"}`}
                       </div>
                       {r.luggageDesc&&<div style={{ fontSize:11,color:C.textMuted }}>📦 {r.luggageDesc}</div>}
-                      <div style={{ fontSize:11,color:r.price>=calcPrice(r.distanceKm)?C.green:C.red,marginTop:3 }}>المعيار: {calcPrice(r.distanceKm)} دج {r.price>=calcPrice(r.distanceKm)?"✅":"⚠️"}</div>
+                      <div style={{ fontSize:11,color:r.price>=calcPrice(r.distanceKm,r.rideType)?C.green:C.red,marginTop:3 }}>المعيار: {calcPrice(r.distanceKm,r.rideType)} دج {r.price>=calcPrice(r.distanceKm,r.rideType)?"✅":"⚠️"}</div>
+                    </div>
                     </div>
                     <div style={{ textAlign:"left" }}>
                       <div style={{ fontSize:22,fontWeight:900,color:C.orange }}>{r.price} دج</div>
