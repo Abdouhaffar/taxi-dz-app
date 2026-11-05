@@ -709,3 +709,172 @@ exports.adminSignIn = onCall({ region: "europe-west1" }, async (req) => {
   const token = await admin.auth().createCustomToken("admin_" + snap.docs[0].id, { admin: true, subAdmin: true });
   return { token, name: a.name || email, id: snap.docs[0].id };
 });
+
+// ============================================================
+// ====== أكواد الخصم والعروض + الرحلات المجدولة (دفعة 2) ======
+// ============================================================
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const FV = admin.firestore.FieldValue;
+
+function promoDiscount(p, price) {
+  let d = p.type === "percent" ? Math.round((price * Number(p.value || 0)) / 100) : Number(p.value || 0);
+  if (p.type === "percent" && Number(p.maxDiscount) > 0) d = Math.min(d, Number(p.maxDiscount));
+  return Math.max(0, Math.min(d, price - 50)); // لا ينزل السعر عن 50 دج
+}
+// يتحقق من صلاحية الكود. يرمي HttpsError بسبب مفهوم للمستخدم
+async function checkPromo(code, uid, price, rideType) {
+  code = String(code || "").trim().toUpperCase();
+  if (!code) throw new HttpsError("invalid-argument", "أدخل الكود");
+  const snap = await db.collection("promos").doc(code).get();
+  if (!snap.exists) throw new HttpsError("not-found", "كود غير صالح");
+  const p = snap.data();
+  const now = Date.now();
+  if (p.active === false) throw new HttpsError("failed-precondition", "هذا الكود متوقف");
+  if (p.startsAt?.toMillis && p.startsAt.toMillis() > now) throw new HttpsError("failed-precondition", "هذا الكود لم يبدأ بعد");
+  if (p.expiresAt?.toMillis && p.expiresAt.toMillis() < now) throw new HttpsError("failed-precondition", "انتهت صلاحية الكود");
+  if (Number(p.maxUses) > 0 && (p.usedCount || 0) >= Number(p.maxUses)) throw new HttpsError("failed-precondition", "استُنفدت استعمالات هذا الكود");
+  if (Number(p.minPrice) > 0 && price < Number(p.minPrice)) throw new HttpsError("failed-precondition", `الحد الأدنى للسعر ${p.minPrice} دج`);
+  if (Array.isArray(p.rideTypes) && p.rideTypes.length && !p.rideTypes.includes(rideType)) throw new HttpsError("failed-precondition", "الكود لا يشمل هذه الفئة");
+  const perUser = Number(p.perUser) > 0 ? Number(p.perUser) : 1;
+  const used = await db.collection("promo_usage").doc(`${code}_${uid}`).get();
+  if (used.exists && (used.data().count || 0) >= perUser) throw new HttpsError("failed-precondition", "استعملت هذا الكود من قبل");
+  return { code, promo: p, discount: promoDiscount(p, price) };
+}
+
+exports.validatePromo = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "سجّل الدخول أولاً");
+  const price = Number(req.data?.price) || 0;
+  if (price <= 0) throw new HttpsError("invalid-argument", "سعر غير صالح");
+  const r = await checkPromo(req.data?.code, req.auth.uid, price, req.data?.rideType);
+  if (r.discount <= 0) throw new HttpsError("failed-precondition", "لا خصم على هذا السعر");
+  return { code: r.code, discount: r.discount, title: r.promo.title || "" };
+});
+
+exports.listOffers = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth) return { offers: [] };
+  const snap = await db.collection("promos").where("public", "==", true).get();
+  const now = Date.now();
+  const offers = snap.docs.map((d) => ({ code: d.id, ...d.data() }))
+    .filter((p) => p.active !== false && !(p.expiresAt?.toMillis && p.expiresAt.toMillis() < now) && !(p.startsAt?.toMillis && p.startsAt.toMillis() > now) && !(Number(p.maxUses) > 0 && (p.usedCount || 0) >= Number(p.maxUses)))
+    .slice(0, 5).map((p) => ({ code: p.code, title: p.title || "", type: p.type, value: p.value }));
+  return { offers };
+});
+
+// عند إنشاء طلب بكود خصم: نعيد التحقق من الخادم ونسجّل الاستعمال، ونعلّم أي تلاعب
+exports.onBookingPromoUsed = functions.firestore.document("bookings/{id}").onCreate(async (snap, ctx) => {
+  const b = snap.data();
+  if (!b.promoCode) return null;
+  const ref = snap.ref;
+  try {
+    const r = await checkPromo(b.promoCode, b.passengerId, Number(b.originalPrice) || 0, b.rideType);
+    if (Number(b.discount) > r.discount + 1) {
+      await ref.update({ promoFlag: "mismatch", promoExpected: r.discount });
+      await db.collection("reports").add({ targetId: b.passengerId, targetName: b.passengerName || "راكب", targetType: "passenger", reporterId: "system", reporterName: "النظام (تلقائي)", reason: `خصم غير مطابق: ${b.discount} بدل ${r.discount} (كود ${b.promoCode})`, status: "pending", createdAt: FV.serverTimestamp() });
+      return null;
+    }
+    await db.runTransaction(async (tx) => {
+      const pr = db.collection("promos").doc(r.code), ur = db.collection("promo_usage").doc(`${r.code}_${b.passengerId}`);
+      tx.update(pr, { usedCount: FV.increment(1), totalDiscount: FV.increment(Number(b.discount) || 0) });
+      tx.set(ur, { code: r.code, uid: b.passengerId, count: FV.increment(1), lastBookingId: ctx.params.id, lastAt: FV.serverTimestamp() }, { merge: true });
+    });
+    await ref.update({ promoVerified: true });
+  } catch (e) {
+    await ref.update({ promoFlag: "invalid", promoError: String(e.message || e).slice(0, 120) }).catch(() => {});
+    await db.collection("reports").add({ targetId: b.passengerId, targetName: b.passengerName || "راكب", targetType: "passenger", reporterId: "system", reporterName: "النظام (تلقائي)", reason: `كود خصم غير صالح استُعمل: ${b.promoCode} — ${e.message}`, status: "pending", createdAt: FV.serverTimestamp() }).catch(() => {});
+  }
+  return null;
+});
+
+// الرحلات المجدولة: كل 5 دقائق نُفعّل ما يقترب موعده (خلال 20 دقيقة) ونُخطر السائقين القريبين
+exports.releaseScheduledRides = onSchedule({ schedule: "every 5 minutes", region: "europe-west1", timeZone: "Africa/Algiers" }, async () => {
+  const snap = await db.collection("bookings").where("status", "==", "scheduled").get();
+  const horizon = Date.now() + 20 * 60000;
+  const due = snap.docs.filter((d) => (d.data().scheduledAt?.toMillis?.() || Infinity) <= horizon);
+  if (!due.length) return;
+  const driversSnap = await db.collection("drivers").where("isOnline", "==", true).where("verificationStatus", "==", "approved").get();
+  const drivers = driversSnap.docs.map((d) => d.data()).filter((d) => d.fcmToken && d.location);
+  for (const d of due) {
+    const b = d.data();
+    await d.ref.update({ status: "pending", releasedAt: FV.serverTimestamp(), notifiedAt: FV.serverTimestamp() });
+    const toRad = Math.PI / 180;
+    const tokens = drivers.filter((dr) => {
+      const dLat = (dr.location.lat - b.originLat) * toRad, dLng = (dr.location.lng - b.originLng) * toRad;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(b.originLat * toRad) * Math.cos(dr.location.lat * toRad) * Math.sin(dLng / 2) ** 2;
+      return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) <= 5;
+    }).map((dr) => dr.fcmToken);
+    await sendToMultiple(tokens, "🗓️ طلب مجدول قريب الموعد", `💰 ${b.price} دج · 📏 ${b.distanceKm?.toFixed?.(1)} كم`, { type: "new_booking", bookingId: d.id, price: String(b.price), screen: "home" });
+  }
+});
+
+// ============================================================
+// ====== المهام والحوافز + تعويض الخصومات للسائق (دفعة 3) ======
+// ============================================================
+const DONE_ST = ["completed", "rated"];
+const DZ_OFFSET = 3600000; // الجزائر UTC+1 بدون توقيت صيفي
+function periodStartDZ(period) {
+  const local = new Date(Date.now() + DZ_OFFSET);
+  let y = local.getUTCFullYear(), m = local.getUTCMonth(), d = local.getUTCDate();
+  if (period === "weekly") { const back = (local.getUTCDay() + 1) % 7; const t = new Date(Date.UTC(y, m, d - back)); y = t.getUTCFullYear(); m = t.getUTCMonth(); d = t.getUTCDate(); }
+  if (period === "monthly") d = 1;
+  return { start: new Date(Date.UTC(y, m, d) - DZ_OFFSET), key: `${period[0]}${y}${String(m + 1).padStart(2, "0")}${String(d).padStart(2, "0")}` };
+}
+
+exports.claimMission = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "سجّل الدخول");
+  const uid = req.auth.uid, missionId = String(req.data?.missionId || "");
+  const mSnap = await db.collection("missions").doc(missionId).get();
+  if (!mSnap.exists) throw new HttpsError("not-found", "المهمة غير موجودة");
+  const m = mSnap.data();
+  if (m.active === false || (m.expiresAt?.toMillis && m.expiresAt.toMillis() < Date.now())) throw new HttpsError("failed-precondition", "المهمة منتهية");
+  const { start, key } = periodStartDZ(m.period || "daily");
+  const rs = await db.collection("bookings").where("driverId", "==", uid).where("status", "in", DONE_ST).orderBy("createdAt", "desc").limit(500).get();
+  const rides = rs.docs.map((d) => d.data()).filter((b) => ((b.completedAt || b.createdAt)?.toMillis?.() || 0) >= start.getTime());
+  const progress = m.metric === "earnings" ? rides.reduce((s, b) => s + (b.price || 0), 0) : rides.length;
+  if (progress < Number(m.target)) throw new HttpsError("failed-precondition", "لم تكتمل المهمة بعد");
+  const claimRef = db.collection("mission_claims").doc(`${uid}_${missionId}_${key}`);
+  const amount = Number(m.reward?.amount) || 0;
+  await db.runTransaction(async (tx) => {
+    if ((await tx.get(claimRef)).exists) throw new HttpsError("already-exists", "استلمت هذه المكافأة من قبل");
+    tx.set(claimRef, { driverId: uid, missionId, periodKey: key, reward: m.reward || null, createdAt: FV.serverTimestamp() });
+    const dRef = db.collection("drivers").doc(uid);
+    if (m.reward?.type === "credit") {
+      tx.update(dRef, { compensationCredit: FV.increment(amount) });
+      tx.set(db.collection("driver_credits").doc(), { driverId: uid, amount, reason: "mission", missionId, title: m.title || "", createdAt: FV.serverTimestamp() });
+    } else {
+      tx.update(dRef, { points: FV.increment(amount) });
+      tx.set(db.collection("point_transactions").doc(), { uid, type: "mission", points: amount, missionId, createdAt: FV.serverTimestamp() });
+    }
+  });
+  return { label: m.reward?.type === "credit" ? `${amount} دج خصم من الاشتراك` : `${amount} نقطة` };
+});
+
+// تعويض السائق عن خصم الراكب: عند اكتمال رحلة بخصم موثَّق من الخادم
+exports.onBookingCompensate = functions.firestore.document("bookings/{id}").onUpdate(async (change, ctx) => {
+  const a = change.after.data(), b = change.before.data();
+  if (!DONE_ST.includes(a.status) || DONE_ST.includes(b.status)) return null;
+  if (!(a.discount > 0) || a.promoVerified !== true || a.compensated || !a.driverId) return null;
+  await db.runTransaction(async (tx) => {
+    const fresh = await tx.get(change.after.ref);
+    if (fresh.data().compensated) return;
+    tx.update(change.after.ref, { compensated: true });
+    tx.update(db.collection("drivers").doc(a.driverId), { compensationCredit: FV.increment(a.discount) });
+    tx.set(db.collection("driver_credits").doc(), { driverId: a.driverId, amount: a.discount, reason: "promo", promoCode: a.promoCode || "", bookingId: ctx.params.id, createdAt: FV.serverTimestamp() });
+  });
+  return null;
+});
+
+// ============================================================
+// ====== مكالمات داخل التطبيق: إشعار الطرف الآخر (دفعة 4) ======
+// ============================================================
+exports.onCallRinging = functions.firestore.document("calls/{id}").onWrite(async (change) => {
+  const a = change.after.exists ? change.after.data() : null;
+  const b = change.before.exists ? change.before.data() : null;
+  if (!a || a.state !== "ringing" || (b && b.callId === a.callId)) return null;
+  const uid = a.calleeId;
+  let snap = await db.collection("drivers").doc(uid).get();
+  if (!snap.exists) snap = await db.collection("passengers").doc(uid).get();
+  const token = snap.exists ? snap.data().fcmToken : null;
+  if (!token) return null;
+  await sendNotification(token, "📞 مكالمة واردة", `${a.callerName || "مستخدم"} يتصل بك عبر AL-BURAQ`, { type: "incoming_call", bookingId: change.after.id, screen: "home" });
+  return null;
+});
