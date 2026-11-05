@@ -22,9 +22,25 @@ const LIBRARIES = ["places"];
 const generateSessionId = () => `${Date.now()}-${Math.random().toString(36).substr(2,9)}`;
 const SESSION_KEY = "taxidz_session_id";
 const ALGERIA_CENTER = { lat: 36.737, lng: 3.086 };
-const PRICE_PER_KM = 30;
-const BASE_PRICE = 40;
+// الأسعار تُقرأ من Firestore (settings/pricing) ويعدّلها الأدمن؛ القيم هنا افتراضية
+const PRICING = { perKm:30, base:40, min:100, mult:{ economy:1.0, comfort:1.4, xl:1.8 } };
 const MIN_PRICE = 100;
+const pricingListeners = new Set();
+try {
+  onSnapshot(doc(db,"settings","pricing"), snap => {
+    if (!snap.exists()) return;
+    const d = snap.data();
+    if (d.perKm>0) PRICING.perKm = d.perKm;
+    if (d.base>=0) PRICING.base = d.base;
+    if (d.min>0) PRICING.min = d.min;
+    if (d.mult) PRICING.mult = { ...PRICING.mult, ...d.mult };
+    pricingListeners.forEach(f=>f());
+  }, ()=>{});
+} catch(e){}
+const usePricing = () => {
+  const [,setV] = useState(0);
+  useEffect(()=>{ const f=()=>setV(v=>v+1); pricingListeners.add(f); return ()=>pricingListeners.delete(f); },[]);
+};
 
 const getDistanceKm = (lat1, lng1, lat2, lng2) => {
   const R = 6371;
@@ -34,9 +50,9 @@ const getDistanceKm = (lat1, lng1, lat2, lng2) => {
 };
 
 const calcPrice = (km, multiplier=1.0) => {
-  if (!km||km<=0) return MIN_PRICE;
-  const price = Math.round((BASE_PRICE+km*PRICE_PER_KM)*multiplier);
-  return km<2 ? Math.max(price,MIN_PRICE) : price;
+  if (!km||km<=0) return PRICING.min;
+  const price = Math.round((PRICING.base+km*PRICING.perKm)*multiplier);
+  return km<2 ? Math.max(price,PRICING.min) : price;
 };
 
 const getLatLng = (place) => {
@@ -218,7 +234,7 @@ const C = {
 const OTP_LEN = 4; // smssak يرسل رمزاً من 4 أرقام
 
 const RIDE_TYPES_IDS = ["economy","comfort","xl"];
-const RIDE_MULTIPLIERS = { economy:1.0, comfort:1.4, xl:1.8 };
+const RIDE_MULTIPLIERS = new Proxy({}, { get:(_,k)=>PRICING.mult[k] });
 const RIDE_ICONS = { economy:"🚗", comfort:"🚙", xl:"🚐" };
 const RIDE_TIMES = { economy:"3", comfort:"5", xl:"7" };
 
@@ -1319,6 +1335,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
 
 // ===== PASSENGER APP =====
 function PassengerApp({ onLogout, user, lang, setLang }) {
+  usePricing();
   const t=T[lang];
   const isRTL=lang==="ar";
   const [screen,setScreen]=useState("home");
