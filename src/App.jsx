@@ -17,6 +17,8 @@ import DriverDashboard from "./DriverDashboard2";
 import { ShareButton, TierProgress } from "./ReferralShare";
 import { Avatar, PhotoSheet } from "./ProfilePhoto";
 import { SavedPlacesBar, SchedulePicker, scheduleToTimestamp, scheduleValid, PromoBox, OffersBanner, UpcomingRides, HistoryScreen } from "./PassengerExtras";
+import { useVoiceCall, CallButtons, CallOverlay } from "./CallKit";
+import { useAccountBlock, AccountBlockedScreen } from "./AccountGuard";
 import { makeRideCode, TagPicker, ShareTripSheet, useShareSync, createShare } from "./TripKit";
 
 const LIBRARIES = ["places"];
@@ -1430,6 +1432,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   useEffect(()=>{ if(!bookingId||screen!=="searching") return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo){setSelectedDriver(d.driverInfo);setScreen("found");} }); return()=>u(); },[bookingId,screen]);
   useEffect(()=>{ if(screen!=="searching") return; const t=setInterval(()=>setTimer(p=>p+1),1000); return()=>clearInterval(t); },[screen]);
   useEffect(()=>{ if(screen==="searching"&&timer===60) setNoDrivers(true); },[timer,screen]);
+  const call=useVoiceCall({ bookingId, meUid:user?.uid, meName:passengerName, otherUid:selectedDriver?.uid||selectedDriver?.id });
+  const block=useAccountBlock("passengers",user?.uid);
   useEffect(()=>{ setPromo(null); },[offerPrice,rideType]);
   useShareSync({ token:shareToken, active:screen==="found"||(screen==="ride"&&!showRating), phase:screen==="ride"?"ride":"pickup", driverLocation, ended:!!shareToken&&(screen==="home"||showRating) });
   const savePlaces=async(list)=>{ try{ await updateDoc(doc(db,"passengers",user.uid),{savedPlaces:list}); setPassengerData(d=>({...(d||{}),savedPlaces:list})); }catch(e){} };
@@ -1630,6 +1634,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const resetTrip=()=>{ setScreen("home");setShowRating(false);setDistanceKm(0);setBookingId(null);setFinalRating(0);setSelectedDriver(null);setShowChat(false);driverArrivedNotified.current=false; };
 
   // HOME — أسلوب Uber: خريطة بملء الشاشة + لوحة سفلية
+  if(block.blocked) return <AccountBlockedScreen info={block} onLogout={onLogout} lang={lang==="fr"||lang==="en"?lang:"ar"} />;
   if(screen==="home") return (
     <div style={{ minHeight:"100vh",background:C.page,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
@@ -1857,6 +1862,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
       {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
       {showShare&&shareToken&&<ShareTripSheet link={`${window.location.origin}/track/${shareToken}`} passengerName={passengerName} contacts={passengerData?.trustedContacts||[]} onSaveContacts={saveContacts} onClose={()=>setShowShare(false)} lang={lang==="fr"||lang==="en"?lang:"ar"} />}
+      <CallOverlay call={call} otherName={selectedDriver?.name||"السائق"} phone={selectedDriver?.phone} />
       <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="pickup" lang={lang} />
       <div style={{ margin:"14px 20px",background:C.card,borderRadius:20,padding:22,boxShadow:C.shadow }}>
         <div style={{ textAlign:"center",marginBottom:16 }}>
@@ -1886,11 +1892,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
             <div style={{ fontSize:32,fontWeight:900,color:"#fff",letterSpacing:8 }}>{booking?.rideCode||"----"}</div>
           </div>
         </div>
-        {selectedDriver?.phone&&<a href={`tel:${selectedDriver.phone}`} style={{ display:"flex",alignItems:"center",gap:10,background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:12,padding:"12px 14px",marginBottom:10,textDecoration:"none" }}>
-          <span style={{ fontSize:22 }}>📞</span>
-          <div style={{ flex:1 }}><div style={{ fontSize:11,color:C.textMuted }}>{t.driverPhone}</div><div style={{ fontSize:16,fontWeight:900,color:C.green,direction:"ltr" }}>{selectedDriver.phone}</div></div>
-          <div style={{ background:C.green,borderRadius:8,padding:"6px 12px",fontSize:12,color:"#fff",fontWeight:700 }}>{t.call}</div>
-        </a>}
+        <div style={{ marginBottom:10 }}><CallButtons call={call} phone={selectedDriver?.phone} /></div>
         <button onClick={openShare} style={{ width:"100%",background:"#fff",border:"1.5px solid #111",borderRadius:12,padding:"11px",color:"#111",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>📡 {lang==="ar"?"شارك رحلتي مع شخص موثوق":lang==="fr"?"Partager mon trajet":"Share my trip"}</button>
         {/* Chat Button */}
         <button onClick={()=>setShowChat(true)} style={{ width:"100%",background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:12,padding:"12px",color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
@@ -1933,6 +1935,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         {showChat&&bookingId&&<ChatBox bookingId={bookingId} userId={user?.uid} userName={passengerName} otherName={selectedDriver?.name||"السائق"} lang={lang} onClose={()=>setShowChat(false)} />}
         {showReport&&<ReportModal targetId={selectedDriver?.uid||bookingId} targetName={selectedDriver?.name||"السائق"} targetType="driver" reporterId={user?.uid} reporterName={passengerName} onClose={()=>setShowReport(false)} lang={lang} />}
       {showShare&&shareToken&&<ShareTripSheet link={`${window.location.origin}/track/${shareToken}`} passengerName={passengerName} contacts={passengerData?.trustedContacts||[]} onSaveContacts={saveContacts} onClose={()=>setShowShare(false)} lang={lang==="fr"||lang==="en"?lang:"ar"} />}
+      <CallOverlay call={call} otherName={selectedDriver?.name||"السائق"} phone={selectedDriver?.phone} />
         <PassengerTrackingMap passengerLocation={passengerGPS||(originPlace?getLatLng(originPlace):null)} driverLocation={driverLocation} destinationLocation={destPlace?getLatLng(destPlace):null} mode="ride" lang={lang} />
         <div style={{ margin:"14px 20px",background:C.card,borderRadius:20,padding:20,boxShadow:C.shadow }}>
           <div style={{ display:"flex",justifyContent:"space-between",marginBottom:14 }}>
@@ -1946,6 +1949,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
             </button>
             <button onClick={()=>setShowReport(true)} style={{ width:44,background:`${C.orange}15`,border:`1px solid ${C.orange}44`,borderRadius:12,padding:"10px",color:C.orange,fontFamily:"inherit",cursor:"pointer",fontSize:16 }}>🚨</button>
           </div>
+          <div style={{ marginBottom:8 }}><CallButtons call={call} phone={selectedDriver?.phone} /></div>
           <button onClick={openShare} style={{ width:"100%",background:"#fff",border:"1.5px solid #111",borderRadius:12,padding:"11px",color:"#111",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>📡 {lang==="ar"?"شارك رحلتي مع شخص موثوق":lang==="fr"?"Partager mon trajet":"Share my trip"}</button>
         {destPlace&&<button onClick={()=>{ const d=getLatLng(destPlace); openNavigation(d.lat,d.lng); }} style={{ width:"100%",background:`linear-gradient(135deg,${C.googleBlue},#000000)`,border:"none",borderRadius:14,padding:13,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}><span style={{ fontSize:18 }}>🗺️</span>{t.trackRoute}</button>}
           <button onClick={finishRide} style={{ width:"100%",background:`${C.dark}`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer" }}>{t.arrived}</button>
