@@ -15,6 +15,7 @@ const cloudFunctions = getFunctions(undefined, "europe-west1");
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } from "@react-google-maps/api";
 import DriverDashboard from "./DriverDashboard2";
 import { ShareButton, TierProgress } from "./ReferralShare";
+import { Avatar, PhotoSheet } from "./ProfilePhoto";
 
 const LIBRARIES = ["places"];
 
@@ -1368,6 +1369,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const [timer,setTimer]=useState(0);
   const [passengerGPS,setPassengerGPS]=useState(null);
   const [passengerData,setPassengerData]=useState(null);
+  const [showPhoto,setShowPhoto]=useState(false);
+  const savePhoto=async(dataUrl)=>{ await updateDoc(doc(db,"passengers",user.uid),{photoURL:dataUrl}); setPassengerData(d=>({...(d||{}),photoURL:dataUrl})); };
   const [fcmToast,setFcmToast]=useState(null);
   const [showReport,setShowReport]=useState(false);
   const [showForceLogout,setShowForceLogout]=useState(false);
@@ -1512,7 +1515,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     setScreen("searching"); // ننتقل فورًا؛ باقي العمل يحدث في الخلفية دون تعليق الواجهة
     const oLL=getLatLng(originPlace),dLL=getLatLng(destPlace);
     try {
-      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,passengers,luggageWeight,luggageDesc,status:"pending",createdAt:serverTimestamp() });
+      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,passengers,luggageWeight,luggageDesc,status:"pending",createdAt:serverTimestamp() });
       setBookingId(ref.id);
       setBooking({originPlace,destPlace,originText,destText,rideType,price,distanceKm,passengerPhone,passengerName,id:ref.id});
       const snap=await getDocs(query(collection(db,"drivers"),where("isOnline","==",true),where("verificationStatus","==","approved")));
@@ -1582,13 +1585,20 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         </div>
         <div style={{ width:46 }} />
       </div>
+      {showPhoto&&<PhotoSheet photo={passengerData?.photoURL} name={passengerName} lang={lang==="fr"||lang==="en"?lang:"ar"} onSave={savePhoto} onClose={()=>setShowPhoto(false)} />}
       {/* اللوحة السفلية */}
       <div style={{ position:"fixed",left:0,right:0,bottom:0,zIndex:20,background:"#fff",borderRadius:"28px 28px 0 0",boxShadow:"0 -8px 32px rgba(0,0,0,0.16)",padding:"10px 20px 24px" }}>
         <div style={{ width:40,height:4,borderRadius:2,background:"#d4d4d4",margin:"0 auto 14px" }} />
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-          <div>
-            <div style={{ fontSize:13,color:C.textMuted }}>{t.hello}</div>
-            <div style={{ fontSize:22,fontWeight:800,color:C.text,letterSpacing:-0.3 }}>{passengerName}</div>
+          <div style={{ display:"flex",alignItems:"center",gap:12 }}>
+            <div onClick={()=>setShowPhoto(true)} style={{ position:"relative",cursor:"pointer" }}>
+              <Avatar src={passengerData?.photoURL} name={passengerName} size={48} />
+              <div style={{ position:"absolute",bottom:-2,right:-2,width:20,height:20,borderRadius:"50%",background:"#111",color:"#fff",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #fff" }}>📷</div>
+            </div>
+            <div>
+              <div style={{ fontSize:13,color:C.textMuted }}>{t.hello}</div>
+              <div style={{ fontSize:22,fontWeight:800,color:C.text,letterSpacing:-0.3 }}>{passengerName}</div>
+            </div>
           </div>
           {passengerData?.points>0&&<div style={{ background:"#f3f3f3",borderRadius:20,padding:"6px 12px",fontSize:12,fontWeight:700,color:C.text }}>⭐ {passengerData.points}</div>}
         </div>
