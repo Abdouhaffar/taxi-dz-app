@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
+import { DashboardPro, LiveOps, RidesPanel, SafetyPanel, GlobalSearch, PricingPanel, adminProStyles, useIsMobile } from "./AdminPro";
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, query, orderBy, addDoc } from "firebase/firestore";
 
 // Firebase مستقل لصفحة الإدارة
@@ -18,7 +20,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 const SUPER_ADMIN_EMAIL = "abdouhaffar@gmail.com";
-const SUPER_ADMIN_CODE = "Daniel&layan@202526";
 
 // يعرض سبب فشل أي عملية كتابة بدل ما يختفي بصمت (خصوصاً permission-denied من قواعد Firestore)
 const showErr = (e, action) => {
@@ -119,23 +120,12 @@ function AdminLogin({ onLogin }) {
           return;
         }
       }
-      const unsub = onSnapshot(collection(db, "admins"), snap => {
-        let found = false;
-        snap.docs.forEach(d => {
-          const data = d.data();
-          if (data.email === email && data.code === code && data.approved) {
-            found = true;
-            signInWithEmailAndPassword(auth, email, code)
-              .then(() => onLogin({ email, role: "sub", name: data.name, id: d.id }))
-              .catch(() => onLogin({ email, role: "sub", name: data.name, id: d.id }));
-          }
-        });
-        if (!found) setError("البريد أو الرمز غير صحيح، أو لم يتم قبولك بعد");
-        unsub();
-        setLoading(false);
-      });
+      const res = await httpsCallable(getFunctions(app, "europe-west1"), "adminSignIn")({ email: email.trim().toLowerCase(), code });
+      await signInWithCustomToken(auth, res.data.token);
+      onLogin({ email, role: "sub", name: res.data.name, id: res.data.id });
+      setLoading(false);
     } catch (e) {
-      setError("حدث خطأ غير متوقع"); setLoading(false);
+      setError(e?.message?.replace(/^.*?: /, "") || "حدث خطأ غير متوقع"); setLoading(false);
     }
   };
 
@@ -175,13 +165,17 @@ function AdminLogin({ onLogin }) {
 }
 
 // ===== SIDEBAR =====
-function Sidebar({ tab, setTab, admin, onLogout, counts }) {
+function Sidebar({ tab, setTab, admin, onLogout, counts, isMobile, open, onClose }) {
   const isSuperAdmin = admin?.role === "super";
   const navItems = [
     { id: "dashboard", icon: "📊", label: "الرئيسية" },
+    { id: "live", icon: "🗺️", label: "العمليات المباشرة" },
+    { id: "rides", icon: "🧾", label: "الرحلات" },
+    { id: "safety", icon: "🆘", label: "الطوارئ", badge: counts.openSos },
     { id: "drivers", icon: "🚕", label: "السائقون", badge: counts.pendingDrivers },
     { id: "passengers", icon: "👥", label: "الركاب" },
     ...(isSuperAdmin ? [{ id: "admins", icon: "🛡️", label: "الأدمنات", badge: counts.pendingAdmins }] : []),
+    { id: "pricing", icon: "💰", label: "التسعير" },
     { id: "reports", icon: "📈", label: "التقارير" },
     { id: "analytics", icon: "💹", label: "التحليلات" },
     { id: "complaints", icon: "🚨", label: "التبليغات", badge: counts.pendingReports },
@@ -190,7 +184,7 @@ function Sidebar({ tab, setTab, admin, onLogout, counts }) {
   ];
 
   return (
-    <div style={{ width: 220, minHeight: "100vh", background: C.sidebar, borderLeft: `1px solid ${C.border}`, display: "flex", flexDirection: "column", position: "fixed", right: 0, top: 0, bottom: 0, zIndex: 100 }}>
+    <div style={{ width: 220, minHeight: "100vh", background: C.sidebar, borderLeft: `1px solid ${C.border}`, display: "flex", flexDirection: "column", position: "fixed", right: 0, top: 0, bottom: 0, zIndex: 150, transform: isMobile && !open ? "translateX(100%)" : "none", transition: "transform .25s ease", overflowY: "auto" }}>
       <div style={{ padding: "20px 16px", borderBottom: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#c4001d,#ff8fa0)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🛡️</div>
@@ -203,7 +197,7 @@ function Sidebar({ tab, setTab, admin, onLogout, counts }) {
 
       <nav style={{ flex: 1, padding: "12px 8px", overflowY: "auto" }}>
         {navItems.map(item => (
-          <button key={item.id} onClick={() => setTab(item.id)}
+          <button key={item.id} onClick={() => { setTab(item.id); onClose && onClose(); }}
             style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: "none", background: tab === item.id ? C.blueGlow : "transparent", color: tab === item.id ? C.blueLight : C.textMuted, fontFamily: "inherit", fontWeight: tab === item.id ? 700 : 500, fontSize: 13, cursor: "pointer", marginBottom: 2, textAlign: "right", position: "relative", transition: "all 0.15s" }}>
             <span style={{ fontSize: 16 }}>{item.icon}</span>
             <span style={{ flex: 1 }}>{item.label}</span>
@@ -1068,6 +1062,9 @@ export default function AdminApp() {
   const [admins, setAdmins] = useState([]);
   const [reports, setReports] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [sos, setSos] = useState([]);
+  const [menu, setMenu] = useState(false);
+  const isMobile = useIsMobile();
   const [loadErr, setLoadErr] = useState("");
 
   useEffect(() => {
@@ -1078,7 +1075,8 @@ export default function AdminApp() {
     const u3 = admin.role === "super" ? onSnapshot(collection(db, "admins"), snap => setAdmins(snap.docs.map(d => ({ id: d.id, ...d.data() })))) : () => {};
     const u4 = onSnapshot(collection(db, "reports"), snap => setReports(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const u5 = onSnapshot(collection(db, "bookings"), snap => setBookings(snap.docs.map(d => ({ id: d.id, ...d.data() }))), e => setLoadErr("تعذر قراءة بيانات الرحلات: " + (e.code || e.message)));
-    return () => { u1(); u2(); u3(); u4(); u5(); };
+    const u6 = onSnapshot(collection(db, "sos_alerts"), snap => setSos(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
   }, [admin]);
 
   if (!admin) return <AdminLogin onLogin={setAdmin} />;
@@ -1087,18 +1085,29 @@ export default function AdminApp() {
     pendingDrivers: drivers.filter(d => d.verificationStatus === "pending" || !d.verificationStatus).length,
     pendingAdmins: admins.filter(a => !a.approved).length,
     pendingReports: reports.filter(r => r.status === "pending").length,
+    openSos: sos.filter(x => !x.resolved).length,
     pendingSubscriptions: drivers.filter(d => d.subscriptionRequest?.status === "pending").length,
   };
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'IBM Plex Sans Arabic',Cairo,sans-serif", direction: "rtl", display: "flex" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap'); *{box-sizing:border-box;margin:0;padding:0} ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:#33262b;border-radius:4px} select option{background:#161113;color:#fff5f6}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap'); *{box-sizing:border-box;margin:0;padding:0} ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:#33262b;border-radius:4px} select option{background:#161113;color:#fff5f6}${adminProStyles}`}</style>
 
-      <Sidebar tab={tab} setTab={setTab} admin={admin} onLogout={() => setAdmin(null)} counts={counts} />
+      <Sidebar tab={tab} setTab={setTab} admin={admin} onLogout={() => setAdmin(null)} counts={counts} isMobile={isMobile} open={menu} onClose={() => setMenu(false)} />
+      {isMobile && menu && <div onClick={() => setMenu(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 140 }} />}
 
-      <main style={{ flex: 1, marginRight: 220, padding: "32px 28px", overflowY: "auto", minHeight: "100vh" }}>
+      <main style={{ flex: 1, marginRight: isMobile ? 0 : 220, padding: isMobile ? "16px 14px 40px" : "24px 28px", overflowY: "auto", minHeight: "100vh", minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 20 }}>
+          {isMobile && <button onClick={() => setMenu(true)} style={{ width: 42, height: 42, borderRadius: 12, background: C.card || "#161113", border: `1px solid ${C.border}`, color: "#fff", fontSize: 18, cursor: "pointer" }}>☰</button>}
+          <GlobalSearch drivers={drivers} passengers={passengers} bookings={bookings} onNav={setTab} />
+          <button onClick={() => setTab("safety")} title="الطوارئ" style={{ position: "relative", width: 42, height: 42, borderRadius: 12, background: counts.openSos ? "#f8514922" : "#161113", border: `1px solid ${counts.openSos ? "#f85149" : C.border}`, cursor: "pointer", fontSize: 18 }}>🔔{counts.openSos > 0 && <span style={{ position: "absolute", top: -5, left: -5, background: "#f85149", color: "#fff", borderRadius: 10, fontSize: 10, padding: "1px 6px", fontWeight: 800 }}>{counts.openSos}</span>}</button>
+        </div>
         {loadErr && <div style={{ background: C.redGlow, border: `1px solid ${C.red}44`, borderRadius: 10, padding: "12px 16px", color: C.redLight, fontSize: 13, marginBottom: 20 }}>⚠️ {loadErr}</div>}
-        {tab === "dashboard" && <Dashboard drivers={drivers} passengers={passengers} admins={admins} />}
+        {tab === "dashboard" && <DashboardPro bookings={bookings} drivers={drivers} passengers={passengers} reports={reports} sos={sos} onNav={setTab} isMobile={isMobile} />}
+        {tab === "live" && <LiveOps bookings={bookings} drivers={drivers} sos={sos} isMobile={isMobile} />}
+        {tab === "rides" && <RidesPanel bookings={bookings} isMobile={isMobile} />}
+        {tab === "pricing" && <PricingPanel db={db} adminName={admin.name} canEdit={admin.role === "super"} />}
+        {tab === "safety" && <SafetyPanel sos={sos} db={db} isMobile={isMobile} />}
         {tab === "drivers" && <DriversPanel drivers={drivers} isSuperAdmin={admin.role === "super"} />}
         {tab === "passengers" && <PassengersPanel passengers={passengers} isSuperAdmin={admin.role === "super"} />}
         {tab === "admins" && admin.role === "super" && <AdminsPanel admins={admins} currentAdmin={admin} />}
