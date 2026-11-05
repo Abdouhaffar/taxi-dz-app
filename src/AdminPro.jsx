@@ -2,7 +2,7 @@
 // لوحة الإدارة المتقدمة: لوحة معلومات حقيقية، عمليات مباشرة، سجل الرحلات، الطوارئ، بحث شامل
 import { useState, useMemo, useEffect, useRef } from "react";
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from "@react-google-maps/api";
-import { doc, updateDoc, setDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
+import { doc, updateDoc, setDoc, deleteDoc, addDoc, collection, Timestamp, serverTimestamp, onSnapshot, arrayUnion, increment } from "firebase/firestore";
 
 // ===== الثيم =====
 export const T = {
@@ -714,6 +714,400 @@ export function PricingPanel({ db, adminName, canEdit }) {
               </div>
             ))}
           </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ================================================================
+// العروض وأكواد الخصم (promos) — تُتحقق وتُسجَّل من الخادم
+// ================================================================
+export function PromosPanel({ db, canEdit }) {
+  const [rows, setRows] = useState([]);
+  const empty = { code: "", title: "", type: "percent", value: 10, maxDiscount: 0, minPrice: 0, maxUses: 0, perUser: 1, days: 30, public: true };
+  const [f, setF] = useState(empty);
+  const [open, setOpen] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => onSnapshot(collection(db, "promos"), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0))), () => {}), [db]);
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const create = async () => {
+    const code = f.code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    if (code.length < 3) return setErr("الكود 3 أحرف/أرقام على الأقل (إنجليزية)");
+    if (!(+f.value > 0) || (f.type === "percent" && +f.value > 100)) return setErr("قيمة الخصم غير صحيحة");
+    try {
+      await setDoc(doc(db, "promos", code), {
+        title: f.title.trim(), type: f.type, value: +f.value, maxDiscount: +f.maxDiscount || 0, minPrice: +f.minPrice || 0, maxUses: +f.maxUses || 0, perUser: +f.perUser || 1,
+        active: true, public: !!f.public, usedCount: 0, totalDiscount: 0,
+        expiresAt: +f.days > 0 ? Timestamp.fromDate(new Date(Date.now() + f.days * 86400000)) : null, createdAt: serverTimestamp(),
+      });
+      setF(empty); setOpen(false); setErr("");
+    } catch (e) { setErr(e.code === "permission-denied" ? "قواعد Firestore تمنع الكتابة في promos" : e.message); }
+  };
+  const toggle = (r) => updateDoc(doc(db, "promos", r.id), { active: r.active === false }).catch((e) => alert(e.message));
+  const del = (r) => window.confirm(`حذف الكود ${r.id}؟`) && deleteDoc(doc(db, "promos", r.id)).catch((e) => alert(e.message));
+  const inp = { width: "100%", background: T.panel2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", color: T.text, fontFamily: "inherit", fontSize: 14, outline: "none" };
+  const F = ({ l, children }) => <label style={{ display: "block" }}><div style={{ fontSize: 11, color: T.muted, marginBottom: 5, fontWeight: 600 }}>{l}</div>{children}</label>;
+  const totalDisc = rows.reduce((s, r) => s + (r.totalDiscount || 0), 0);
+  const totalUse = rows.reduce((s, r) => s + (r.usedCount || 0), 0);
+  return (
+    <div>
+      <PageTitle title="🎟️ العروض وأكواد الخصم" sub={`${totalUse} استعمال · كلفة الخصومات ${DA(totalDisc)}`}
+        right={canEdit && <button onClick={() => setOpen(!open)} style={{ background: T.brand, border: "none", color: "#fff", borderRadius: 12, padding: "10px 18px", fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>{open ? "إلغاء" : "＋ كود جديد"}</button>} />
+      {open && (
+        <Card style={{ marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12 }}>
+            <F l="الكود (إنجليزي)"><input style={{ ...inp, direction: "ltr", letterSpacing: 2, fontWeight: 800 }} value={f.code} onChange={(e) => set("code", e.target.value.toUpperCase())} placeholder="WELCOME20" /></F>
+            <F l="العنوان الظاهر للراكب"><input style={inp} value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="خصم الترحيب" /></F>
+            <F l="النوع"><select style={inp} value={f.type} onChange={(e) => set("type", e.target.value)}><option value="percent">نسبة %</option><option value="fixed">مبلغ ثابت (دج)</option></select></F>
+            <F l={f.type === "percent" ? "النسبة %" : "المبلغ دج"}><input type="number" style={inp} value={f.value} onChange={(e) => set("value", e.target.value)} /></F>
+            {f.type === "percent" && <F l="سقف الخصم دج (0 = بدون)"><input type="number" style={inp} value={f.maxDiscount} onChange={(e) => set("maxDiscount", e.target.value)} /></F>}
+            <F l="أقل سعر للرحلة دج"><input type="number" style={inp} value={f.minPrice} onChange={(e) => set("minPrice", e.target.value)} /></F>
+            <F l="أقصى عدد استعمالات (0 = مفتوح)"><input type="number" style={inp} value={f.maxUses} onChange={(e) => set("maxUses", e.target.value)} /></F>
+            <F l="مرات الاستعمال لكل راكب"><input type="number" style={inp} value={f.perUser} onChange={(e) => set("perUser", e.target.value)} /></F>
+            <F l="الصلاحية بالأيام (0 = دائم)"><input type="number" style={inp} value={f.days} onChange={(e) => set("days", e.target.value)} /></F>
+          </div>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "14px 0", color: T.text, fontSize: 13 }}><input type="checkbox" checked={f.public} onChange={(e) => set("public", e.target.checked)} /> إظهاره كعرض في الصفحة الرئيسية للركاب</label>
+          {err && <div style={{ color: T.bad, fontSize: 13, marginBottom: 8 }}>{err}</div>}
+          <button onClick={create} style={{ background: T.brand, border: "none", color: "#fff", borderRadius: 12, padding: "12px 24px", fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>إنشاء</button>
+        </Card>
+      )}
+      {rows.length === 0 && <Card><Empty icon="🎟️" text="لا توجد أكواد بعد" /></Card>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {rows.map((r) => {
+          const exp = toDate(r.expiresAt), expired = exp && exp < new Date(), full = r.maxUses > 0 && (r.usedCount || 0) >= r.maxUses;
+          const live = r.active !== false && !expired && !full;
+          return (
+            <Card key={r.id} pad={16}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <span style={{ fontWeight: 900, fontSize: 18, color: T.text, letterSpacing: 2, direction: "ltr" }}>{r.id}</span>
+                    <Pill color={live ? T.ok : T.dim}>{live ? "فعّال" : expired ? "منتهي" : full ? "مستنفد" : "متوقف"}</Pill>
+                    {r.public && <Pill color={T.info}>عرض عام</Pill>}
+                  </div>
+                  <div style={{ fontSize: 12, color: T.muted, marginTop: 5 }}>
+                    {r.title && <>{r.title} · </>}{r.type === "percent" ? `${r.value}%${r.maxDiscount ? ` (حتى ${r.maxDiscount} دج)` : ""}` : `${r.value} دج`}
+                    {r.minPrice ? ` · من ${r.minPrice} دج` : ""}{exp ? ` · حتى ${exp.toLocaleDateString("ar-DZ")}` : ""}
+                  </div>
+                </div>
+                <div style={{ textAlign: "left" }}>
+                  <div style={{ fontSize: 13, color: T.text, fontWeight: 700 }}>{r.usedCount || 0}{r.maxUses ? ` / ${r.maxUses}` : ""} استعمال</div>
+                  <div style={{ fontSize: 11, color: T.muted }}>كلفة {DA(r.totalDiscount)}</div>
+                </div>
+              </div>
+              {canEdit && <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <button onClick={() => toggle(r)} style={{ background: T.panel2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "7px 14px", fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{r.active === false ? "تفعيل" : "إيقاف"}</button>
+                <button onClick={() => del(r)} style={{ background: "none", border: `1px solid ${T.bad}55`, color: T.bad, borderRadius: 10, padding: "7px 14px", fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>حذف</button>
+              </div>}
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// المهام والحوافز للسائقين (missions) — الاستلام يتحقق منه الخادم
+// ================================================================
+export function MissionsAdmin({ db, canEdit }) {
+  const [rows, setRows] = useState([]);
+  const empty = { title: "", description: "", metric: "rides", target: 10, period: "weekly", rtype: "points", amount: 100, days: 30 };
+  const [f, setF] = useState(empty);
+  const [open, setOpen] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => onSnapshot(collection(db, "missions"), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0))), () => {}), [db]);
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const create = async () => {
+    if (!f.title.trim() || !(+f.target > 0) || !(+f.amount > 0)) return setErr("أكمل العنوان والهدف والمكافأة");
+    try {
+      await setDoc(doc(collection(db, "missions")), { title: f.title.trim(), description: f.description.trim(), metric: f.metric, target: +f.target, period: f.period, reward: { type: f.rtype, amount: +f.amount }, active: true,
+        expiresAt: +f.days > 0 ? Timestamp.fromDate(new Date(Date.now() + f.days * 86400000)) : null, createdAt: serverTimestamp() });
+      setF(empty); setOpen(false); setErr("");
+    } catch (e) { setErr(e.code === "permission-denied" ? "قواعد Firestore تمنع الكتابة في missions" : e.message); }
+  };
+  const inp = { width: "100%", background: T.panel2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", color: T.text, fontFamily: "inherit", fontSize: 14, outline: "none" };
+  const F = ({ l, children }) => <label style={{ display: "block" }}><div style={{ fontSize: 11, color: T.muted, marginBottom: 5, fontWeight: 600 }}>{l}</div>{children}</label>;
+  const PL = { daily: "يومية", weekly: "أسبوعية", monthly: "شهرية" };
+  return (
+    <div>
+      <PageTitle title="🎯 المهام والحوافز" sub="حوافز للسائقين تزيد النشاط وقت الحاجة"
+        right={canEdit && <button onClick={() => setOpen(!open)} style={{ background: T.brand, border: "none", color: "#fff", borderRadius: 12, padding: "10px 18px", fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>{open ? "إلغاء" : "＋ مهمة جديدة"}</button>} />
+      {open && (
+        <Card style={{ marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12 }}>
+            <F l="العنوان"><input style={inp} value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="أكمل 20 رحلة هذا الأسبوع" /></F>
+            <F l="وصف قصير"><input style={inp} value={f.description} onChange={(e) => set("description", e.target.value)} /></F>
+            <F l="المقياس"><select style={inp} value={f.metric} onChange={(e) => set("metric", e.target.value)}><option value="rides">عدد الرحلات</option><option value="earnings">قيمة الدخل (دج)</option></select></F>
+            <F l="الهدف"><input type="number" style={inp} value={f.target} onChange={(e) => set("target", e.target.value)} /></F>
+            <F l="الفترة"><select style={inp} value={f.period} onChange={(e) => set("period", e.target.value)}><option value="daily">يومية</option><option value="weekly">أسبوعية</option><option value="monthly">شهرية</option></select></F>
+            <F l="نوع المكافأة"><select style={inp} value={f.rtype} onChange={(e) => set("rtype", e.target.value)}><option value="points">نقاط</option><option value="credit">خصم من الاشتراك (دج)</option></select></F>
+            <F l="قيمة المكافأة"><input type="number" style={inp} value={f.amount} onChange={(e) => set("amount", e.target.value)} /></F>
+            <F l="تنتهي بعد (أيام، 0 = دائمة)"><input type="number" style={inp} value={f.days} onChange={(e) => set("days", e.target.value)} /></F>
+          </div>
+          {err && <div style={{ color: T.bad, fontSize: 13, margin: "10px 0" }}>{err}</div>}
+          <button onClick={create} style={{ marginTop: 14, background: T.brand, border: "none", color: "#fff", borderRadius: 12, padding: "12px 24px", fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>إنشاء</button>
+        </Card>
+      )}
+      {rows.length === 0 && <Card><Empty icon="🎯" text="لا توجد مهام بعد" /></Card>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {rows.map((r) => (
+          <Card key={r.id} pad={16}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ fontWeight: 800, color: T.text }}>{r.title}</span><Pill color={r.active === false ? T.dim : T.ok}>{r.active === false ? "متوقفة" : "فعّالة"}</Pill><Pill color={T.info}>{PL[r.period]}</Pill></div>
+                <div style={{ fontSize: 12, color: T.muted, marginTop: 5 }}>الهدف: {r.target} {r.metric === "rides" ? "رحلة" : "دج"} · المكافأة: {r.reward?.amount} {r.reward?.type === "credit" ? "دج خصم اشتراك" : "نقطة"}</div>
+              </div>
+              {canEdit && <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => updateDoc(doc(db, "missions", r.id), { active: r.active === false })} style={{ background: T.panel2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "7px 14px", fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{r.active === false ? "تفعيل" : "إيقاف"}</button>
+                <button onClick={() => window.confirm("حذف المهمة؟") && deleteDoc(doc(db, "missions", r.id))} style={{ background: "none", border: `1px solid ${T.bad}55`, color: T.bad, borderRadius: 10, padding: "7px 14px", fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>حذف</button>
+              </div>}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// إجراءات الحسابات (تحذير / إيقاف مؤقت / حظر دائم / إعادة تفعيل) + سجل التدقيق
+// ================================================================
+const colOf = (type) => (type === "driver" ? "drivers" : "passengers");
+const ACT_L = { warn: "⚠️ تحذير", suspend: "⏸️ إيقاف مؤقت", ban: "⛔ حظر دائم", reinstate: "✅ إعادة تفعيل", note: "📝 ملاحظة" };
+export function accountState(u) {
+  const until = toDate(u.suspendedUntil);
+  if (u.accountStatus === "banned") return { k: "banned", label: "محظور نهائياً", color: T.bad };
+  if (u.accountStatus === "suspended" && (!until || until > new Date())) return { k: "suspended", label: until ? `موقوف حتى ${until.toLocaleDateString("ar-DZ")}` : "موقوف", color: T.warn };
+  return { k: "active", label: "نشط", color: T.ok };
+}
+async function applyAction({ db, adminName, type, target, action, days, reason, reportId }) {
+  const ref = doc(db, colOf(type), target.id);
+  if (action === "warn") await updateDoc(ref, { warnings: increment(1) });
+  if (action === "suspend") await updateDoc(ref, { accountStatus: "suspended", suspendedUntil: Timestamp.fromDate(new Date(Date.now() + days * 86400000)), suspendReason: reason || "", isOnline: false });
+  if (action === "ban") await updateDoc(ref, { accountStatus: "banned", suspendedUntil: null, suspendReason: reason || "", isOnline: false });
+  if (action === "reinstate") await updateDoc(ref, { accountStatus: "active", suspendedUntil: null, suspendReason: "" });
+  await addDoc(collection(db, "admin_actions"), { adminName: adminName || "admin", targetId: target.id, targetType: type, targetName: target.name || "", action, days: days || null, reason: reason || "", reportId: reportId || null, createdAt: serverTimestamp() });
+  if (reportId) await updateDoc(doc(db, "reports", reportId), { log: arrayUnion({ at: Timestamp.now(), by: adminName || "admin", action, note: reason || "", days: days || null }) });
+}
+
+function ActionBox({ db, adminName, type, target, reportId, isSuper, onDone }) {
+  const [action, setAction] = useState("");
+  const [days, setDays] = useState(3);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const st = accountState(target);
+  const go = async () => {
+    if ((action === "suspend" || action === "ban") && !reason.trim()) return setErr("اكتب السبب (يظهر للمستخدم)");
+    if (action === "ban" && !window.confirm(`حظر ${target.name} نهائياً؟`)) return;
+    setBusy(true); setErr("");
+    try { await applyAction({ db, adminName, type, target, action, days, reason, reportId }); setAction(""); setReason(""); onDone && onDone(); }
+    catch (e) { setErr(e.code === "permission-denied" ? "قواعد Firestore تمنع هذا الإجراء" : e.message); }
+    setBusy(false);
+  };
+  const b = (a, c) => <button key={a} onClick={() => setAction(action === a ? "" : a)} style={{ border: `1px solid ${action === a ? c : T.border}`, background: action === a ? c + "22" : T.panel2, color: action === a ? c : T.text, borderRadius: 10, padding: "8px 12px", fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>{ACT_L[a]}</button>;
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontWeight: 800, color: T.text }}>إجراء على الحساب</div><Pill color={st.color}>{st.label}</Pill>
+      </div>
+      {target.suspendReason && st.k !== "active" && <div style={{ fontSize: 12, color: T.muted, marginBottom: 10 }}>السبب: {target.suspendReason}</div>}
+      {(target.warnings || 0) > 0 && <div style={{ fontSize: 12, color: T.warn, marginBottom: 10 }}>⚠️ {target.warnings} تحذير سابق</div>}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {b("warn", T.warn)}{b("suspend", T.warn)}{isSuper && b("ban", T.bad)}{st.k !== "active" && b("reinstate", T.ok)}
+      </div>
+      {action && (
+        <div style={{ marginTop: 12 }}>
+          {action === "suspend" && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+              {[1, 3, 7, 30].map((d) => <button key={d} onClick={() => setDays(d)} style={{ border: `1px solid ${days === d ? T.brand : T.border}`, background: days === d ? T.brand + "22" : "transparent", color: days === d ? T.brandL : T.muted, borderRadius: 20, padding: "5px 14px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{d === 1 ? "يوم" : `${d} أيام`}</button>)}
+            </div>
+          )}
+          <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder={action === "reinstate" ? "ملاحظة (اختياري)" : "السبب (يظهر للمستخدم عند الإيقاف)"} style={{ width: "100%", background: T.panel2, border: `1px solid ${T.border}`, borderRadius: 10, padding: 10, color: T.text, fontFamily: "inherit", fontSize: 13, outline: "none", resize: "vertical" }} />
+          {err && <div style={{ color: T.bad, fontSize: 12, marginTop: 6 }}>{err}</div>}
+          <button onClick={go} disabled={busy} style={{ marginTop: 10, background: T.brand, border: "none", color: "#fff", borderRadius: 10, padding: "10px 22px", fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>{busy ? "…" : "تنفيذ"}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ================================================================
+// إدارة الشكاوى (سجل كامل + إجراءات)
+// ================================================================
+const R_ST = { pending: ["معلقة", T.warn], resolved: ["معالجة", T.ok], dismissed: ["مُهملة", T.dim] };
+export function ComplaintsPro({ reports, drivers, passengers, bookings, db, adminName, isSuper, isMobile }) {
+  const [filter, setFilter] = useState("pending");
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState(null);
+  const counts = {}; reports.forEach((r) => (counts[r.targetId] = (counts[r.targetId] || 0) + 1));
+  const rows = reports.filter((r) => filter === "all" || r.status === filter)
+    .filter((r) => !q.trim() || [r.targetName, r.reporterName, r.reason].some((v) => String(v || "").includes(q.trim())))
+    .sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0));
+  const selected = sel && reports.find((r) => r.id === sel);
+  return (
+    <div>
+      <PageTitle title="🚨 الشكاوى والبلاغات" sub={`${reports.length} بلاغ · ${reports.filter((r) => r.status === "pending").length} معلّق`} />
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔎 اسم أو سبب…" style={{ flex: "1 1 220px", background: T.panel, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 14px", color: T.text, fontFamily: "inherit", fontSize: 14, outline: "none" }} />
+        <Seg value={filter} onChange={setFilter} options={[{ v: "pending", l: "معلقة" }, { v: "resolved", l: "معالجة" }, { v: "dismissed", l: "مُهملة" }, { v: "all", l: "الكل" }]} />
+      </div>
+      <Card pad={0} style={{ overflow: "hidden" }}>
+        {rows.length === 0 && <Empty icon="✅" text="لا توجد بلاغات" />}
+        {rows.map((r) => (
+          <div key={r.id} onClick={() => setSel(r.id)} style={{ display: "flex", gap: 12, alignItems: "center", padding: "13px 18px", borderBottom: `1px solid ${T.border}`, cursor: "pointer" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = T.panel2)} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: R_ST[r.status]?.[1] + "22", display: "flex", alignItems: "center", justifyContent: "center" }}>{r.targetType === "driver" ? "🚕" : "👤"}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{r.targetName} {counts[r.targetId] > 1 && <Pill color={T.bad}>{counts[r.targetId]} بلاغات</Pill>}</div>
+              <div style={{ fontSize: 12, color: T.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.reason}</div>
+              <div style={{ fontSize: 11, color: T.dim }}>من {r.reporterName} · {ago(toDate(r.createdAt))}</div>
+            </div>
+            <Pill color={R_ST[r.status]?.[1] || T.muted}>{R_ST[r.status]?.[0] || r.status}</Pill>
+          </div>
+        ))}
+      </Card>
+      {selected && <ComplaintDrawer r={selected} reports={reports} drivers={drivers} passengers={passengers} bookings={bookings} db={db} adminName={adminName} isSuper={isSuper} isMobile={isMobile} onClose={() => setSel(null)} />}
+    </div>
+  );
+}
+
+function ComplaintDrawer({ r, reports, drivers, passengers, bookings, db, adminName, isSuper, isMobile, onClose }) {
+  const [note, setNote] = useState("");
+  const target = (r.targetType === "driver" ? drivers : passengers).find((u) => u.id === r.targetId);
+  const others = reports.filter((x) => x.targetId === r.targetId && x.id !== r.id).sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0));
+  const rides = bookings.filter((b) => (r.targetType === "driver" ? b.driverId : b.passengerId) === r.targetId).sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0));
+  const cancelled = rides.filter((b) => b.status === "cancelled").length;
+  const log = [...(r.log || [])].sort((a, b) => (toDate(b.at) || 0) - (toDate(a.at) || 0));
+  const setStatus = async (status, label) => {
+    try {
+      await updateDoc(doc(db, "reports", r.id), { status, [status + "At"]: serverTimestamp(), log: arrayUnion({ at: Timestamp.now(), by: adminName || "admin", action: status, note: note.trim(), days: null }) });
+      await addDoc(collection(db, "admin_actions"), { adminName: adminName || "admin", targetId: r.targetId, targetType: r.targetType, targetName: r.targetName || "", action: status, reason: note.trim(), reportId: r.id, createdAt: serverTimestamp() });
+      setNote("");
+    } catch (e) { alert("تعذر: " + e.message); }
+  };
+  const addNote = async () => {
+    if (!note.trim()) return;
+    try { await updateDoc(doc(db, "reports", r.id), { log: arrayUnion({ at: Timestamp.now(), by: adminName || "admin", action: "note", note: note.trim(), days: null }) }); setNote(""); } catch (e) { alert("تعذر: " + e.message); }
+  };
+  const AL = { ...ACT_L, resolved: "✅ تمت المعالجة", dismissed: "🚫 إهمال البلاغ" };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 200 }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.6)", backdropFilter: "blur(3px)" }} />
+      <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: isMobile ? "100%" : 480, background: T.bg, borderRight: `1px solid ${T.border}`, overflowY: "auto", padding: 22, animation: "adminSlide .3s cubic-bezier(.2,.8,.2,1)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: T.text }}>تفاصيل البلاغ</div>
+          <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: "50%", background: T.panel, border: `1px solid ${T.border}`, color: T.text, cursor: "pointer" }}>✕</button>
+        </div>
+        <Card style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><b style={{ color: T.text }}>{r.targetType === "driver" ? "🚕" : "👤"} {r.targetName}</b><Pill color={R_ST[r.status]?.[1] || T.muted}>{R_ST[r.status]?.[0]}</Pill></div>
+          <div style={{ fontSize: 13, color: T.text, margin: "10px 0", lineHeight: 1.8, background: T.panel2, borderRadius: 10, padding: 12 }}>{r.reason}</div>
+          <div style={{ fontSize: 12, color: T.muted }}>المُبلِّغ: {r.reporterName} ({r.reporterType === "driver" ? "سائق" : "راكب"}) · {fmtDT(toDate(r.createdAt))}</div>
+          {r.bookingId && <div style={{ fontSize: 11, color: T.dim, marginTop: 4, direction: "ltr", textAlign: "right" }}>رحلة: {r.bookingId}</div>}
+        </Card>
+
+        {target ? (
+          <Card style={{ marginBottom: 12 }}>
+            <div style={{ fontWeight: 800, color: T.text, marginBottom: 8 }}>ملف {r.targetType === "driver" ? "السائق" : "الراكب"}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+              {[[rides.length, "رحلة"], [cancelled, "ملغاة"], [target.rating || "—", "تقييم"]].map(([v, l], i) => <div key={i} style={{ background: T.panel2, borderRadius: 10, padding: 10, textAlign: "center" }}><div style={{ fontWeight: 900, color: T.text, fontSize: 18 }}>{v}</div><div style={{ fontSize: 10, color: T.muted }}>{l}</div></div>)}
+            </div>
+            <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.9 }}>📞 {target.phone ? <a href={`tel:${target.phone}`} style={{ color: T.brandL }}>{target.phone}</a> : "—"}{target.carBrand ? ` · 🚗 ${target.carBrand} ${target.carModel || ""} ${target.plateNumber || ""}` : ""}</div>
+          </Card>
+        ) : <Card style={{ marginBottom: 12 }}><Empty icon="🗑️" text="الحساب محذوف أو غير موجود" /></Card>}
+
+        {target && <Card style={{ marginBottom: 12 }}><ActionBox db={db} adminName={adminName} type={r.targetType} target={target} reportId={r.id} isSuper={isSuper} /></Card>}
+
+        <Card style={{ marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, color: T.text, marginBottom: 8 }}>إغلاق البلاغ</div>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="ملاحظة داخلية (تُحفظ في السجل)" style={{ width: "100%", background: T.panel2, border: `1px solid ${T.border}`, borderRadius: 10, padding: 10, color: T.text, fontFamily: "inherit", fontSize: 13, outline: "none", resize: "vertical" }} />
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <button onClick={addNote} style={{ background: T.panel2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "9px 14px", fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>📝 إضافة ملاحظة</button>
+            {r.status !== "resolved" && <button onClick={() => setStatus("resolved")} style={{ background: T.ok, border: "none", color: "#fff", borderRadius: 10, padding: "9px 14px", fontFamily: "inherit", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>✅ تمت المعالجة</button>}
+            {r.status === "pending" && <button onClick={() => setStatus("dismissed")} style={{ background: "none", border: `1px solid ${T.border}`, color: T.muted, borderRadius: 10, padding: "9px 14px", fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>🚫 إهمال</button>}
+          </div>
+        </Card>
+
+        <Card style={{ marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, color: T.text, marginBottom: 10 }}>📜 سجل البلاغ</div>
+          {log.length === 0 && <div style={{ fontSize: 12, color: T.dim }}>لا إجراءات بعد</div>}
+          {log.map((l, i) => (
+            <div key={i} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+              <div style={{ width: 9, height: 9, borderRadius: "50%", background: T.brandL, marginTop: 5, flexShrink: 0 }} />
+              <div><div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>{AL[l.action] || l.action}{l.days ? ` (${l.days} يوم)` : ""}</div>{l.note && <div style={{ fontSize: 12, color: T.muted }}>{l.note}</div>}<div style={{ fontSize: 10, color: T.dim }}>{l.by} · {fmtDT(toDate(l.at))}</div></div>
+            </div>
+          ))}
+        </Card>
+
+        {others.length > 0 && (
+          <Card>
+            <div style={{ fontWeight: 800, color: T.text, marginBottom: 10 }}>بلاغات أخرى ضد نفس الحساب ({others.length})</div>
+            {others.slice(0, 6).map((o) => <div key={o.id} style={{ fontSize: 12, color: T.muted, padding: "7px 0", borderBottom: `1px solid ${T.border}` }}><b style={{ color: T.text }}>{o.reason?.slice(0, 60)}</b><br />{o.reporterName} · {ago(toDate(o.createdAt))} · {R_ST[o.status]?.[0]}</div>)}
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// الحسابات والإيقاف + سجل الإجراءات
+// ================================================================
+export function AccountsPanel({ drivers, passengers, db, adminName, isSuper, isMobile }) {
+  const [q, setQ] = useState("");
+  const [kind, setKind] = useState("all");
+  const [stF, setStF] = useState("all");
+  const [sel, setSel] = useState(null);
+  const [tab, setTab] = useState("users");
+  const [logs, setLogs] = useState([]);
+  useEffect(() => onSnapshot(collection(db, "admin_actions"), (s) => setLogs(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0)).slice(0, 100)), () => {}), [db]);
+  const all = useMemo(() => [...drivers.map((d) => ({ ...d, _t: "driver" })), ...passengers.map((p) => ({ ...p, _t: "passenger" }))], [drivers, passengers]);
+  const s = q.trim().toLowerCase();
+  const rows = all.filter((u) => (kind === "all" || u._t === kind) && (stF === "all" || accountState(u).k === stF) && (!s || [u.name, u.phone, u.email, u.plateNumber].some((v) => String(v || "").toLowerCase().includes(s))))
+    .sort((a, b) => (accountState(a).k === "active") - (accountState(b).k === "active")).slice(0, 80);
+  const bad = all.filter((u) => accountState(u).k !== "active").length;
+  const selected = sel && all.find((u) => u.id === sel.id && u._t === sel.t);
+  return (
+    <div>
+      <PageTitle title="⛔ الحسابات والإيقاف" sub={`${bad} حساب موقوف أو محظور`} right={<Seg value={tab} onChange={setTab} options={[{ v: "users", l: "الحسابات" }, { v: "log", l: "سجل الإجراءات" }]} />} />
+      {tab === "users" ? (<>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔎 اسم، هاتف، لوحة…" style={{ flex: "1 1 220px", background: T.panel, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 14px", color: T.text, fontFamily: "inherit", fontSize: 14, outline: "none" }} />
+          <Seg value={kind} onChange={setKind} options={[{ v: "all", l: "الكل" }, { v: "driver", l: "سائقون" }, { v: "passenger", l: "ركاب" }]} />
+          <Seg value={stF} onChange={setStF} options={[{ v: "all", l: "كل الحالات" }, { v: "suspended", l: "موقوف" }, { v: "banned", l: "محظور" }]} />
+        </div>
+        <Card pad={0} style={{ overflow: "hidden" }}>
+          {rows.length === 0 && <Empty text="لا نتائج" />}
+          {rows.map((u) => { const st = accountState(u); return (
+            <div key={u._t + u.id} onClick={() => setSel({ id: u.id, t: u._t })} style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 18px", borderBottom: `1px solid ${T.border}`, cursor: "pointer" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = T.panel2)} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.panel2, display: "flex", alignItems: "center", justifyContent: "center" }}>{u._t === "driver" ? "🚕" : "👤"}</div>
+              <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{u.name || "—"}</div><div style={{ fontSize: 12, color: T.muted, direction: "ltr", textAlign: "right" }}>{u.phone}</div></div>
+              {(u.warnings || 0) > 0 && <Pill color={T.warn}>⚠️ {u.warnings}</Pill>}
+              <Pill color={st.color}>{st.label}</Pill>
+            </div>); })}
+        </Card>
+      </>) : (
+        <Card pad={0} style={{ overflow: "hidden" }}>
+          {logs.length === 0 && <Empty icon="📜" text="لا إجراءات مسجلة" />}
+          {logs.map((l) => (
+            <div key={l.id} style={{ padding: "12px 18px", borderBottom: `1px solid ${T.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ fontSize: 13, color: T.text, fontWeight: 700 }}>{ACT_L[l.action] || l.action} — {l.targetName}</span><span style={{ fontSize: 11, color: T.dim }}>{ago(toDate(l.createdAt))}</span></div>
+              <div style={{ fontSize: 12, color: T.muted }}>{l.adminName}{l.days ? ` · ${l.days} يوم` : ""}{l.reason ? ` · ${l.reason}` : ""}</div>
+            </div>
+          ))}
+        </Card>
+      )}
+      {selected && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 200 }}>
+          <div onClick={() => setSel(null)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.6)" }} />
+          <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: isMobile ? "100%" : 440, background: T.bg, borderRight: `1px solid ${T.border}`, overflowY: "auto", padding: 22, animation: "adminSlide .3s" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}><div style={{ fontSize: 18, fontWeight: 900, color: T.text }}>{selected._t === "driver" ? "🚕" : "👤"} {selected.name}</div><button onClick={() => setSel(null)} style={{ width: 34, height: 34, borderRadius: "50%", background: T.panel, border: `1px solid ${T.border}`, color: T.text, cursor: "pointer" }}>✕</button></div>
+            <Card style={{ marginBottom: 12, fontSize: 13, color: T.muted, lineHeight: 2 }}>📞 {selected.phone}<br />{selected.email && <>✉️ {selected.email}<br /></>}{selected.carBrand && <>🚗 {selected.carBrand} {selected.carModel} {selected.plateNumber}<br /></>}⭐ {selected.rating || "—"}</Card>
+            <Card><ActionBox db={db} adminName={adminName} type={selected._t} target={selected} isSuper={isSuper} /></Card>
+          </div>
         </div>
       )}
     </div>
