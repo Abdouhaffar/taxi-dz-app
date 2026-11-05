@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { DashboardPro, LiveOps, RidesPanel, SafetyPanel, GlobalSearch, PricingPanel, adminProStyles, useIsMobile } from "./AdminPro";
+import { DashboardPro, LiveOps, RidesPanel, SafetyPanel, GlobalSearch, PricingPanel, PromosPanel, MissionsAdmin, ComplaintsPro, AccountsPanel, adminProStyles, useIsMobile } from "./AdminPro";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, query, orderBy, addDoc } from "firebase/firestore";
+import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, query, orderBy, addDoc, increment } from "firebase/firestore";
 
 // Firebase مستقل لصفحة الإدارة
 const firebaseConfig = {
@@ -176,6 +176,9 @@ function Sidebar({ tab, setTab, admin, onLogout, counts, isMobile, open, onClose
     { id: "passengers", icon: "👥", label: "الركاب" },
     ...(isSuperAdmin ? [{ id: "admins", icon: "🛡️", label: "الأدمنات", badge: counts.pendingAdmins }] : []),
     { id: "pricing", icon: "💰", label: "التسعير" },
+    { id: "missions", icon: "🎯", label: "المهام والحوافز" },
+    { id: "accounts", icon: "⛔", label: "الحسابات والإيقاف" },
+    { id: "promos", icon: "🎟️", label: "العروض والخصومات" },
     { id: "reports", icon: "📈", label: "التقارير" },
     { id: "analytics", icon: "💹", label: "التحليلات" },
     { id: "complaints", icon: "🚨", label: "التبليغات", badge: counts.pendingReports },
@@ -962,6 +965,7 @@ function SubscriptionPanel({ drivers, isSuperAdmin }) {
           expiresAt: expiresAt,
         },
         "subscriptionRequest.status": "approved",
+        ...(req.creditApplied > 0 && (driver.compensationCredit || 0) > 0 ? { compensationCredit: increment(-Math.min(req.creditApplied, driver.compensationCredit || 0)) } : {}),
       });
     } catch(e) { showErr(e, "تفعيل الاشتراك"); }
     setLoading(false);
@@ -1010,6 +1014,7 @@ function SubscriptionPanel({ drivers, isSuperAdmin }) {
                 </div>
                 <div style={{ textAlign:"left" }}>
                   <div style={{ fontWeight: 900, fontSize: 20, color: C.orange }}>{driver.subscriptionRequest?.price} دج</div>
+                  {driver.subscriptionRequest?.creditApplied > 0 && <div style={{ fontSize: 11, color: "#ffd24d" }}>🎁 تعويض -{driver.subscriptionRequest.creditApplied} · يدفع {driver.subscriptionRequest.payable} دج</div>}
                   <div style={{ fontSize: 11, color: C.textMuted }}>{driver.subscriptionRequest?.duration} يوم</div>
                 </div>
               </div>
@@ -1107,13 +1112,16 @@ export default function AdminApp() {
         {tab === "live" && <LiveOps bookings={bookings} drivers={drivers} sos={sos} isMobile={isMobile} />}
         {tab === "rides" && <RidesPanel bookings={bookings} isMobile={isMobile} />}
         {tab === "pricing" && <PricingPanel db={db} adminName={admin.name} canEdit={admin.role === "super"} />}
+        {tab === "missions" && <MissionsAdmin db={db} canEdit={admin.role === "super"} />}
+        {tab === "promos" && <PromosPanel db={db} canEdit={admin.role === "super"} />}
         {tab === "safety" && <SafetyPanel sos={sos} db={db} isMobile={isMobile} />}
         {tab === "drivers" && <DriversPanel drivers={drivers} isSuperAdmin={admin.role === "super"} />}
         {tab === "passengers" && <PassengersPanel passengers={passengers} isSuperAdmin={admin.role === "super"} />}
         {tab === "admins" && admin.role === "super" && <AdminsPanel admins={admins} currentAdmin={admin} />}
         {tab === "reports" && <ReportsPanel drivers={drivers} passengers={passengers} />}
         {tab === "analytics" && <AnalyticsPanel bookings={bookings} />}
-        {tab === "complaints" && <ComplaintsPanel reports={reports} drivers={drivers} passengers={passengers} isSuperAdmin={admin.role === "super"} />}
+        {tab === "complaints" && <ComplaintsPro reports={reports} drivers={drivers} passengers={passengers} bookings={bookings} db={db} adminName={admin.name} isSuper={admin.role === "super"} isMobile={isMobile} />}
+        {tab === "accounts" && <AccountsPanel drivers={drivers} passengers={passengers} db={db} adminName={admin.name} isSuper={admin.role === "super"} isMobile={isMobile} />}
         {tab === "subscriptions" && <SubscriptionPanel drivers={drivers} isSuperAdmin={admin.role === "super"} />}
         {tab === "settings" && <SettingsPanel admin={admin} />}
       </main>
