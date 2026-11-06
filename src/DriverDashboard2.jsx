@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { doc, onSnapshot, updateDoc, setDoc, getDoc, serverTimestamp, collection, query, where, addDoc, orderBy, getDocs, limit, increment } from "firebase/firestore";
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer } from "@react-google-maps/api";
 import { db, requestNotificationPermission, onForegroundMessage } from "./firebase";
+import { useSingleSession, KickedScreen } from "./DeviceGuard";
+import { unlockSound, playAlert, playPing } from "./Sound";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { ShareButton, TierProgress } from "./ReferralShare";
 import { Avatar } from "./ProfilePhoto";
@@ -48,6 +50,7 @@ const openNavigation=(lat,lng)=>window.open(`https://www.google.com/maps/dir/?ap
 // ثم يُعاد استخدامه لاحقاً من أي مكان دون الحاجة لتفاعل جديد.
 let sharedAudioCtx = null;
 const unlockAudio=()=>{
+  unlockSound();
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if(!AudioCtx) return;
@@ -62,6 +65,7 @@ const unlockAudio=()=>{
 };
 const alertNewBooking=()=>{
   try { navigator.vibrate?.([500,150,500,150,500,150,500]); } catch(e){}
+  playAlert();
   try {
     if(!sharedAudioCtx) return; // لم يُفعَّل السياق الصوتي بعد (لم يضغط المستخدم على أي شيء بعد)
     if(sharedAudioCtx.state==="suspended") sharedAudioCtx.resume();
@@ -1184,6 +1188,7 @@ export default function DriverDashboard({ user, onLogout }) {
   const [showCodeGate,setShowCodeGate]=useState(false);
   const call=useVoiceCall({ bookingId:acceptedBooking?.id, meUid:user?.uid, meName:data?.name||"السائق", otherUid:acceptedBooking?.passengerId });
   const block=useAccountBlock("drivers",user?.uid);
+  const kicked=useSingleSession(user?.uid);
   useEffect(()=>{ if(block.blocked&&user?.uid) setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true}).catch(()=>{}); },[block.blocked]);
   const startRide=async()=>{ setShowCodeGate(false); if(acceptedBooking?.id){ try{ await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"arrived",arrivedAt:serverTimestamp(),codeVerified:true}); }catch(e){} } setDriverScreen("ride"); };
   const acceptBooking=async(booking)=>{
@@ -1219,6 +1224,7 @@ export default function DriverDashboard({ user, onLogout }) {
   if(status==="rejected") return <RejectedView data={data} onRetry={handleRetry} />;
   if(status==="pending") return <PendingView onLogout={onLogout} />;
   if(showChangeVehicle) return <DriverVerificationForm uid={user?.uid} userEmail={user?.email} existingData={data} onDone={()=>setShowChangeVehicle(false)} isUpdate={true} />;
+  if(kicked) return <KickedScreen onLogout={onLogout} lang="ar" />;
   if(block.blocked) return <AccountBlockedScreen info={block} onLogout={onLogout} lang="ar" />;
   if(showWallet) return <DriverWalletScreen uid={user?.uid} driverData={data} onBack={()=>setShowWallet(false)} onOpenEarnings={()=>{setShowWallet(false);setShowEarnings(true);}} />;
   if(showEarnings) return <EarningsPro C={C} uid={user?.uid} driverData={data} onBack={()=>setShowEarnings(false)} />;
@@ -1338,7 +1344,7 @@ export default function DriverDashboard({ user, onLogout }) {
                   <button onClick={()=>setShowReport(true)} style={{ flex:1,background:`${C.orange}22`,border:`1px solid ${C.orange}44`,borderRadius:10,padding:"11px",color:C.orange,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>🚨 بلّغ</button>
                   <button onClick={sendSOS} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>🆘 SOS</button>
                   <button onClick={finishRide} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>❌ إلغاء</button>
-                  <button onClick={()=>{ if(acceptedBooking?.rideCode) setShowCodeGate(true); else startRide(); }} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>✅ وصلت</button>
+                  <button onClick={()=>{ if(acceptedBooking?.rideCode) setShowCodeGate(true); else startRide(); }} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>{acceptedBooking?.rideCode?"🔐 وصلت — أدخل رمز الراكب":"✅ وصلت"}</button>
                 </div>
               </div>
             </div>
@@ -1378,7 +1384,7 @@ export default function DriverDashboard({ user, onLogout }) {
           {online&&bookings.length>0&&!acceptedBooking&&(
             <div style={{ padding:"14px 20px 0" }}>
               <div style={{ fontWeight:800,fontSize:15,color:C.text,marginBottom:12 }}>🔔 طلبات جديدة ({bookings.length})</div>
-              {bookings.map(r=>(
+              {[...bookings].sort((x,y)=>{ if(!driverLocation) return 0; const d=q=>q.originLat==null?1e9:getDistKm(driverLocation.lat,driverLocation.lng,q.originLat,q.originLng); return d(x)-d(y); }).map(r=>(
                 <div key={r.id} style={{ background:C.card,borderRadius:"6px 20px 20px 20px",padding:16,marginBottom:10,border:`1px solid ${C.orange}44` }}>
                   <div style={{ display:"flex",justifyContent:"space-between",marginBottom:10 }}>
                     <div style={{ display:"flex",alignItems:"center",gap:10 }}>
@@ -1387,10 +1393,7 @@ export default function DriverDashboard({ user, onLogout }) {
                       <div style={{ fontWeight:700,fontSize:14,color:C.text }}>{r.passengerName||"راكب"}</div>
                           <div style={{ fontSize:12,color:C.textMuted,marginTop:2 }}>📍 {r.originText?.substring(0,30)}...</div>
                       <div style={{ fontSize:12,color:C.textMuted }}>🏁 {r.destText?.substring(0,30)}...</div>
-                      {/* المسافة بين السائق والراكب */}
-                      {driverLocation&&<div style={{ fontSize:11,color:C.blue,marginTop:3,fontWeight:700 }}>
-                        🚗→👤 {getDistKm(driverLocation.lat,driverLocation.lng,r.originLat,r.originLng).toFixed(1)} كم منك
-                      </div>}
+
                       <div style={{ fontSize:11,color:C.textMuted,marginTop:2 }}>
                         📏 {r.distanceKm?.toFixed(1)} كم · 👥 {r.passengers||1} {r.passengers>1?"ركاب":"راكب"}
                         {r.luggageWeight&&` · 🧳 ${r.luggageWeight==="less25"?"<25كغ":r.luggageWeight==="25to40"?"25-40كغ":">40كغ"}`}
@@ -1402,13 +1405,14 @@ export default function DriverDashboard({ user, onLogout }) {
                     <div style={{ textAlign:"left" }}>
                       <div style={{ fontSize:22,fontWeight:900,color:C.orange }}>{r.price} دج</div>
                       <div style={{ fontSize:11,color:C.textMuted }}>{r.distanceKm?.toFixed(1)} كم</div>
+                      {(()=>{ if(!driverLocation||r.originLat==null) return <div style={{ marginTop:6,fontSize:10,color:C.textMuted }}>📍 فعّل الموقع</div>; const dk=getDistKm(driverLocation.lat,driverLocation.lng,r.originLat,r.originLng); const near=dk<=2, far=dk>6; const col=near?C.green:far?C.red:C.orange; return <div style={{ marginTop:6,background:col+"1f",border:`1px solid ${col}66`,color:col,borderRadius:10,padding:"4px 8px",fontSize:12,fontWeight:900,textAlign:"center" }}>🚗 {dk.toFixed(1)} كم منك<div style={{ fontSize:10,fontWeight:700 }}>~{Math.max(1,Math.round(dk*3))} د · {near?"قريب جداً":far?"بعيد":"متوسط"}</div></div>; })()}
                     </div>
                   </div>
-                  <a href={`tel:${r.passengerPhone}`} style={{ display:"flex",alignItems:"center",gap:10,background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:12,padding:"10px 14px",marginBottom:10,textDecoration:"none" }}>
+                  {r.passengerPhone&&<a href={`tel:${r.passengerPhone}`} style={{ display:"flex",alignItems:"center",gap:10,background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:12,padding:"10px 14px",marginBottom:10,textDecoration:"none" }}>
                     <span style={{ fontSize:20 }}>📞</span>
                     <div style={{ flex:1 }}><div style={{ fontSize:11,color:C.textMuted }}>رقم الراكب</div><div style={{ fontSize:15,fontWeight:900,color:C.green,direction:"ltr" }}>{r.passengerPhone}</div></div>
                     <div style={{ background:C.green,borderRadius:8,padding:"5px 10px",fontSize:12,color:"#fff",fontWeight:700 }}>☎️</div>
-                  </a>
+                  </a>}
                   <div style={{ display:"flex",gap:8 }}>
                     <button onClick={()=>rejectBooking(r.id)} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:10,padding:"12px",color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14 }}>❌</button>
                     <button onClick={()=>acceptBooking(r)} style={{ flex:3,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"12px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:14 }}>✅ قبول {r.price} دج</button>
