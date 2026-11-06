@@ -1,6 +1,9 @@
 /* eslint-disable */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { auth, db, requestNotificationPermission, onForegroundMessage } from "./firebase";
+import { playPing } from "./Sound";
+import LangDropdown from "./LangDropdown";
+import { useSingleSession, KickedScreen, PermissionGate, clearDeviceClaim } from "./DeviceGuard";
 import {
   signOut, onAuthStateChanged, updateProfile, signInWithCustomToken
 } from "firebase/auth";
@@ -711,11 +714,7 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
       <div style={{ position:"absolute",inset:0,backgroundImage:"url('/logo512.png')",backgroundSize:"cover",backgroundPosition:"center 35%",backgroundRepeat:"no-repeat",filter:"brightness(0.5) saturate(1.05)",zIndex:0 }} />
       <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(20,8,10,0.55) 0%,rgba(60,6,16,0.5) 40%,rgba(20,8,10,0.92) 100%)",zIndex:1 }} />
       <div style={{ position:"relative",zIndex:2,display:"flex",flexDirection:"column",alignItems:"center",width:"100%" }}>
-      <div style={{ position:"absolute",top:16,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6 }}>
-        {[{code:"ar",flag:"🇩🇿"},{code:"fr",flag:"🇫🇷"},{code:"en",flag:"🇬🇧"}].map(l=>(
-          <button key={l.code} onClick={()=>setLang(l.code)} style={{ padding:"6px 12px",borderRadius:20,border:`1.5px solid ${lang===l.code?"#ff5a70":"#ffffff33"}`,background:lang===l.code?"#ff5a7022":"rgba(20,10,12,0.55)",color:lang===l.code?"#ff5a70":"#ffffff88",fontFamily:"inherit",fontWeight:lang===l.code?700:400,fontSize:13,cursor:"pointer" }}>{l.flag}</button>
-        ))}
-      </div>
+      <LangDropdown lang={lang} setLang={setLang} />
       <div style={{ height:38 }} />
       <div style={{ fontSize:34,fontWeight:700,color:"#fff",marginBottom:6,letterSpacing:3,animation:"wordRise 0.7s ease 0.25s both",textShadow:"0 2px 12px rgba(0,0,0,0.5)" }}>AL-BURAQ</div>
       <div style={{ fontSize:13,color:"#ff5a70",marginBottom:36,fontWeight:600,animation:"wordRise 0.7s ease 0.35s both",textShadow:"0 1px 8px rgba(0,0,0,0.6)" }}>{t.appTagline}</div>
@@ -1092,7 +1091,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
 
   return (
     <div style={{ minHeight:"100vh",background:C.brand,backgroundAttachment:"fixed",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
-      <FloatingLang lang={lang} setLang={setLang} side={isRTL?"left":"right"} />
+      <LangDropdown lang={lang} setLang={setLang} />
       <style>{`
         @keyframes bladeR{from{transform:translateX(100vw) skewX(-14deg)}to{transform:translateX(-225vw) skewX(-14deg)}}
         @keyframes bladeL{from{transform:translateX(-200vw) skewX(-14deg)}to{transform:translateX(125vw) skewX(-14deg)}}
@@ -1113,13 +1112,12 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
       {/* Header */}
       <div style={{ background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,padding:"48px 24px 54px",textAlign:"center",position:"relative",clipPath:authTab==="register"?"polygon(0 0,100% 0,100% 84%,0 100%)":"polygon(0 0,100% 0,100% 100%,0 84%)",transition:"clip-path 0.7s cubic-bezier(.77,0,.18,1)" }}>
         <button onClick={step==="form"?onBack:()=>{if(resetGuardRef)resetGuardRef.current=false;sessionStorage.removeItem("taxidz_reset_in_progress");setStep("form");setOtp(Array(OTP_LEN).fill(""));setError("");}}
-          style={{ position:"absolute",top:48,[isRTL?"right":"left"]:20,width:36,height:36,borderRadius:10,background:"#ffffff22",border:"none",color:"#fff",cursor:"pointer",fontSize:16 }}>←</button>
+          style={{ position:"absolute",top:62,[isRTL?"right":"left"]:20,width:36,height:36,borderRadius:10,background:"#ffffff22",border:"none",color:"#fff",cursor:"pointer",fontSize:16 }}>←</button>
         <img src="/logo192.png" alt="AL-BURAQ" style={{ width:60,height:60,objectFit:"contain",marginBottom:8 }} onError={e=>e.target.style.display="none"} />
         <div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{isPassenger?t.passengerGate:t.driverGate}</div>
       </div>
 
       <div key={authTab+step} style={{ margin:"-22px 16px 32px",animation:"bladeFormIn 0.6s cubic-bezier(.2,.8,.2,1) both",background:C.card,borderRadius:20,padding:"20px 18px 28px",boxShadow:"0 10px 40px rgba(0,0,0,0.25)",position:"relative" }}>
-        <LanguageSwitcher lang={lang} setLang={setLang} />
 
         {/* Tabs */}
         {step==="form"&&authTab!=="reset"&&(
@@ -1392,7 +1390,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const destRef=useRef(null);
 
   const multiplier=RIDE_MULTIPLIERS[rideType]||1.0;
-  const passengerPhone=localStorage.getItem("taxidz_phone")||"";
+  const passengerPhone=localStorage.getItem("taxidz_phone")||passengerData?.phone||user?.phoneNumber||"";
   const passengerName=localStorage.getItem("taxidz_name")||user?.displayName||"مستخدم";
 
   useEffect(()=>{
@@ -1423,7 +1421,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         }
       }
     });
-    const unsub=onForegroundMessage(msg=>setFcmToast({title:msg.notification?.title,body:msg.notification?.body}));
+    const unsub=onForegroundMessage(msg=>{playPing();setFcmToast({title:msg.notification?.title,body:msg.notification?.body});});
     return()=>{u();if(unsub)unsub();};
   },[user?.uid]);
 
@@ -1434,6 +1432,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   useEffect(()=>{ if(screen==="searching"&&timer===60) setNoDrivers(true); },[timer,screen]);
   const call=useVoiceCall({ bookingId, meUid:user?.uid, meName:passengerName, otherUid:selectedDriver?.uid||selectedDriver?.id });
   const block=useAccountBlock("passengers",user?.uid);
+  const kicked=useSingleSession(user?.uid);
   useEffect(()=>{ setPromo(null); },[offerPrice,rideType]);
   useShareSync({ token:shareToken, active:screen==="found"||(screen==="ride"&&!showRating), phase:screen==="ride"?"ride":"pickup", driverLocation, ended:!!shareToken&&(screen==="home"||showRating) });
   const savePlaces=async(list)=>{ try{ await updateDoc(doc(db,"passengers",user.uid),{savedPlaces:list}); setPassengerData(d=>({...(d||{}),savedPlaces:list})); }catch(e){} };
@@ -1634,15 +1633,16 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const resetTrip=()=>{ setScreen("home");setShowRating(false);setDistanceKm(0);setBookingId(null);setFinalRating(0);setSelectedDriver(null);setShowChat(false);driverArrivedNotified.current=false; };
 
   // HOME — أسلوب Uber: خريطة بملء الشاشة + لوحة سفلية
+  if(kicked) return <KickedScreen onLogout={onLogout} lang={lang==="fr"||lang==="en"?lang:"ar"} />;
   if(block.blocked) return <AccountBlockedScreen info={block} onLogout={onLogout} lang={lang==="fr"||lang==="en"?lang:"ar"} />;
   if(screen==="home") return (
     <div style={{ minHeight:"100vh",background:C.page,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:isRTL?"rtl":"ltr" }}>
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
-      <FloatingLang lang={lang} setLang={setLang} />
+      <LangDropdown lang={lang} setLang={setLang} />
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <TaxiMap origin={null} destination={null} showDrivers={true} fullscreen />
       {/* شريط علوي عائم */}
-      <div style={{ position:"fixed",top:0,left:0,right:0,zIndex:20,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",pointerEvents:"none" }}>
+      <div style={{ position:"fixed",top:0,left:0,right:0,zIndex:20,padding:"14px 16px",display:"flex",flexDirection:isRTL?"row":"row-reverse",justifyContent:"space-between",alignItems:"center",pointerEvents:"none" }}>
         <div style={{ display:"flex",gap:10,pointerEvents:"auto" }}>
           <button onClick={onLogout} aria-label="logout" style={{ width:46,height:46,borderRadius:"50%",background:"#fff",border:"none",boxShadow:"0 4px 16px rgba(0,0,0,0.18)",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center" }}>{t.logout}</button>
         </div>
@@ -1889,6 +1889,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           </div>
           <div style={{ background:C.dark,borderRadius:"14px 4px 14px 14px",padding:12,textAlign:"center" }}>
             <div style={{ fontSize:11,color:"#ffffff88",marginBottom:4 }}>{t.verifyCode} — {t.giveDriver}</div>
+            <div style={{ fontSize:10,color:"#ffffff66",marginBottom:6 }}>{lang==="ar"?"أعطِه للسائق عند ركوبك؛ هو من يُدخله في تطبيقه ليبدأ الرحلة":lang==="fr"?"Donnez-le au chauffeur à la montée ; il le saisit pour démarrer":"Give it to the driver when you board; they enter it to start the trip"}</div>
             <div style={{ fontSize:32,fontWeight:900,color:"#fff",letterSpacing:8 }}>{booking?.rideCode||"----"}</div>
           </div>
         </div>
@@ -2011,7 +2012,7 @@ export default function App() {
     if(role==="driver"&&user?.uid){try{await setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true});}catch(e){}}
     try{await signOut(auth);}catch(e){}
     setUser(null);setRole(null);setScreen("welcome");
-    ["taxidz_role","taxidz_phone","taxidz_name"].forEach(k=>localStorage.removeItem(k));
+    ["taxidz_role","taxidz_phone","taxidz_name"].forEach(k=>localStorage.removeItem(k));clearDeviceClaim();
   };
 
   const handleAuthSuccess=r=>{setRole(r);localStorage.setItem("taxidz_role",r);setScreen("app");};
@@ -2022,6 +2023,8 @@ export default function App() {
   return (
     <div style={{ maxWidth:390,margin:"0 auto",minHeight:"100vh" }}>
       <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
+      <PermissionGate lang={lang} />
+      <div style={{ position:"fixed",bottom:2,left:0,right:0,textAlign:"center",fontSize:9,color:"#8884",pointerEvents:"none",zIndex:1 }}>AL-BURAQ v2.5</div>
       {screen==="welcome"&&<WelcomeScreen onSelect={r=>{setRole(r);setScreen("auth");}} lang={lang} setLang={changeLang} />}
       {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} setLang={changeLang} resetGuardRef={resetGuardRef} />}
       {screen==="app"&&role==="passenger"&&<PassengerApp onLogout={handleLogout} user={user} lang={lang} setLang={changeLang} />}
