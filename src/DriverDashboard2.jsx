@@ -1292,11 +1292,11 @@ export default function DriverDashboard({ user, onLogout }) {
               {data?.plateNumber&&<div style={{ fontSize:11,color:C.textLight,direction:"ltr",display:"inline-block" }}>🔢 {data.plateNumber}</div>}
             </div>
           </div>
-          <div onClick={toggleOnline} style={{ width:56,height:30,borderRadius:15,background:online?C.green:C.border,position:"relative",cursor:"pointer",transition:"all 0.3s" }}>
-            <div style={{ position:"absolute",top:3,right:online?3:"auto",left:online?"auto":3,width:24,height:24,borderRadius:"50%",background:"#fff",transition:"all 0.3s",boxShadow:"0 2px 4px rgba(0,0,0,0.2)" }} />
+          <div onClick={toggleOnline} style={{ width:64,height:34,borderRadius:17,background:online?"#37d67a":C.border,position:"relative",cursor:"pointer",transition:"all 0.3s" }}>
+            <div style={{ position:"absolute",top:3,right:online?3:"auto",left:online?"auto":3,width:28,height:28,borderRadius:"50%",background:"#fff",transition:"all 0.3s",boxShadow:"0 2px 4px rgba(0,0,0,0.2)" }} />
           </div>
         </div>
-        {online&&<div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:10,padding:"8px 14px",fontSize:13,color:C.green,fontWeight:700,display:"flex",alignItems:"center",gap:8 }}>
+        {online&&<div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"10px 14px",fontSize:13,color:C.green,fontWeight:800,display:"flex",alignItems:"center",gap:8 }}>
           <span style={{ width:8,height:8,borderRadius:"50%",background:C.green,display:"inline-block",animation:"pulse 2s infinite" }} />🟢 متصل · {bookings.length} طلب
         </div>}
         {bookingsError&&<div style={{ background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:10,padding:"8px 14px",fontSize:12,color:C.red,fontWeight:700,marginTop:8 }}>{bookingsError}</div>}
@@ -1306,16 +1306,16 @@ export default function DriverDashboard({ user, onLogout }) {
         {tab==="home"&&(<>
           <div style={{ padding:"14px 20px 0",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
             {stats.map((s,i)=>(
-              <div key={i} onClick={i===0?()=>setShowEarnings(true):i===3?()=>setShowWallet(true):undefined} style={{ background:C.card,borderRadius:16,padding:16,border:`1px solid ${C.border}`,cursor:(i===0||i===3)?"pointer":"default" }}>
-                <div style={{ fontSize:22,marginBottom:6 }}>{s.icon}</div>
-                <div style={{ fontSize:18,fontWeight:900,color:s.color }}>{s.value}</div>
+              <div key={i} onClick={i===0?()=>setShowEarnings(true):i===3?()=>setShowWallet(true):undefined} style={{ background:C.card,borderRadius:20,padding:16,border:"none",boxShadow:"0 2px 14px rgba(0,0,0,0.07)",cursor:(i===0||i===3)?"pointer":"default",animation:`sheetUp .45s cubic-bezier(.2,.8,.2,1) ${i*70}ms both` }}>
+                <div style={{ width:40,height:40,borderRadius:12,background:`${s.color}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,marginBottom:10 }}>{s.icon}</div>
+                <div style={{ fontSize:20,fontWeight:900,color:s.color,letterSpacing:-.3 }}>{s.value}</div>
                 <div style={{ fontSize:11,color:C.textMuted,marginTop:4 }}>{s.label}</div>
               </div>
             ))}
           </div>
           <div style={{ padding:"10px 20px 0",display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10 }}>
             {[["🎯","المهام",()=>setShowMissions(true)],["🔥","مناطق الطلب",()=>setShowDemand(true)],["🔔","اختبر الصوت",()=>{unlockAudio();alertNewBooking();}]].map(([ic,l,f],i)=>(
-              <button key={i} onClick={f} style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"12px 4px",color:C.text,fontFamily:"inherit",fontWeight:700,fontSize:12,cursor:"pointer" }}><div style={{ fontSize:22,marginBottom:4 }}>{ic}</div>{l}</button>
+              <button key={i} onClick={f} style={{ background:C.card,border:"none",boxShadow:"0 2px 14px rgba(0,0,0,0.07)",borderRadius:18,padding:"14px 4px",color:C.text,fontFamily:"inherit",fontWeight:800,fontSize:12,cursor:"pointer" }}><div style={{ fontSize:22,marginBottom:4 }}>{ic}</div>{l}</button>
             ))}
           </div>
 
@@ -1385,7 +1385,7 @@ export default function DriverDashboard({ user, onLogout }) {
             <div style={{ padding:"14px 20px 0" }}>
               <div style={{ fontWeight:800,fontSize:15,color:C.text,marginBottom:12 }}>🔔 طلبات جديدة ({bookings.length})</div>
               {[...bookings].sort((x,y)=>{ if(!driverLocation) return 0; const d=q=>q.originLat==null?1e9:getDistKm(driverLocation.lat,driverLocation.lng,q.originLat,q.originLng); return d(x)-d(y); }).map(r=>(
-                <div key={r.id} style={{ background:C.card,borderRadius:"6px 20px 20px 20px",padding:16,marginBottom:10,border:`1px solid ${C.orange}44` }}>
+                <div key={r.id} style={{ background:C.card,borderRadius:22,padding:16,marginBottom:14,border:"none",boxShadow:"0 6px 24px rgba(0,0,0,0.10)",animation:"sheetUp .4s cubic-bezier(.2,.8,.2,1) both" }}>
                   <div style={{ display:"flex",justifyContent:"space-between",marginBottom:10 }}>
                     <div style={{ display:"flex",alignItems:"center",gap:10 }}>
                       <Avatar src={r.passengerPhoto} name={r.passengerName||"راكب"} size={44} />
@@ -1414,8 +1414,8 @@ export default function DriverDashboard({ user, onLogout }) {
                     <div style={{ background:C.green,borderRadius:8,padding:"5px 10px",fontSize:12,color:"#fff",fontWeight:700 }}>☎️</div>
                   </a>}
                   <div style={{ display:"flex",gap:8 }}>
-                    <button onClick={()=>rejectBooking(r.id)} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:10,padding:"12px",color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14 }}>❌</button>
-                    <button onClick={()=>acceptBooking(r)} style={{ flex:3,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"12px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:14 }}>✅ قبول {r.price} دج</button>
+                    <button onClick={()=>rejectBooking(r.id)} style={{ flex:1,background:C.redLight,border:"none",borderRadius:14,padding:"14px",color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14 }}>❌</button>
+                    <button onClick={()=>acceptBooking(r)} style={{ flex:3,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:14,padding:"14px",color:"#fff",fontFamily:"inherit",fontWeight:900,cursor:"pointer",fontSize:15,boxShadow:`0 8px 18px ${C.green}55` }}>✅ قبول {r.price} دج</button>
                   </div>
                 </div>
               ))}
