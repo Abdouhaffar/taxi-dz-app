@@ -8,7 +8,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import { ShareButton, TierProgress } from "./ReferralShare";
 import { Avatar } from "./ProfilePhoto";
 import { RideCodeGate, TagPicker } from "./TripKit";
-import { useVoiceCall, CallButtons, CallOverlay } from "./CallKit";
+import { useChatAlert, ChatBadge, ChatToast, PhoneButton } from "./ChatNotify";
 import { useAccountBlock, AccountBlockedScreen } from "./AccountGuard";
 import { EarningsPro, MissionsScreen, DemandMap } from "./DriverFinance";
 
@@ -1063,7 +1063,7 @@ export default function DriverDashboard({ user, onLogout }) {
         if(fcmToken) await setDoc(doc(db,"drivers",user.uid),{fcmToken},{merge:true});
       } catch(e){}
     })();
-    const unsub = onForegroundMessage(msg=>{ alertNewBooking(); setFcmToast({title:msg.notification?.title,body:msg.notification?.body}); });
+    const unsub = onForegroundMessage(msg=>{ if(msg.data?.type==="new_message"){ playPing(); return; } alertNewBooking(); setFcmToast({title:msg.notification?.title,body:msg.notification?.body}); });
     return()=>{ if(unsub) unsub(); };
   },[user?.uid,status]);
 
@@ -1186,7 +1186,7 @@ export default function DriverDashboard({ user, onLogout }) {
   const [showMissions,setShowMissions]=useState(false);
   const [showDemand,setShowDemand]=useState(false);
   const [showCodeGate,setShowCodeGate]=useState(false);
-  const call=useVoiceCall({ bookingId:acceptedBooking?.id, meUid:user?.uid, meName:data?.name||"السائق", otherUid:acceptedBooking?.passengerId });
+  const chatAlert=useChatAlert({ bookingId:acceptedBooking?.id, userId:user?.uid, open:showChat });
   const block=useAccountBlock("drivers",user?.uid);
   const kicked=useSingleSession(user?.uid);
   useEffect(()=>{ if(block.blocked&&user?.uid) setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true}).catch(()=>{}); },[block.blocked]);
@@ -1274,7 +1274,7 @@ export default function DriverDashboard({ user, onLogout }) {
           </div>
         </div>
       )}
-      <CallOverlay call={call} otherName={acceptedBooking?.passengerName||"الراكب"} phone={acceptedBooking?.passengerPhone} />
+      <ChatToast toast={chatAlert.toast} onOpen={()=>setShowChat(true)} onClose={chatAlert.clearToast} lang="ar" />
       {showCodeGate&&acceptedBooking&&<RideCodeGate code={acceptedBooking.rideCode} passengerName={acceptedBooking.passengerName} onOk={startRide} onCancel={()=>setShowCodeGate(false)} />}
       {showReport&&acceptedBooking&&<DriverReportModal targetId={acceptedBooking.passengerId} targetName={acceptedBooking.passengerName||"الراكب"} driverId={user?.uid} driverName={data?.name||"السائق"} onClose={()=>setShowReport(false)} />}
       {showReset&&<DriverPinChange uid={user?.uid} phone={data?.phone} currentPin={data?.pinCode} onClose={()=>setShowReset(false)} />}
@@ -1332,10 +1332,10 @@ export default function DriverDashboard({ user, onLogout }) {
                 <div style={{ fontSize:12,color:C.textMuted,marginBottom:8 }}>📍 {acceptedBooking.originText}</div>
                 {distToTarget&&<div style={{ background:`${C.green}22`,borderRadius:10,padding:"6px 12px",fontSize:13,color:C.green,fontWeight:700,marginBottom:10,display:"inline-block" }}>{distToTarget<1?`${Math.round(distToTarget*1000)} م`:`${distToTarget.toFixed(1)} كم`} متبقية</div>}
                 <div style={{ fontSize:12,color:C.textMuted,marginBottom:6 }}>📞 رقم الراكب: <b style={{ color:C.green,direction:"ltr",display:"inline-block" }}>{acceptedBooking.passengerPhone}</b></div>
-                <div style={{ marginBottom:10 }}><CallButtons call={call} phone={acceptedBooking.passengerPhone} /></div>
+                <div style={{ marginBottom:10 }}><PhoneButton phone={acceptedBooking.passengerPhone} label="اتصل بالراكب" /></div>
                 {/* Chat */}
                 <button onClick={()=>setShowChat(true)} style={{ width:"100%",background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:12,padding:"10px",color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-                  <span style={{ fontSize:16 }}>💬</span> محادثة مع الراكب
+                  <span style={{ fontSize:16 }}>💬</span> محادثة مع الراكب<ChatBadge n={chatAlert.unread} />
                 </button>
                 <button onClick={()=>passengerLoc&&openNavigation(passengerLoc.lat,passengerLoc.lng)} style={{ width:"100%",background:`linear-gradient(135deg,#1c1a1d,#000000)`,border:"none",borderRadius:10,padding:"12px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
                   <span style={{ fontSize:18 }}>🗺️</span> انطلق — Google Maps
@@ -1364,9 +1364,9 @@ export default function DriverDashboard({ user, onLogout }) {
                   <div style={{ flex:1,background:`${C.green}22`,borderRadius:10,padding:"8px",textAlign:"center" }}><div style={{ fontSize:18,fontWeight:900,color:C.green }}>{acceptedBooking.price} دج</div><div style={{ fontSize:10,color:C.textMuted }}>السعر</div></div>
                   <div style={{ flex:1,background:`${C.orange}22`,borderRadius:10,padding:"8px",textAlign:"center" }}><div style={{ fontSize:18,fontWeight:900,color:C.orange }}>🟢</div><div style={{ fontSize:10,color:C.textMuted }}>GPS نشط</div></div>
                 </div>
-                <div style={{ marginBottom:8 }}><CallButtons call={call} phone={acceptedBooking.passengerPhone} /></div>
+                <div style={{ marginBottom:8 }}><PhoneButton phone={acceptedBooking.passengerPhone} label="اتصل بالراكب" /></div>
                 <button onClick={()=>setShowChat(true)} style={{ width:"100%",background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:12,padding:"10px",color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-                  <span style={{ fontSize:16 }}>💬</span> محادثة مع الراكب
+                  <span style={{ fontSize:16 }}>💬</span> محادثة مع الراكب<ChatBadge n={chatAlert.unread} />
                 </button>
                 <button onClick={()=>destLoc&&openNavigation(destLoc.lat,destLoc.lng)} style={{ width:"100%",background:`linear-gradient(135deg,#1c1a1d,#000000)`,border:"none",borderRadius:10,padding:"12px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
                   <span style={{ fontSize:18 }}>🗺️</span> تتبع مسار الرحلة — Google Maps
