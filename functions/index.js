@@ -268,7 +268,7 @@ exports.onNewChatMessage = functions.firestore
       let recipientName = "";
 
       if (senderId === booking.passengerId) {
-        const driverSnap = await db.collection("drivers").doc(booking.driverId).get();
+        const driverSnap = await db.collection("drivers").doc(booking.driverId || booking.driverInfo?.uid || "_none_").get();
         recipientToken = driverSnap.data()?.fcmToken;
         recipientName = booking.passengerName || "الراكب";
       } else {
@@ -860,21 +860,5 @@ exports.onBookingCompensate = functions.firestore.document("bookings/{id}").onUp
     tx.update(db.collection("drivers").doc(a.driverId), { compensationCredit: FV.increment(a.discount) });
     tx.set(db.collection("driver_credits").doc(), { driverId: a.driverId, amount: a.discount, reason: "promo", promoCode: a.promoCode || "", bookingId: ctx.params.id, createdAt: FV.serverTimestamp() });
   });
-  return null;
-});
-
-// ============================================================
-// ====== مكالمات داخل التطبيق: إشعار الطرف الآخر (دفعة 4) ======
-// ============================================================
-exports.onCallRinging = functions.firestore.document("calls/{id}").onWrite(async (change) => {
-  const a = change.after.exists ? change.after.data() : null;
-  const b = change.before.exists ? change.before.data() : null;
-  if (!a || a.state !== "ringing" || (b && b.callId === a.callId)) return null;
-  const uid = a.calleeId;
-  let snap = await db.collection("drivers").doc(uid).get();
-  if (!snap.exists) snap = await db.collection("passengers").doc(uid).get();
-  const token = snap.exists ? snap.data().fcmToken : null;
-  if (!token) return null;
-  await sendNotification(token, "📞 مكالمة واردة", `${a.callerName || "مستخدم"} يتصل بك عبر AL-BURAQ`, { type: "incoming_call", bookingId: change.after.id, screen: "home" });
   return null;
 });
