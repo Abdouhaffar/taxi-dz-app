@@ -19,7 +19,7 @@ const generateSessionId = () => `${Date.now()}-${Math.random().toString(36).subs
 const SESSION_KEY = "taxidz_session_id";
 
 const C = {
-  bg:"#141012", card:"#201a1d", border:"#3a2a2f",
+  bg:"#0f0c0e", card:"#1d181b", border:"#2e2428",
   green:"#c4001d", greenLight:"#c4001d22", greenDark:"#8f0015",
   orange:"#e0334d", orangeDark:"#8f0015",
   red:"#ef4444", redLight:"#ef444422",
@@ -1190,6 +1190,7 @@ export default function DriverDashboard({ user, onLogout }) {
   const block=useAccountBlock("drivers",user?.uid);
   const kicked=useSingleSession(user?.uid);
   useEffect(()=>{ if(block.blocked&&user?.uid) setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true}).catch(()=>{}); },[block.blocked]);
+  const verifyCode=async(code)=>{ const f=httpsCallable(cloudFunctions,"verifyRideCode"); await f({bookingId:acceptedBooking.id,code}); setShowCodeGate(false); setDriverScreen("ride"); };
   const startRide=async()=>{ setShowCodeGate(false); if(acceptedBooking?.id){ try{ await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"arrived",arrivedAt:serverTimestamp(),codeVerified:true}); }catch(e){} } setDriverScreen("ride"); };
   const acceptBooking=async(booking)=>{
     try {
@@ -1275,7 +1276,7 @@ export default function DriverDashboard({ user, onLogout }) {
         </div>
       )}
       <ChatToast toast={chatAlert.toast} onOpen={()=>setShowChat(true)} onClose={chatAlert.clearToast} lang="ar" />
-      {showCodeGate&&acceptedBooking&&<RideCodeGate code={acceptedBooking.rideCode} passengerName={acceptedBooking.passengerName} onOk={startRide} onCancel={()=>setShowCodeGate(false)} />}
+      {showCodeGate&&acceptedBooking&&<RideCodeGate verify={verifyCode} passengerName={acceptedBooking.passengerName} onOk={startRide} onCancel={()=>setShowCodeGate(false)} />}
       {showReport&&acceptedBooking&&<DriverReportModal targetId={acceptedBooking.passengerId} targetName={acceptedBooking.passengerName||"الراكب"} driverId={user?.uid} driverName={data?.name||"السائق"} onClose={()=>setShowReport(false)} />}
       {showReset&&<DriverPinChange uid={user?.uid} phone={data?.phone} currentPin={data?.pinCode} onClose={()=>setShowReset(false)} />}
 
@@ -1344,7 +1345,7 @@ export default function DriverDashboard({ user, onLogout }) {
                   <button onClick={()=>setShowReport(true)} style={{ flex:1,background:`${C.orange}22`,border:`1px solid ${C.orange}44`,borderRadius:10,padding:"11px",color:C.orange,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>🚨 بلّغ</button>
                   <button onClick={sendSOS} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>🆘 SOS</button>
                   <button onClick={finishRide} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>❌ إلغاء</button>
-                  <button onClick={()=>{ if(acceptedBooking?.rideCode) setShowCodeGate(true); else startRide(); }} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>{acceptedBooking?.rideCode?"🔐 وصلت — أدخل رمز الراكب":"✅ وصلت"}</button>
+                  <button onClick={()=>{ if(acceptedBooking?.rideCode||acceptedBooking?.hasRideCode) setShowCodeGate(true); else startRide(); }} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>{(acceptedBooking?.rideCode||acceptedBooking?.hasRideCode)?"🔐 وصلت — أدخل رمز الراكب":"✅ وصلت"}</button>
                 </div>
               </div>
             </div>
