@@ -11,11 +11,18 @@ const FONT = "'IBM Plex Sans Arabic',Cairo,sans-serif";
 // ================= رمز الركوب =================
 export const makeRideCode = () => String(Math.floor(1000 + Math.random() * 9000));
 
-export function RideCodeGate({ code, passengerName, onOk, onCancel }) {
+export function RideCodeGate({ code, verify, passengerName, onOk, onCancel }) {
+  const [busy, setBusy] = useState(false);
   const [v, setV] = useState("");
   const [fails, setFails] = useState(0);
   const [err, setErr] = useState("");
-  const submit = () => {
+  const submit = async () => {
+    if (verify) { // تحقق من جهة الخادم
+      setBusy(true);
+      try { await verify(v); }
+      catch (e) { setBusy(false); setV(""); setErr(e?.code === "functions/resource-exhausted" ? "محاولات كثيرة — انتظر بضع دقائق أو اطلب الرمز من الراكب" : e?.code === "functions/permission-denied" ? "الرمز غير صحيح، اطلب الرمز من الراكب" : "تعذر التحقق، تأكد من الاتصال وحاول مجدداً"); }
+      return;
+    }
     if (v === code) return onOk();
     const f = fails + 1; setFails(f); setV("");
     setErr(f >= 5 ? "محاولات كثيرة — اطلب من الراكب رمزاً صحيحاً أو أبلغ الدعم" : "الرمز غير صحيح، اطلب الرمز من الراكب");
@@ -32,7 +39,7 @@ export function RideCodeGate({ code, passengerName, onOk, onCancel }) {
         {err && <div style={{ color: K.red, fontSize: 12, marginTop: 8 }}>{err}</div>}
         <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
           <button onClick={onCancel} style={{ flex: 1, background: K.soft, border: "none", borderRadius: 14, padding: 14, fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>رجوع</button>
-          <button onClick={submit} disabled={v.length !== 4 || fails >= 5} style={{ flex: 2, background: v.length === 4 && fails < 5 ? K.dark : "#ccc", color: "#fff", border: "none", borderRadius: 14, padding: 14, fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>تأكيد وبدء الرحلة</button>
+          <button onClick={submit} disabled={v.length !== 4 || fails >= 5 || busy} style={{ flex: 2, background: v.length === 4 && fails < 5 ? K.dark : "#ccc", color: "#fff", border: "none", borderRadius: 14, padding: 14, fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>تأكيد وبدء الرحلة</button>
         </div>
       </div>
     </div>
