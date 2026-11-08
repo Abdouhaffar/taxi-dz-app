@@ -2,7 +2,7 @@
 // منع الحسابات الموقوفة/المحظورة من استعمال التطبيق (يتحدّث لحظياً عند قرار الأدمن)
 import { useState, useEffect } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 
 const toDate = (t) => t?.toDate?.() || (t?.seconds ? new Date(t.seconds * 1000) : null);
 
@@ -24,6 +24,9 @@ export function useAccountBlock(col, uid) {
   }, [until?.getTime()]);
   const banned = data?.accountStatus === "banned";
   const suspended = data?.accountStatus === "suspended" && (!until || until > new Date());
+  const blockedNow = banned || suspended;
+  // يجدّد الرمز المميز ليلتقط claim الحظر/رفعه من الخادم
+  useEffect(() => { if (uid && data) { try { auth.currentUser?.getIdToken(true).catch(() => {}); } catch (e) {} } }, [blockedNow]);
   return { blocked: banned || suspended, banned, until, reason: data?.suspendReason || "" };
 }
 
