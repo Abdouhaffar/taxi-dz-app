@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { auth, db, requestNotificationPermission, onForegroundMessage } from "./firebase";
 import { playPing } from "./Sound";
 import LangDropdown from "./LangDropdown";
+import { LegalLinks, SupportButton, OfflineBanner } from "./Legal";
 import { useSingleSession, KickedScreen, PermissionGate, clearDeviceClaim } from "./DeviceGuard";
 import {
   signOut, onAuthStateChanged, updateProfile, signInWithCustomToken
@@ -227,7 +228,7 @@ const MAP_STYLE = [
 ];
 
 const C = {
-  bg:"#f3f3f3", page:"#f3f3f3", brand:"linear-gradient(180deg,#0b1d4a 0%,#2d2a6e 24%,#8a3f86 50%,#e0507a 76%,#f59a4a 100%)", card:"#ffffff", dark:"#1c1a1d",
+  bg:"#f5f5f7", page:"#f5f5f7", brand:"linear-gradient(180deg,#0b1d4a 0%,#2d2a6e 24%,#8a3f86 50%,#e0507a 76%,#f59a4a 100%)", card:"#ffffff", dark:"#1c1a1d",
   green:"#c4001d", greenLight:"#fde8eb", greenDark:"#8f0015",
   orange:"#e0334d", orangeLight:"#fde8eb",
   red:"#ef4444", redLight:"#fef2f2",
@@ -235,8 +236,8 @@ const C = {
   yellow:"#e0334d", yellowLight:"#fde8eb",
   gold:"#ff5a70", goldLight:"#fde8eb",
   googleBlue:"#1c1a1d",
-  text:"#1c1a1d", textMuted:"#7a6268", textLight:"#b39ba0",
-  border:"#e4e4e4", shadow:"0 4px 24px rgba(0,0,0,0.08)",
+  text:"#1c1a1d", textMuted:"#6e6469", textLight:"#a89ca1",
+  border:"#ebebef", shadow:"0 2px 18px rgba(20,16,18,0.07)",
 };
 
 const OTP_LEN = 4; // smssak يرسل رمزاً من 4 أرقام
@@ -401,6 +402,7 @@ function RatingModal({ booking, driver, onSubmit, onSkip, lang }) {
     setSaving(true);
     try {
       await addDoc(collection(db,"ratings"),{ bookingId:booking?.id,driverId:booking?.driverId,passengerId:booking?.passengerId,rating,comment,tags,type:"passenger_to_driver",createdAt:serverTimestamp() });
+      try{ await setDoc(doc(db,"ride_codes",ref.id),{passengerId:user.uid,code:rideCode,fails:0,createdAt:serverTimestamp()}); }catch(e){console.log("ride_code",e);}
       if(booking?.driverId){
         const dSnap=await getDoc(doc(db,"drivers",booking.driverId));
         if(dSnap.exists()){const d=dSnap.data();const n=(d.totalRatings||0)+1;await updateDoc(doc(db,"drivers",booking.driverId),{rating:Math.round(((d.rating||0)*(d.totalRatings||0)+rating)/n*10)/10,totalRatings:n});}
@@ -744,6 +746,7 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
           </div>
         </button>
       </div>
+      <LegalLinks lang={lang} />
       </div>
     </div>
   );
@@ -1430,6 +1433,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   useEffect(()=>{ if(!bookingId||screen!=="searching") return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo){setSelectedDriver(d.driverInfo);setScreen("found");} }); return()=>u(); },[bookingId,screen]);
   useEffect(()=>{ if(screen!=="searching") return; const t=setInterval(()=>setTimer(p=>p+1),1000); return()=>clearInterval(t); },[screen]);
   useEffect(()=>{ if(screen==="searching"&&timer===60) setNoDrivers(true); },[timer,screen]);
+  const [codeShown,setCodeShown]=useState("");
+  useEffect(()=>{ setCodeShown(""); if(!bookingId) return; let on=true; getDoc(doc(db,"ride_codes",bookingId)).then(s=>{ if(on&&s.exists()) setCodeShown(s.data().code||""); }).catch(()=>{}); return()=>{on=false;}; },[bookingId]);
   const chatAlert=useChatAlert({ bookingId, userId:user?.uid, open:showChat });
   const block=useAccountBlock("passengers",user?.uid);
   const kicked=useSingleSession(user?.uid);
@@ -1570,7 +1575,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     const oLL=getLatLng(originPlace),dLL=getLatLng(destPlace);
     try {
       const rideCode=makeRideCode();
-      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,rideCode,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,passengers,luggageWeight,luggageDesc,status:sched?"scheduled":"pending",...(sched?{scheduledAt:sched}:{}),...(promoNow?{promoCode:promoNow.code,discount:promoNow.discount,originalPrice:rawPrice}:{}),createdAt:serverTimestamp() });
+      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,hasRideCode:true,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,passengers,luggageWeight,luggageDesc,status:sched?"scheduled":"pending",...(sched?{scheduledAt:sched}:{}),...(promoNow?{promoCode:promoNow.code,discount:promoNow.discount,originalPrice:rawPrice}:{}),createdAt:serverTimestamp() });
       if(sched){
         setSubmittingBooking(false); setScheduleAt(""); setPromo(null); setScreen("home");
         setFcmToast({title:lang==="ar"?"🗓️ تم حجز رحلتك":lang==="fr"?"🗓️ Course planifiée":"🗓️ Ride scheduled",body:lang==="ar"?"سنبحث عن سائق قبل موعدك بـ 15 دقيقة":lang==="fr"?"Nous chercherons un chauffeur 15 min avant":"We'll find a driver 15 min before pickup"});
@@ -1911,7 +1916,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           <div style={{ background:C.dark,borderRadius:"14px 4px 14px 14px",padding:12,textAlign:"center" }}>
             <div style={{ fontSize:11,color:"#ffffff88",marginBottom:4 }}>{t.verifyCode} — {t.giveDriver}</div>
             <div style={{ fontSize:10,color:"#ffffff66",marginBottom:6 }}>{lang==="ar"?"أعطِه للسائق عند ركوبك؛ هو من يُدخله في تطبيقه ليبدأ الرحلة":lang==="fr"?"Donnez-le au chauffeur à la montée ; il le saisit pour démarrer":"Give it to the driver when you board; they enter it to start the trip"}</div>
-            <div style={{ display:"flex",gap:8,justifyContent:"center",direction:"ltr" }}>{String(booking?.rideCode||"----").split("").map((d,i)=><div key={i} style={{ width:44,height:54,borderRadius:12,background:"#ffffff14",border:"1px solid #ffffff2a",color:"#fff",fontSize:28,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center" }}>{d}</div>)}</div>
+            <div style={{ display:"flex",gap:8,justifyContent:"center",direction:"ltr" }}>{String(codeShown||booking?.rideCode||"----").split("").map((d,i)=><div key={i} style={{ width:44,height:54,borderRadius:12,background:"#ffffff14",border:"1px solid #ffffff2a",color:"#fff",fontSize:28,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center" }}>{d}</div>)}</div>
           </div>
         </div>
         <div style={{ marginBottom:10 }}><PhoneButton phone={selectedDriver?.phone} label={lang==="ar"?"اتصل بالسائق":lang==="fr"?"Appeler":"Call driver"} /></div>
@@ -2043,7 +2048,11 @@ export default function App() {
 
   return (
     <div style={{ maxWidth:390,margin:"0 auto",minHeight:"100vh" }}>
-      <style>{`* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body{ font-family:'IBM Plex Sans Arabic',Cairo,system-ui,-apple-system,'Segoe UI',sans-serif; background:#f5f5f7; color:#1c1a1d; }
+        ::selection{ background:#c4001d33; }
+        ::-webkit-scrollbar{ width:0; height:0; }
         html,body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; overscroll-behavior-y:none; }
         button{ transition: transform .12s ease, box-shadow .2s ease, background .2s ease, opacity .2s; }
         button:active:not(:disabled){ transform: scale(.96); }
@@ -2052,7 +2061,9 @@ export default function App() {
         @keyframes fadeIn{ from{ opacity:0 } to{ opacity:1 } }
         @keyframes pulseDot{ 0%{ box-shadow:0 0 0 0 rgba(55,214,122,.55) } 100%{ box-shadow:0 0 0 10px rgba(55,214,122,0) } }`}</style>
       <PermissionGate lang={lang} />
-      <div style={{ position:"fixed",bottom:2,left:0,right:0,textAlign:"center",fontSize:9,color:"#8884",pointerEvents:"none",zIndex:1 }}>AL-BURAQ v2.5</div>
+      <OfflineBanner lang={lang} />
+      {screen==="app"&&<SupportButton lang={lang} />}
+      <div style={{ position:"fixed",bottom:2,left:0,right:0,textAlign:"center",fontSize:9,color:"#8884",pointerEvents:"none",zIndex:1 }}>AL-BURAQ v2.6</div>
       {screen==="welcome"&&<WelcomeScreen onSelect={r=>{setRole(r);setScreen("auth");}} lang={lang} setLang={changeLang} />}
       {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} setLang={changeLang} resetGuardRef={resetGuardRef} />}
       {screen==="app"&&role==="passenger"&&<PassengerApp onLogout={handleLogout} user={user} lang={lang} setLang={changeLang} />}
