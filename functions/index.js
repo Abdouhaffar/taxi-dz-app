@@ -698,8 +698,15 @@ exports.adminSignIn = onCall({ region: "europe-west1" }, async (req) => {
   const ref = snap.docs[0].ref, a = snap.docs[0].data();
   const lockedUntil = a.lockedUntil?.toMillis?.() || 0;
   if (lockedUntil > Date.now()) throw new HttpsError("resource-exhausted", "الحساب مقفل مؤقتاً بعد محاولات خاطئة، حاول لاحقاً");
-  const A = Buffer.from(String(a.code || "")), B = Buffer.from(code);
-  const ok = a.approved === true && A.length === B.length && A.length > 0 && crypto.timingSafeEqual(A, B);
+  let match = false;
+  if (a.codeHash && a.codeSalt) {
+    const H = Buffer.from(a.codeHash, "hex"), G = crypto.scryptSync(code, a.codeSalt, 32);
+    match = H.length === G.length && crypto.timingSafeEqual(H, G);
+  } else if (a.code) { // قديم: لم يُشفَّر بعد
+    const A = Buffer.from(String(a.code)), B = Buffer.from(code);
+    match = A.length === B.length && crypto.timingSafeEqual(A, B);
+  }
+  const ok = a.approved === true && match;
   if (!ok) {
     const fails = (a.failedAttempts || 0) + 1;
     await ref.update({ failedAttempts: fails, ...(fails >= 5 ? { failedAttempts: 0, lockedUntil: admin.firestore.Timestamp.fromMillis(Date.now() + 15 * 60000) } : {}) });
@@ -861,4 +868,85 @@ exports.onBookingCompensate = functions.firestore.document("bookings/{id}").onUp
     tx.set(db.collection("driver_credits").doc(), { driverId: a.driverId, amount: a.discount, reason: "promo", promoCode: a.promoCode || "", bookingId: ctx.params.id, createdAt: FV.serverTimestamp() });
   });
   return null;
+});
+
+// ============================================================
+// ====== الأمان من جهة الخادم (دفعة الحماية) ======
+// ============================================================
+
+// ---- 1) التحقق من رمز الركوب على الخادم: السائق لا يرى الرمز أبداً ----
+exports.verifyRideCode = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "سجّل الدخول أولاً");
+  const bookingId = String(req.data?.bookingId || "");
+  const code = String(req.data?.code || "").replace(/\D/g, "");
+  if (!bookingId || code.length !== 4) throw new HttpsError("invalid-argument", "أدخل الرمز المكوّن من 4 أرقام");
+  const bRef = db.collection("bookings").doc(bookingId);
+  const cRef = db.collection("ride_codes").doc(bookingId);
+  const [bSnap, cSnap] = await Promise.all([bRef.get(), cRef.get()]);
+  if (!bSnap.exists) throw new HttpsError("not-found", "الرحلة غير موجودة");
+  const b = bSnap.data();
+  if (b.driverId !== req.auth.uid) throw new HttpsError("permission-denied", "هذه الرحلة ليست لك");
+  if (["completed", "cancelled", "done"].includes(b.status)) throw new HttpsError("failed-precondition", "الرحلة منتهية");
+  if (!cSnap.exists) { // رحلة قديمة بلا رمز مخزَّن: نسمح بالمتابعة
+    await bRef.update({ status: "arrived", arrivedAt: FV.serverTimestamp(), codeVerified: true });
+    return { ok: true };
+  }
+  const c = cSnap.data();
+  const lockedUntil = c.lockedUntil?.toMillis?.() || 0;
+  if (lockedUntil > Date.now()) throw new HttpsError("resource-exhausted", "محاولات كثيرة، انتظر بضع دقائق أو اطلب الرمز من الراكب");
+  const A = Buffer.from(String(c.code || "")), B = Buffer.from(code);
+  const ok = A.length === B.length && A.length > 0 && crypto.timingSafeEqual(A, B);
+  if (!ok) {
+    const fails = (c.fails || 0) + 1;
+    await cRef.update(fails >= 5 ? { fails: 0, lockedUntil: admin.firestore.Timestamp.fromMillis(Date.now() + 5 * 60000) } : { fails });
+    throw new HttpsError("permission-denied", "الرمز غير صحيح");
+  }
+  await cRef.update({ fails: 0 });
+  await bRef.update({ status: "arrived", arrivedAt: FV.serverTimestamp(), codeVerified: true });
+  return { ok: true };
+});
+
+// ---- 2) تشفير رموز المديرين الفرعيين: يحوّل code النصي إلى hash ويحذفه ----
+exports.onAdminCodeHash = functions.firestore.document("admins/{id}").onWrite(async (change) => {
+  if (!change.after.exists) return null;
+  const a = change.after.data();
+  if (!a.code) return null;
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(String(a.code), salt, 32).toString("hex");
+  await change.after.ref.update({ codeSalt: salt, codeHash: hash, code: FV.delete() });
+  return null;
+});
+
+// ---- 3) إيقاف الحسابات: يُفرض على مستوى الخادم عبر claim في الرمز المميز ----
+async function setBlockedClaim(uid, blocked) {
+  try {
+    const u = await admin.auth().getUser(uid);
+    const claims = { ...(u.customClaims || {}) };
+    if (!!claims.blocked === blocked) return;
+    if (blocked) claims.blocked = true; else delete claims.blocked;
+    await admin.auth().setCustomUserClaims(uid, claims);
+    if (blocked) await admin.auth().revokeRefreshTokens(uid);
+  } catch (e) { console.error("setBlockedClaim", uid, e.message); }
+}
+function isBlockedDoc(d) {
+  const until = d.suspendedUntil?.toMillis?.() || 0;
+  return d.accountStatus === "banned" || (d.accountStatus === "suspended" && (!until || until > Date.now()));
+}
+const onStatus = (col) => functions.firestore.document(`${col}/{uid}`).onWrite(async (change, ctx) => {
+  if (!change.after.exists) return null;
+  const a = change.after.data(), b = change.before.exists ? change.before.data() : {};
+  if (a.accountStatus === b.accountStatus && String(a.suspendedUntil?.toMillis?.()) === String(b.suspendedUntil?.toMillis?.())) return null;
+  await setBlockedClaim(ctx.params.uid, isBlockedDoc(a));
+  return null;
+});
+exports.onDriverStatus = onStatus("drivers");
+exports.onPassengerStatus = onStatus("passengers");
+
+// ينهي الإيقاف المؤقت المنتهي تلقائياً
+exports.releaseExpiredSuspensions = onSchedule({ schedule: "every 15 minutes", region: "europe-west1" }, async () => {
+  const now = admin.firestore.Timestamp.now();
+  for (const col of ["drivers", "passengers"]) {
+    const q = await db.collection(col).where("accountStatus", "==", "suspended").where("suspendedUntil", "<=", now).limit(200).get();
+    for (const d of q.docs) await d.ref.update({ accountStatus: "active", suspendedUntil: FV.delete(), suspendReason: FV.delete() });
+  }
 });
