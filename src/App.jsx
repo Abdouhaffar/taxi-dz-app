@@ -34,7 +34,7 @@ const generateSessionId = () => `${Date.now()}-${Math.random().toString(36).subs
 const SESSION_KEY = "taxidz_session_id";
 const ALGERIA_CENTER = { lat: 36.737, lng: 3.086 };
 // الأسعار تُقرأ من Firestore (settings/pricing) ويعدّلها الأدمن؛ القيم هنا افتراضية
-const PRICING = { perKm:30, base:40, min:100, mult:{ economy:1.0, comfort:1.4, xl:1.8 } };
+const PRICING = { perKm:30, base:40, min:100, perMin:0, surge:1, trafficK:1, trafficMax:1.5, mult:{ economy:1.0, comfort:1.4, xl:1.8 } };
 const MIN_PRICE = 100;
 const pricingListeners = new Set();
 try {
@@ -44,6 +44,10 @@ try {
     if (d.perKm>0) PRICING.perKm = d.perKm;
     if (d.base>=0) PRICING.base = d.base;
     if (d.min>0) PRICING.min = d.min;
+    if (d.perMin>=0) PRICING.perMin = d.perMin;
+    if (d.surge>=1) PRICING.surge = d.surge;
+    if (d.trafficK>=0) PRICING.trafficK = d.trafficK;
+    if (d.trafficMax>=1) PRICING.trafficMax = d.trafficMax;
     if (d.mult) PRICING.mult = { ...PRICING.mult, ...d.mult };
     pricingListeners.forEach(f=>f());
   }, ()=>{});
@@ -60,9 +64,17 @@ const getDistanceKm = (lat1, lng1, lat2, lng2) => {
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 };
 
-const calcPrice = (km, multiplier=1.0) => {
+// السعر = (أساس + كم×سعر الكم + دقائق الطريق مع الازدحام×سعر الدقيقة) × معامل الفئة × معامل الذروة، مقرّباً لأقرب 10 دج
+// زيادة تلقائية عند الازدحام: كلما زاد وقت الطريق الحقيقي عن العادي (الطريق الأحمر في خرائط جوجل) ارتفع السعر حتى سقف يحدده الأدمن
+const autoSurge = (ratio) => {
+  const k = PRICING.trafficK, mx = PRICING.trafficMax;
+  if (!(ratio>1.2) || !(mx>1)) return 1;
+  return Math.min(mx, 1+(ratio-1.2)*k);
+};
+const calcPrice = (km, multiplier=1.0, minutes=0, ratio=1) => {
   if (!km||km<=0) return PRICING.min;
-  const price = Math.round((PRICING.base+km*PRICING.perKm)*multiplier);
+  const raw = (PRICING.base+km*PRICING.perKm+(minutes||0)*(PRICING.perMin||0))*multiplier*(PRICING.surge||1)*autoSurge(ratio);
+  const price = Math.round(raw/10)*10;
   return km<2 ? Math.max(price,PRICING.min) : price;
 };
 
@@ -1357,6 +1369,9 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const [destText,setDestText]=useState("");
   const [rideType,setRideType]=useState("economy");
   const [distanceKm,setDistanceKm]=useState(0);
+  const [tripMin,setTripMin]=useState(0);
+  const [trafficRatio,setTrafficRatio]=useState(1);
+  const routeTok=useRef(0);
   const [suggestedPrice,setSuggestedPrice]=useState(MIN_PRICE);
   const [offerPrice,setOfferPrice]=useState(MIN_PRICE);
   const [booking,setBooking]=useState(null);
@@ -1434,7 +1449,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     return()=>{u();if(unsub)unsub();};
   },[user?.uid]);
 
-  useEffect(()=>{ if(distanceKm>0){const p=calcPrice(distanceKm,multiplier);setSuggestedPrice(p);setOfferPrice(p);} },[rideType,distanceKm]);
+  useEffect(()=>{ if(distanceKm>0){const p=calcPrice(distanceKm,multiplier,tripMin,trafficRatio);setSuggestedPrice(p);setOfferPrice(p);} },[rideType,distanceKm,tripMin,trafficRatio]);
   useEffect(()=>{ if(!bookingId||(screen!=="found"&&screen!=="ride")) return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo&&screen==="searching"){setSelectedDriver(d.driverInfo);setScreen("found");} if(d.status==="arrived"&&!driverArrivedNotified.current){ driverArrivedNotified.current=true; setFcmToast({title:lang==="ar"?"🚕 السائق وصل!":"🚕 Le chauffeur est arrivé!",body:lang==="ar"?"السائق بانتظارك عند نقطة الانطلاق":"Le chauffeur vous attend au point de départ"}); } if(d.driverCurrentLocation){const dLoc=d.driverCurrentLocation;setDriverLocation(dLoc);const pLoc=passengerGPS||(originPlace?getLatLng(originPlace):null);if(pLoc&&screen==="found") setEta(Math.max(1,Math.round(getDistanceKm(dLoc.lat,dLoc.lng,pLoc.lat,pLoc.lng)/0.5)));} }); return()=>u(); },[bookingId,screen,originPlace,passengerGPS,lang]);
   useEffect(()=>{ if(!bookingId||screen!=="searching") return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo){setSelectedDriver(d.driverInfo);setScreen("found");} }); return()=>u(); },[bookingId,screen]);
   useEffect(()=>{ if(screen!=="searching") return; const t=setInterval(()=>setTimer(p=>p+1),1000); return()=>clearInterval(t); },[screen]);
@@ -1498,7 +1513,22 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     setShowForceLogout(false);
   };
 
-  const updateDistance=(lat1,lng1,lat2,lng2)=>{ const km=getDistanceKm(lat1,lng1,lat2,lng2);setDistanceKm(km);const p=calcPrice(km,multiplier);setSuggestedPrice(p);setOfferPrice(p); };
+  const updateDistance=(lat1,lng1,lat2,lng2)=>{
+    // تقدير فوري (خط مستقيم × 1.3 كطريق، بسرعة 30 كم/س) ثم يُستبدل بطريق جوجل الفعلي مع الازدحام
+    const est=getDistanceKm(lat1,lng1,lat2,lng2)*1.3, estMin=est*2;
+    setDistanceKm(est);setTripMin(estMin);setTrafficRatio(1);
+    const tok=++routeTok.current;
+    try{
+      if(window.google?.maps){
+        new window.google.maps.DirectionsService().route({origin:{lat:lat1,lng:lng1},destination:{lat:lat2,lng:lng2},travelMode:"DRIVING",drivingOptions:{departureTime:new Date(),trafficModel:"bestguess"}},(r,s)=>{
+          if(tok!==routeTok.current||s!=="OK"||!r?.routes?.[0]?.legs?.[0]) return;
+          const leg=r.routes[0].legs[0];
+          const km=leg.distance.value/1000, free=leg.duration.value/60, live=(leg.duration_in_traffic?.value||leg.duration.value)/60;
+          setDistanceKm(km);setTripMin(live);setTrafficRatio(free>0?live/free:1);
+        });
+      }
+    }catch(e){}
+  };
   const handleGPS=()=>{
     setGpsError("");
     if(!("geolocation" in navigator)){
@@ -1566,7 +1596,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     setSharedBusy(true); setRestrictedMsg("");
     let id=null;
     try{
-      id=await createSharedBooking({user,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,originText,destText,oLL:oLLx,dLL:dLLx,rideType,price:suggestedPrice,distanceKm,passengers,scheduledAt:sched});
+      id=await createSharedBooking({user,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,originText,destText,oLL:oLLx,dLL:dLLx,rideType,price:suggestedPrice,distanceKm,durationMin:Math.round(tripMin),passengers,scheduledAt:sched});
       if(joinTripDoc) await joinTrip(id,joinTripDoc.id);
       setSharedBookingId(id); setScheduleAt(""); setSharedMode("solo"); setScreen("shared");
     }catch(e){
@@ -1605,7 +1635,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     const oLL=getLatLng(originPlace),dLL=getLatLng(destPlace);
     try {
       const rideCode=makeRideCode();
-      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,hasRideCode:true,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,passengers,luggageWeight,luggageDesc,status:sched?"scheduled":"pending",...(sched?{scheduledAt:sched}:{}),...(promoNow?{promoCode:promoNow.code,discount:promoNow.discount,originalPrice:rawPrice}:{}),createdAt:serverTimestamp() });
+      const ref=await addDoc(collection(db,"bookings"),{ passengerId:user.uid,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,hasRideCode:true,originText,destText,originLat:oLL.lat,originLng:oLL.lng,destLat:dLL.lat,destLng:dLL.lng,rideType,price,distanceKm,durationMin:Math.round(tripMin),trafficRatio:Math.round(trafficRatio*100)/100,passengers,luggageWeight,luggageDesc,status:sched?"scheduled":"pending",...(sched?{scheduledAt:sched}:{}),...(promoNow?{promoCode:promoNow.code,discount:promoNow.discount,originalPrice:rawPrice}:{}),createdAt:serverTimestamp() });
       if(sched){
         setSubmittingBooking(false); setScheduleAt(""); setPromo(null); setScreen("home");
         setFcmToast({title:lang==="ar"?"🗓️ تم حجز رحلتك":lang==="fr"?"🗓️ Course planifiée":"🗓️ Ride scheduled",body:lang==="ar"?"سنبحث عن سائق قبل موعدك بـ 15 دقيقة":lang==="fr"?"Nous chercherons un chauffeur 15 min avant":"We'll find a driver 15 min before pickup"});
@@ -1782,7 +1812,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
               <div><div style={{ fontWeight:700,fontSize:14,color:C.text }}>{t[id]}</div><div style={{ fontSize:11,color:C.textMuted }}>⏱ {RIDE_TIMES[id]} min</div></div>
             </div>
             <div style={{ textAlign:"left" }}>
-              <div style={{ fontWeight:900,fontSize:16,color:rideType===id?C.greenDark:C.text }}>{calcPrice(distanceKm,RIDE_MULTIPLIERS[id])} DA</div>
+              <div style={{ fontWeight:900,fontSize:16,color:rideType===id?C.greenDark:C.text }}>{calcPrice(distanceKm,RIDE_MULTIPLIERS[id],tripMin,trafficRatio)} DA</div>
             </div>
           </div>
         ))}
@@ -1840,6 +1870,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         <BackBtn onBack={()=>setScreen("booking")} />
         <div><div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.offerPrice}</div><div style={{ fontSize:12,color:C.textMuted }}>{distanceKm.toFixed(1)} كم</div></div>
       </div>
+      {(autoSurge(trafficRatio)>1||PRICING.surge>1)&&<div style={{ margin:"0 20px 12px",background:"#fff3e0",border:"1px solid #ffd59a",borderRadius:14,padding:"10px 14px",fontSize:12.5,color:"#8a4b00",lineHeight:1.7,display:"flex",gap:10,alignItems:"center" }}><span style={{ fontSize:22 }}>🚦</span><span>{PRICING.surge>1?(lang==="ar"?"فترة ذروة: ":lang==="fr"?"Heure de pointe : ":"Peak time: "):""}{autoSurge(trafficRatio)>1?(lang==="ar"?`ازدحام مروري على الطريق (≈ ${Math.round(tripMin)} د بدل ${Math.round(tripMin/trafficRatio)} د) — زيادة ${Math.round((autoSurge(trafficRatio)-1)*100)}% على السعر`:lang==="fr"?`Trafic dense (≈ ${Math.round(tripMin)} min au lieu de ${Math.round(tripMin/trafficRatio)}) : +${Math.round((autoSurge(trafficRatio)-1)*100)}% sur le prix`:`Heavy traffic (≈ ${Math.round(tripMin)} min instead of ${Math.round(tripMin/trafficRatio)}): +${Math.round((autoSurge(trafficRatio)-1)*100)}% on the price`):(lang==="ar"?"السعر مرتفع قليلاً":"")}</span></div>}
       {isIntercity&&!regionBlocked&&<SharedModeBox price={suggestedPrice} mode={sharedMode} setMode={setSharedMode} lang={L2} uplift={regions.uplift} />}
       {sharedOn&&<SharedTripPicker originLL={oLLx} destLL={dLLx} price={suggestedPrice} uplift={regions.uplift} joinBusy={sharedBusy} onJoin={startShared} lang={L2} />}
       {!sharedOn&&<>
