@@ -4,6 +4,8 @@ import { auth, db, requestNotificationPermission, onForegroundMessage } from "./
 import { playPing } from "./Sound";
 import LangDropdown from "./LangDropdown";
 import { LegalLinks, SupportButton, OfflineBanner } from "./Legal";
+import { useRegions, wilayaOf, isEnabled } from "./Wilayas";
+import { SharedModeBox, SharedTripPicker, SharedTripScreen, ActiveSharedBanner, createSharedBooking, joinTrip } from "./SharedTrips";
 import { useSingleSession, KickedScreen, PermissionGate, clearDeviceClaim } from "./DeviceGuard";
 import {
   signOut, onAuthStateChanged, updateProfile, signInWithCustomToken
@@ -1345,6 +1347,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
 // ===== PASSENGER APP =====
 function PassengerApp({ onLogout, user, lang, setLang }) {
   usePricing();
+  const regions=useRegions();
   const t=T[lang];
   const isRTL=lang==="ar";
   const [screen,setScreen]=useState("home");
@@ -1379,6 +1382,9 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const [passengerData,setPassengerData]=useState(null);
   const [showPhoto,setShowPhoto]=useState(false);
   const [scheduleAt,setScheduleAt]=useState("");
+  const [sharedMode,setSharedMode]=useState("solo");
+  const [sharedBookingId,setSharedBookingId]=useState(null);
+  const [sharedBusy,setSharedBusy]=useState(false);
   const [promo,setPromo]=useState(null);
   const [promoPrefill,setPromoPrefill]=useState("");
   const [shareToken,setShareToken]=useState(null);
@@ -1546,8 +1552,32 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const onOriginChanged=()=>{ if(originRef.current){const p=originRef.current.getPlace();if(p?.geometry){setOriginPlace(p.geometry.location);setOriginText(p.formatted_address||p.name);if(destPlace){const{lat:lat1,lng:lng1}=getLatLng(p.geometry.location);const{lat:lat2,lng:lng2}=getLatLng(destPlace);updateDistance(lat1,lng1,lat2,lng2);}}} };
   const onDestChanged=()=>{ if(destRef.current){const p=destRef.current.getPlace();if(p?.geometry){setDestPlace(p.geometry.location);setDestText(p.formatted_address||p.name);if(originPlace){const{lat:lat1,lng:lng1}=getLatLng(originPlace);const{lat:lat2,lng:lng2}=getLatLng(p.geometry.location);updateDistance(lat1,lng1,lat2,lng2);}}} };
 
+  const oLLx=originPlace?getLatLng(originPlace):null, dLLx=destPlace?getLatLng(destPlace):null;
+  const oW=oLLx?wilayaOf(oLLx.lat,oLLx.lng):null, dW=dLLx?wilayaOf(dLLx.lat,dLLx.lng):null;
+  const regionBlocked=!!(oW&&dW&&(!isEnabled(regions,oW.c)||!isEnabled(regions,dW.c)));
+  const regionMsg=regionBlocked?(lang==="ar"?`🚧 الخدمة غير متوفرة بعد في ${!isEnabled(regions,oW.c)?oW.n:dW.n}. نعمل على التوسع قريباً.`:lang==="fr"?`🚧 Service pas encore disponible à ${!isEnabled(regions,oW.c)?oW.n:dW.n}.`:`🚧 Service not available yet in ${!isEnabled(regions,oW.c)?oW.n:dW.n}.`):"";
+  const isIntercity=!!(oW&&dW&&(oW.c!==dW.c||distanceKm>(regions.intercityKm||40)));
+  const sharedOn=isIntercity&&sharedMode==="shared";
+  const L2=lang==="fr"||lang==="en"?lang:"ar";
+  const startShared=async(joinTripDoc)=>{
+    if(sharedBusy||regionBlocked) return;
+    const sched=scheduleAt?scheduleToTimestamp(scheduleAt):null;
+    if(scheduleAt&&!scheduleValid(scheduleAt)) return;
+    setSharedBusy(true); setRestrictedMsg("");
+    let id=null;
+    try{
+      id=await createSharedBooking({user,passengerName,passengerPhone,passengerPhoto:passengerData?.photoURL||null,originText,destText,oLL:oLLx,dLL:dLLx,rideType,price:suggestedPrice,distanceKm,passengers,scheduledAt:sched});
+      if(joinTripDoc) await joinTrip(id,joinTripDoc.id);
+      setSharedBookingId(id); setScheduleAt(""); setSharedMode("solo"); setScreen("shared");
+    }catch(e){
+      if(id&&joinTripDoc){ try{await updateDoc(doc(db,"bookings",id),{status:"cancelled",cancelledBy:"system"});}catch(x){} }
+      setRestrictedMsg("⚠️ "+((e?.message||"").replace(/^.*?:\s*/,"")||"تعذر الإرسال"));
+    }
+    setSharedBusy(false);
+  };
   const startSearch=async(price)=>{
     if(submittingBooking) return;
+    if(regionBlocked){ setRestrictedMsg(regionMsg); return; }
     const sched = scheduleAt ? scheduleToTimestamp(scheduleAt) : null;
     if(scheduleAt && !scheduleValid(scheduleAt)) return;
     const rawPrice = price;
@@ -1671,6 +1701,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           {passengerData?.points>0&&<div onClick={()=>setScreen("wallet")} style={{ background:"linear-gradient(135deg,#fff4d6,#ffe3a3)",borderRadius:20,padding:"7px 13px",fontSize:12.5,fontWeight:800,color:"#7a5200",cursor:"pointer" }}>⭐ {passengerData.points}</div>}
         </div>
         <OffersBanner lang={lang==="fr"||lang==="en"?lang:"ar"} onUse={c=>{setPromoPrefill(c);setScreen("booking");}} />
+        <ActiveSharedBanner uid={user?.uid} lang={L2} onOpen={id=>{setSharedBookingId(id);setScreen("shared");}} />
         <UpcomingRides userId={user?.uid} lang={lang==="fr"||lang==="en"?lang:"ar"} onResume={resumeBooking} />
         <div onClick={()=>setScreen("booking")} style={{ background:"#f3f3f3",borderRadius:16,padding:"15px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",border:"1px solid #ececec" }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1c1a1d" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
@@ -1697,6 +1728,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   );
 
   // WALLET
+  if(screen==="shared"&&sharedBookingId) return <SharedTripScreen bookingId={sharedBookingId} lang={L2} onBack={()=>setScreen("home")} />;
   if(screen==="history") return <HistoryScreen userId={user?.uid} passengerName={passengerName} lang={lang==="fr"||lang==="en"?lang:"ar"} onBack={()=>setScreen("home")} onRebook={rebook} />;
   if(screen==="wallet") return <WalletScreen userId={user?.uid} passengerData={passengerData} lang={lang} onBack={()=>setScreen("home")} />;
 
@@ -1808,6 +1840,9 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         <BackBtn onBack={()=>setScreen("booking")} />
         <div><div style={{ fontWeight:800,fontSize:18,color:C.text }}>{t.offerPrice}</div><div style={{ fontSize:12,color:C.textMuted }}>{distanceKm.toFixed(1)} كم</div></div>
       </div>
+      {isIntercity&&!regionBlocked&&<SharedModeBox price={suggestedPrice} mode={sharedMode} setMode={setSharedMode} lang={L2} uplift={regions.uplift} />}
+      {sharedOn&&<SharedTripPicker originLL={oLLx} destLL={dLLx} price={suggestedPrice} uplift={regions.uplift} joinBusy={sharedBusy} onJoin={startShared} lang={L2} />}
+      {!sharedOn&&<>
       <div style={{ margin:"0 20px 14px",background:C.card,borderRadius:20,padding:24,boxShadow:C.shadow,textAlign:"center" }}>
         <div style={{ fontSize:13,color:C.textMuted,marginBottom:4 }}>{t.yourOffer}</div>
         <div style={{ fontSize:64,fontWeight:900,color:offerPrice>suggestedPrice?C.blue:C.green,lineHeight:1,transition:"color 0.3s" }}>{offerPrice}</div>
@@ -1828,13 +1863,16 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           ))}
         </div>
       </div>
+      </>}
       <SchedulePicker value={scheduleAt} onChange={setScheduleAt} lang={lang==="fr"||lang==="en"?lang:"ar"} />
-      <PromoBox price={offerPrice} rideType={rideType} applied={promo} onApply={setPromo} onClear={()=>setPromo(null)} initialCode={promoPrefill} lang={lang==="fr"||lang==="en"?lang:"ar"} />
+      {!sharedOn&&<PromoBox price={offerPrice} rideType={rideType} applied={promo} onApply={setPromo} onClear={()=>setPromo(null)} initialCode={promoPrefill} lang={lang==="fr"||lang==="en"?lang:"ar"} />}
       <div style={{ margin:"0 20px" }}>
+        {regionBlocked&&<div style={{ background:"#fff3cd",border:"1px solid #ffe08a",borderRadius:12,padding:"12px 14px",fontSize:13,color:"#7a5b00",marginBottom:12,textAlign:"center" }}>{regionMsg}</div>}
         {restrictedMsg&&<div style={{ background:C.redLight||"#ef444422",border:"1px solid #ef444444",borderRadius:12,padding:"12px 14px",fontSize:13,color:"#ef4444",marginBottom:12,textAlign:"center" }}>{restrictedMsg}</div>}
-        <button onClick={()=>startSearch(offerPrice)} disabled={submittingBooking||!scheduleValid(scheduleAt)} style={{ width:"100%",background:submittingBooking?C.border:`linear-gradient(135deg,${C.dark},#2b1a1e)`,border:"1px solid #ff5a7033",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:17,cursor:submittingBooking?"default":"pointer",opacity:submittingBooking?0.7:1 }}>
+        {sharedOn&&<button onClick={()=>startShared(null)} disabled={sharedBusy||regionBlocked||!scheduleValid(scheduleAt)} style={{ width:"100%",background:regionBlocked||sharedBusy?C.border:`linear-gradient(135deg,${C.dark},#2b1a1e)`,border:"none",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:900,fontSize:16,cursor:"pointer" }}>🚐 {lang==="ar"?"أرسل طلباً تشاركياً":lang==="fr"?"Envoyer une demande partagée":"Send a shared request"}</button>}
+        {!sharedOn&&<button onClick={()=>startSearch(offerPrice)} disabled={submittingBooking||regionBlocked||!scheduleValid(scheduleAt)} style={{ width:"100%",background:submittingBooking?C.border:`linear-gradient(135deg,${C.dark},#2b1a1e)`,border:"1px solid #ff5a7033",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:17,cursor:submittingBooking?"default":"pointer",opacity:submittingBooking?0.7:1 }}>
           {scheduleAt?(lang==="ar"?"🗓️ احجز الرحلة":lang==="fr"?"🗓️ Planifier":"🗓️ Schedule ride"):t.sendOffer} — {promo?<><s style={{opacity:0.5}}>{offerPrice}</s> {Math.max(50,offerPrice-promo.discount)}</>:offerPrice} DA
-        </button>
+        </button>}
       </div>
     </div>
   );
