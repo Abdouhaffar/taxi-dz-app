@@ -8,6 +8,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import { ShareButton, TierProgress } from "./ReferralShare";
 import { Avatar } from "./ProfilePhoto";
 import { RideCodeGate, TagPicker } from "./TripKit";
+import { DC as C } from "./Theme";
 import { useRegions, isEnabled, codeOfLabel } from "./Wilayas";
 import { DriverSharedHub } from "./SharedTrips";
 import { useChatAlert, ChatBadge, ChatToast, PhoneButton } from "./ChatNotify";
@@ -20,16 +21,7 @@ const LIBRARIES = ["places"];
 const generateSessionId = () => `${Date.now()}-${Math.random().toString(36).substr(2,9)}`;
 const SESSION_KEY = "taxidz_session_id";
 
-const C = {
-  bg:"#0f0c0e", card:"#1d181b", border:"#2e2428",
-  green:"#c4001d", greenLight:"#c4001d22", greenDark:"#8f0015",
-  orange:"#e0334d", orangeDark:"#8f0015",
-  red:"#ef4444", redLight:"#ef444422",
-  blue:"#1c1a1d", blueLight:"#1c1a1d15",
-  yellow:"#e0334d", yellowLight:"#e0334d22",
-  gold:"#ff5a70", goldLight:"#ff5a7022",
-  text:"#ffffff", textMuted:"#c7a9ae", textLight:"#9a7f85",
-};
+
 
 const PRICING={ perKm:30, base:40, min:100, perMin:0, surge:1, trafficK:1, trafficMax:1.5, mult:{ economy:1, comfort:1.4, xl:1.8 } };
 const pricingListeners=new Set();
@@ -221,7 +213,7 @@ function DriverPinChange({ uid, phone, currentPin, onClose }) {
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,marginBottom:12 }}>{error}</div>}
             <div style={{ display:"flex",gap:10 }}>
               <button onClick={onClose} style={{ flex:1,background:C.border,border:"none",borderRadius:14,padding:14,color:C.text,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>إلغاء</button>
-              <button onClick={checkOldPin} style={{ flex:2,background:`linear-gradient(135deg,#1c1a1d,#8f0015)`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>متابعة</button>
+              <button onClick={checkOldPin} style={{ flex:2,background:`linear-gradient(135deg,#1c1a1d,#5b3fe6)`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>متابعة</button>
             </div>
           </>)}
 
@@ -567,7 +559,7 @@ function EarningsScreen({ uid, driverData, onBack }) {
           <div style={{ fontSize:28,fontWeight:900,color:"#fff" }}>{totalEarnings.toLocaleString()} دج</div>
           <div style={{ fontSize:12,color:"#ffffff88",marginTop:4 }}>إجمالي الإيرادات</div>
         </div>
-        <div style={{ background:`linear-gradient(135deg,${C.blue},#8f0015)`,borderRadius:20,padding:20,textAlign:"center" }}>
+        <div style={{ background:`linear-gradient(135deg,${C.blue},#5b3fe6)`,borderRadius:20,padding:20,textAlign:"center" }}>
           <div style={{ fontSize:28,fontWeight:900,color:"#fff" }}>{filtered.length}</div>
           <div style={{ fontSize:12,color:"#ffffff88",marginTop:4 }}>عدد الرحلات</div>
         </div>
@@ -855,7 +847,7 @@ function DriverGPSMap({ driverLocation, passengerLocation, destLocation, mode })
         {driverLocation&&target&&<span style={{ fontSize:12,color:mode==="pickup"?C.orange:C.green,fontWeight:700 }}>{getDistKm(driverLocation.lat,driverLocation.lng,target.lat,target.lng).toFixed(1)} كم</span>}
       </div>
       <GoogleMap mapContainerStyle={{ width:"100%",height:"220px" }} center={driverLocation||passengerLocation||{lat:36.737,lng:3.086}} zoom={15} onLoad={m=>mapRef.current=m} options={{ disableDefaultUI:true,zoomControl:true }}>
-        {driverLocation&&<Marker position={driverLocation} icon={{ url:makeMarker("🚕","#141012"),scaledSize:new window.google.maps.Size(44,44) }} />}
+        {driverLocation&&<Marker position={driverLocation} icon={{ url:makeMarker("🚕","#0d0b1f"),scaledSize:new window.google.maps.Size(44,44) }} />}
         {passengerLocation&&mode==="pickup"&&<Marker position={passengerLocation} icon={{ url:makeMarker("📍",C.green),scaledSize:new window.google.maps.Size(44,44) }} />}
         {destLocation&&mode==="ride"&&<Marker position={destLocation} icon={{ url:makeMarker("🏁",C.blue),scaledSize:new window.google.maps.Size(44,44) }} />}
         {directions&&<DirectionsRenderer directions={directions} options={{ polylineOptions:{ strokeColor:mode==="pickup"?C.orange:C.green,strokeWeight:5,strokeOpacity:0.85 },suppressMarkers:true }} />}
@@ -959,24 +951,24 @@ function DriverWalletScreen({ uid, driverData, onBack, onOpenEarnings }) {
       </div>
 
       <div style={{ margin:"0 20px 14px",background:`linear-gradient(135deg,#2b1a1e,${C.bg})`,border:`1px solid ${C.border}`,borderRadius:24,padding:24,position:"relative",overflow:"hidden" }}>
-        <div style={{ position:"absolute",top:-24,left:-24,width:120,height:120,borderRadius:"50%",background:"#c4001d33" }} />
-        <div style={{ fontSize:13,color:"#c7a9ae",marginBottom:4 }}>نقاطك المتراكمة</div>
-        <div style={{ fontSize:48,fontWeight:900,color:"#ff5a70" }}>⭐ {points}</div>
+        <div style={{ position:"absolute",top:-24,left:-24,width:120,height:120,borderRadius:"50%",background:(C.green+"33") }} />
+        <div style={{ fontSize:13,color:C.textMuted,marginBottom:4 }}>نقاطك المتراكمة</div>
+        <div style={{ fontSize:48,fontWeight:900,color:C.green }}>⭐ {points}</div>
         <div style={{ display:"flex",gap:18,marginTop:14 }}>
-          <div><div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{count}</div><div style={{ fontSize:11,color:"#c7a9ae" }}>دعوة ناجحة</div></div>
+          <div><div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{count}</div><div style={{ fontSize:11,color:C.textMuted }}>دعوة ناجحة</div></div>
           <div style={{ width:1,background:"#ffffff22" }} />
-          <div><div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{driverData?.totalRides||0}</div><div style={{ fontSize:11,color:"#c7a9ae" }}>رحلة</div></div>
+          <div><div style={{ fontSize:20,fontWeight:900,color:"#fff" }}>{driverData?.totalRides||0}</div><div style={{ fontSize:11,color:C.textMuted }}>رحلة</div></div>
         </div>
       </div>
 
       <div style={{ margin:"0 20px 14px",background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:20 }}>
         <div style={{ fontWeight:800,fontSize:15,color:C.text,marginBottom:4 }}>🎁 ادعُ أصدقاءك واكسب نقاطاً</div>
         <div style={{ fontSize:13,color:C.textMuted,marginBottom:14 }}>كلما دعوت عدداً أكبر ارتفع مستواك وزادت نقاط كل دعوة.</div>
-        <div style={{ background:"#c4001d18",border:"2px dashed #c4001d",borderRadius:16,padding:"14px 20px",textAlign:"center",marginBottom:16 }}>
+        <div style={{ background:(C.green+"18"),border:`2px dashed ${C.green}`,borderRadius:16,padding:"14px 20px",textAlign:"center",marginBottom:16 }}>
           <div style={{ fontSize:12,color:C.textMuted,fontWeight:600,marginBottom:4 }}>كود الإحالة الخاص بك</div>
           <div style={{ fontSize:28,fontWeight:900,color:"#fff",letterSpacing:4 }}>{code||"—"}</div>
         </div>
-        {code&&<ShareButton code={code} lang="ar" accent="#c4001d" labelColor="#c7a9ae" />}
+        {code&&<ShareButton code={code} lang="ar" accent={C.green} labelColor={C.textMuted} />}
       </div>
 
       <div style={{ margin:"0 20px 14px" }}>
@@ -1000,7 +992,7 @@ function DriverWalletScreen({ uid, driverData, onBack, onOpenEarnings }) {
               <div style={{ fontSize:13,color:C.text,fontWeight:600 }}>{reasonLabel[r.type]||"نقاط"}</div>
               <div style={{ fontSize:11,color:C.textMuted,marginTop:2 }}>{r.createdAt?.toDate?.()?.toLocaleDateString("ar-DZ")||""}</div>
             </div>
-            <div style={{ fontSize:16,fontWeight:900,color:"#ff5a70" }}>+{r.points}</div>
+            <div style={{ fontSize:16,fontWeight:900,color:C.green }}>+{r.points}</div>
           </div>
         ))}
       </div>
@@ -1301,8 +1293,8 @@ export default function DriverDashboard({ user, onLogout }) {
               {data?.plateNumber&&<div style={{ fontSize:11,color:C.textLight,direction:"ltr",display:"inline-block" }}>🔢 {data.plateNumber}</div>}
             </div>
           </div>
-          <div onClick={toggleOnline} style={{ width:64,height:34,borderRadius:17,background:online?"#37d67a":C.border,position:"relative",cursor:"pointer",transition:"all 0.3s" }}>
-            <div style={{ position:"absolute",top:3,right:online?3:"auto",left:online?"auto":3,width:28,height:28,borderRadius:"50%",background:"#fff",transition:"all 0.3s",boxShadow:"0 2px 4px rgba(0,0,0,0.2)" }} />
+          <div onClick={toggleOnline} style={{ width:64,height:34,borderRadius:17,background:online?C.ok:C.border,position:"relative",cursor:"pointer",transition:"all 0.3s" }}>
+            <div style={{ position:"absolute",top:3,right:online?3:"auto",left:online?"auto":3,width:28,height:28,borderRadius:"50%",background:C.card,transition:"all 0.3s",boxShadow:"0 2px 4px rgba(0,0,0,0.2)" }} />
           </div>
         </div>
         {online&&<div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"10px 14px",fontSize:13,color:C.green,fontWeight:800,display:"flex",alignItems:"center",gap:8 }}>
@@ -1468,7 +1460,7 @@ export default function DriverDashboard({ user, onLogout }) {
             </div>
 
             <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
-              <button onClick={()=>setShowWallet(true)} style={{ background:"linear-gradient(135deg,#c4001d,#8f0015)",border:"none",borderRadius:16,padding:"16px 20px",color:"#fff",fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
+              <button onClick={()=>setShowWallet(true)} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:16,padding:"16px 20px",color:"#fff",fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:12,textAlign:"right" }}>
                 <span style={{ fontSize:22 }}>💰</span>
                 <div style={{ flex:1 }}><div style={{ fontWeight:800 }}>المحفظة والإحالة</div><div style={{ fontSize:12,opacity:0.85,marginTop:2 }}>⭐ {data?.points||0} نقطة · شارك كودك واكسب المزيد</div></div>
                 <span>←</span>
