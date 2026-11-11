@@ -79,11 +79,11 @@ export function SharedTripPicker({ originLL, destLL, price, uplift = 20, joinBus
 }
 
 // ينشئ حجزاً تشاركياً (طلب ينتظر سائقاً)، ويعيد معرّفه
-export async function createSharedBooking({ user, passengerName, passengerPhone, passengerPhoto, originText, destText, oLL, dLL, rideType, price, distanceKm, passengers, scheduledAt, promo }) {
+export async function createSharedBooking({ user, passengerName, passengerPhone, passengerPhoto, originText, destText, oLL, dLL, rideType, price, distanceKm, durationMin, passengers, scheduledAt, promo }) {
   const ref = await addDoc(collection(db, "bookings"), {
     passengerId: user.uid, passengerName, passengerPhone: passengerPhone || "", passengerPhoto: passengerPhoto || null,
     originText, destText, originLat: oLL.lat, originLng: oLL.lng, destLat: dLL.lat, destLng: dLL.lng,
-    rideType, price, soloPrice: price, distanceKm, passengers: passengers || 1, shared: true, intercity: true,
+    rideType, price, soloPrice: price, distanceKm, durationMin: durationMin || 0, passengers: passengers || 1, shared: true, intercity: true,
     status: "shared_pending", ...(scheduledAt ? { scheduledAt } : {}), createdAt: serverTimestamp(),
   });
   return ref.id;
