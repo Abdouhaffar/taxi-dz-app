@@ -950,3 +950,200 @@ exports.releaseExpiredSuspensions = onSchedule({ schedule: "every 15 minutes", r
     for (const d of q.docs) await d.ref.update({ accountStatus: "active", suspendedUntil: FV.delete(), suspendReason: FV.delete() });
   }
 });
+
+// ============================================================
+// ====== الرحلات التشاركية بين المدن + تحكم الأدمن بالولايات ======
+// ============================================================
+const WILAYAS = require("./wilayas.json");
+const wByCode = (c) => WILAYAS.find((w) => w.c === String(c).padStart(2, "0"));
+const hav = (a, b, c, d) => {
+  const r = (x) => (x * Math.PI) / 180, R = 6371;
+  const x = Math.sin(r(c - a) / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d - b) / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+};
+const wOf = (lat, lng) => {
+  if (lat == null || lng == null) return null;
+  let best = null, bd = 1e9;
+  for (const w of WILAYAS) { const d = hav(lat, lng, w.lat, w.lng); if (d < bd) { bd = d; best = w; } }
+  return best;
+};
+const sPrice = (total, n, uplift) => (n <= 1 ? Math.round(total) : Math.round((total / n) * (1 + uplift / 100) / 10) * 10);
+async function getRegions() {
+  const s = await db.collection("settings").doc("regions").get();
+  return { restrict: false, enabled: [], intercityKm: 40, uplift: 20, maxSeatsLimit: 6, ...(s.exists ? s.data() : {}) };
+}
+const okRegion = (R, code) => !R.restrict || (R.enabled || []).includes(String(code));
+async function mustBeDriver(uid) {
+  const d = await db.collection("drivers").doc(uid).get();
+  if (!d.exists) throw new HttpsError("permission-denied", "حساب السائق غير موجود");
+  const x = d.data();
+  if (x.accountStatus === "banned" || (x.accountStatus === "suspended")) throw new HttpsError("permission-denied", "حسابك موقوف");
+  return x;
+}
+const driverCard = (x, uid) => ({ uid, name: x.name || "السائق", phone: x.phone || "", carBrand: x.carBrand || "", carModel: x.carModel || "", carColor: x.carColor || "", plateNumber: x.plateNumber || "", photo: x.selfieUrl || x.photoURL || null });
+const need = (c, m) => { if (!c) throw new HttpsError("invalid-argument", m); };
+
+// السائق ينشر رحلة بين مدينتين
+exports.publishSharedTrip = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "سجّل الدخول");
+  const uid = req.auth.uid, dr = await mustBeDriver(uid), R = await getRegions();
+  const fromCode = String(req.data?.fromCode || (dr.wilaya || "").match(/\d+/)?.[0] || "").padStart(2, "0");
+  const toCode = String(req.data?.toCode || "").padStart(2, "0");
+  const seats = Math.floor(Number(req.data?.seats));
+  const dep = Number(req.data?.departureAtMs);
+  need(wByCode(fromCode) && wByCode(toCode) && fromCode !== toCode, "اختر ولايتين مختلفتين");
+  if (!okRegion(R, fromCode) || !okRegion(R, toCode)) throw new HttpsError("failed-precondition", "إحدى الولايتين غير مفعّلة بعد");
+  if (!(seats >= 2 && seats <= R.maxSeatsLimit)) throw new HttpsError("invalid-argument", `عدد المقاعد من 2 إلى ${R.maxSeatsLimit}`);
+  if (!(dep > Date.now() - 5 * 60000 && dep < Date.now() + 30 * 86400000)) throw new HttpsError("invalid-argument", "موعد الانطلاق غير صالح");
+  const open = await db.collection("shared_trips").where("driverId", "==", uid).where("status", "in", ["open", "started"]).get();
+  if (open.size >= 3) throw new HttpsError("resource-exhausted", "لديك رحلات تشاركية كثيرة مفتوحة");
+  const ps = (await db.collection("settings").doc("pricing").get()).data() || {};
+  const p = { perKm: 30, base: 40, min: 100, ...ps };
+  const a = wByCode(fromCode), b = wByCode(toCode);
+  const km = Math.round(hav(a.lat, a.lng, b.lat, b.lng) * 1.25);
+  const baseTotal = Math.max(p.min, Math.round((p.base + km * p.perKm) * ((p.mult || {}).economy || 1)));
+  const ref = await db.collection("shared_trips").add({
+    driverId: uid, driverInfo: driverCard(dr, uid), fromCode, toCode, fromName: a.n, toName: b.n,
+    originLat: a.lat, originLng: a.lng, destLat: b.lat, destLng: b.lng, km, baseTotal, uplift: R.uplift,
+    departureAt: admin.firestore.Timestamp.fromMillis(dep), maxSeats: seats, seatsTaken: 0, bookingIds: [],
+    status: "open", source: "published", createdAt: FV.serverTimestamp(),
+  });
+  return { id: ref.id, baseTotal, km };
+});
+
+// ينضم الحجز إلى رحلة داخل معاملة (يمنع تجاوز المقاعد)
+async function joinTx(tx, tripRef, bRef, driverInfo, driverUid) {
+  const [t, b] = await Promise.all([tx.get(tripRef), tx.get(bRef)]);
+  if (!t.exists || !b.exists) throw new HttpsError("not-found", "غير موجود");
+  const T = t.data(), B = b.data();
+  if (T.status !== "open") throw new HttpsError("failed-precondition", "الرحلة لم تعد متاحة");
+  if (T.seatsTaken >= T.maxSeats) throw new HttpsError("failed-precondition", "اكتملت المقاعد");
+  if (B.status !== "shared_pending" || B.tripId) throw new HttpsError("failed-precondition", "الطلب لم يعد متاحاً");
+  tx.update(tripRef, { seatsTaken: T.seatsTaken + 1, bookingIds: FV.arrayUnion(bRef.id) });
+  tx.update(bRef, { status: "shared_booked", tripId: tripRef.id, driverId: T.driverId, driverInfo: T.driverInfo, soloPrice: B.soloPrice || B.price || 0, sharedJoinedAt: FV.serverTimestamp() });
+}
+
+// الراكب ينضم إلى رحلة منشورة
+exports.joinSharedTrip = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "سجّل الدخول");
+  const bookingId = String(req.data?.bookingId || ""), tripId = String(req.data?.tripId || "");
+  need(bookingId && tripId, "بيانات ناقصة");
+  const bRef = db.collection("bookings").doc(bookingId), tRef = db.collection("shared_trips").doc(tripId);
+  await db.runTransaction(async (tx) => {
+    const [b, t] = await Promise.all([tx.get(bRef), tx.get(tRef)]);
+    if (!b.exists || b.data().passengerId !== req.auth.uid) throw new HttpsError("permission-denied", "ليس طلبك");
+    if (!t.exists) throw new HttpsError("not-found", "الرحلة غير موجودة");
+    const B = b.data(), T = t.data();
+    const o = wOf(B.originLat, B.originLng), d = wOf(B.destLat, B.destLng);
+    if (!o || !d || o.c !== T.fromCode || d.c !== T.toCode) throw new HttpsError("failed-precondition", "مسارك لا يطابق هذه الرحلة");
+    await joinTx(tx, tRef, bRef, T.driverInfo, T.driverId);
+  });
+  return { ok: true };
+});
+
+// السائق يقبل طلباً تشاركياً: ينضم لرحلته المفتوحة المطابقة أو يُنشئ رحلة جديدة بعدد مقاعد يحدده
+exports.acceptSharedRequest = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "سجّل الدخول");
+  const uid = req.auth.uid, dr = await mustBeDriver(uid), R = await getRegions();
+  const bookingId = String(req.data?.bookingId || "");
+  const bRef = db.collection("bookings").doc(bookingId);
+  const bs = await bRef.get();
+  if (!bs.exists) throw new HttpsError("not-found", "الطلب غير موجود");
+  const B = bs.data();
+  if (B.status !== "shared_pending" || B.tripId) throw new HttpsError("failed-precondition", "الطلب لم يعد متاحاً");
+  const o = wOf(B.originLat, B.originLng), d = wOf(B.destLat, B.destLng);
+  need(o && d, "إحداثيات الطلب ناقصة");
+  if (!okRegion(R, o.c) || !okRegion(R, d.c)) throw new HttpsError("failed-precondition", "ولاية الطلب غير مفعّلة");
+  const mine = await db.collection("shared_trips").where("driverId", "==", uid).where("status", "==", "open").get();
+  const match = mine.docs.find((x) => x.data().fromCode === o.c && x.data().toCode === d.c && x.data().seatsTaken < x.data().maxSeats);
+  if (match) {
+    await db.runTransaction((tx) => joinTx(tx, match.ref, bRef, match.data().driverInfo, uid));
+    return { tripId: match.id, joined: true };
+  }
+  const seats = Math.floor(Number(req.data?.seats));
+  if (!(seats >= 2 && seats <= R.maxSeatsLimit)) throw new HttpsError("invalid-argument", `حدّد عدد المقاعد من 2 إلى ${R.maxSeatsLimit}`);
+  if (mine.size + (await db.collection("shared_trips").where("driverId", "==", uid).where("status", "==", "started").get()).size >= 3) throw new HttpsError("resource-exhausted", "لديك رحلات مفتوحة كثيرة");
+  const dep = B.scheduledAt?.toMillis?.() || Date.now();
+  const tRef = db.collection("shared_trips").doc();
+  await db.runTransaction(async (tx) => {
+    const fresh = await tx.get(bRef);
+    if (fresh.data().status !== "shared_pending" || fresh.data().tripId) throw new HttpsError("failed-precondition", "الطلب لم يعد متاحاً");
+    tx.set(tRef, {
+      driverId: uid, driverInfo: driverCard(dr, uid), fromCode: o.c, toCode: d.c, fromName: o.n, toName: d.n,
+      originLat: B.originLat, originLng: B.originLng, destLat: B.destLat, destLng: B.destLng, km: Math.round(B.distanceKm || 0),
+      baseTotal: Math.round(B.soloPrice || B.price || 0), uplift: R.uplift,
+      departureAt: admin.firestore.Timestamp.fromMillis(dep), maxSeats: seats, seatsTaken: 1, bookingIds: [bookingId],
+      status: "open", source: "request", createdAt: FV.serverTimestamp(),
+    });
+    tx.update(bRef, { status: "shared_booked", tripId: tRef.id, driverId: uid, driverInfo: driverCard(dr, uid), soloPrice: B.soloPrice || B.price || 0, sharedJoinedAt: FV.serverTimestamp() });
+  });
+  return { tripId: tRef.id, joined: false };
+});
+
+// انطلاق الرحلة: يُثبَّت عدد الركاب وسعر كل فرد
+exports.startSharedTrip = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "سجّل الدخول");
+  const tRef = db.collection("shared_trips").doc(String(req.data?.tripId || ""));
+  return db.runTransaction(async (tx) => {
+    const t = await tx.get(tRef);
+    if (!t.exists || t.data().driverId !== req.auth.uid) throw new HttpsError("permission-denied", "ليست رحلتك");
+    const T = t.data();
+    if (T.status !== "open") throw new HttpsError("failed-precondition", "الرحلة ليست مفتوحة");
+    const snaps = await Promise.all((T.bookingIds || []).map((id) => tx.get(db.collection("bookings").doc(id))));
+    const live = snaps.filter((s) => s.exists && s.data().status === "shared_booked");
+    if (!live.length) throw new HttpsError("failed-precondition", "لا يوجد ركاب بعد");
+    const n = live.length, price = sPrice(T.baseTotal, n, T.uplift ?? 20);
+    live.forEach((s) => tx.update(s.ref, { status: "shared_started", price, sharedPrice: price, finalPassengers: n, startedAt: FV.serverTimestamp() }));
+    tx.update(tRef, { status: "started", finalPassengers: n, finalPrice: price, bookingIds: live.map((s) => s.id), startedAt: FV.serverTimestamp() });
+    return { n, price, total: price * n };
+  });
+});
+
+// إنهاء الرحلة: كل الحجوزات تصبح مكتملة (الدفع نقداً من كل راكب)
+exports.completeSharedTrip = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "سجّل الدخول");
+  const tRef = db.collection("shared_trips").doc(String(req.data?.tripId || ""));
+  return db.runTransaction(async (tx) => {
+    const t = await tx.get(tRef);
+    if (!t.exists || t.data().driverId !== req.auth.uid) throw new HttpsError("permission-denied", "ليست رحلتك");
+    const T = t.data();
+    if (T.status !== "started") throw new HttpsError("failed-precondition", "الرحلة لم تنطلق");
+    const snaps = await Promise.all((T.bookingIds || []).map((id) => tx.get(db.collection("bookings").doc(id))));
+    snaps.filter((s) => s.exists && s.data().status === "shared_started").forEach((s) => tx.update(s.ref, { status: "completed", completedAt: FV.serverTimestamp() }));
+    tx.update(tRef, { status: "completed", completedAt: FV.serverTimestamp() });
+    return { ok: true };
+  });
+});
+
+// الراكب يلغي مقعده (قبل الانطلاق)
+exports.cancelSharedSeat = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "سجّل الدخول");
+  const bRef = db.collection("bookings").doc(String(req.data?.bookingId || ""));
+  await db.runTransaction(async (tx) => {
+    const b = await tx.get(bRef);
+    if (!b.exists || b.data().passengerId !== req.auth.uid) throw new HttpsError("permission-denied", "ليس طلبك");
+    const B = b.data();
+    if (!["shared_pending", "shared_booked"].includes(B.status)) throw new HttpsError("failed-precondition", "لا يمكن الإلغاء الآن");
+    if (B.status === "shared_booked" && B.tripId) {
+      const tRef = db.collection("shared_trips").doc(B.tripId), t = await tx.get(tRef);
+      if (t.exists && t.data().status === "open") tx.update(tRef, { seatsTaken: Math.max(0, t.data().seatsTaken - 1), bookingIds: FV.arrayRemove(bRef.id) });
+    }
+    tx.update(bRef, { status: "cancelled", cancelledAt: FV.serverTimestamp(), cancelledBy: "passenger" });
+  });
+  return { ok: true };
+});
+
+// السائق يلغي رحلته: الركاب يعودون لقائمة الطلبات ليجدوا سائقاً آخر
+exports.cancelSharedTrip = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "سجّل الدخول");
+  const tRef = db.collection("shared_trips").doc(String(req.data?.tripId || ""));
+  await db.runTransaction(async (tx) => {
+    const t = await tx.get(tRef);
+    if (!t.exists || t.data().driverId !== req.auth.uid) throw new HttpsError("permission-denied", "ليست رحلتك");
+    if (t.data().status !== "open") throw new HttpsError("failed-precondition", "لا يمكن الإلغاء بعد الانطلاق");
+    const snaps = await Promise.all((t.data().bookingIds || []).map((id) => tx.get(db.collection("bookings").doc(id))));
+    snaps.filter((s) => s.exists && s.data().status === "shared_booked").forEach((s) => tx.update(s.ref, { status: "shared_pending", tripId: FV.delete(), driverId: FV.delete(), driverInfo: FV.delete() }));
+    tx.update(tRef, { status: "cancelled", cancelledAt: FV.serverTimestamp() });
+  });
+  return { ok: true };
+});
