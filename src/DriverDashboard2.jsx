@@ -8,6 +8,8 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import { ShareButton, TierProgress } from "./ReferralShare";
 import { Avatar } from "./ProfilePhoto";
 import { RideCodeGate, TagPicker } from "./TripKit";
+import { useRegions, isEnabled, codeOfLabel } from "./Wilayas";
+import { DriverSharedHub } from "./SharedTrips";
 import { useChatAlert, ChatBadge, ChatToast, PhoneButton } from "./ChatNotify";
 import { useAccountBlock, AccountBlockedScreen } from "./AccountGuard";
 import { EarningsPro, MissionsScreen, DemandMap } from "./DriverFinance";
@@ -1009,6 +1011,8 @@ export default function DriverDashboard({ user, onLogout }) {
   usePricing();
   const {isLoaded}=useJsApiLoader({googleMapsApiKey:process.env.REACT_APP_GOOGLE_MAPS_KEY||"",libraries:LIBRARIES,language:"ar",region:"DZ"});
   const {status,data,loading}=useDriverStatus(user?.uid);
+  const regions=useRegions();
+  const regionOff=!!(regions.restrict&&codeOfLabel(data?.wilaya)&&!isEnabled(regions,codeOfLabel(data?.wilaya)));
   const [passengerPrefill,setPassengerPrefill]=useState(null);
   const [prefillLoading,setPrefillLoading]=useState(true);
   useEffect(()=>{
@@ -1096,7 +1100,7 @@ export default function DriverDashboard({ user, onLogout }) {
 
   // تفعيل الاتصال تلقائياً
   useEffect(()=>{
-    if(status!=="approved"||!user?.uid) return;
+    if(status!=="approved"||!user?.uid||regionOff) return;
     const goOnline=async()=>{
       setOnline(true);
       navigator.geolocation?.getCurrentPosition(async pos=>{
@@ -1107,7 +1111,7 @@ export default function DriverDashboard({ user, onLogout }) {
     };
     goOnline();
     return()=>{ if(user?.uid) setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true}).catch(()=>{}); };
-  },[status,user?.uid]);
+  },[status,user?.uid,regionOff]);
 
   // استعادة الرحلة الجارية إذا كانت موجودة (مثلاً بعد الرجوع من تطبيق خرائط خارجي أدى لإغلاق التطبيق)
   useEffect(()=>{
@@ -1139,6 +1143,7 @@ export default function DriverDashboard({ user, onLogout }) {
 
   const toggleOnline=async()=>{
     unlockAudio();
+    if(!online&&regionOff) return;
     const n=!online; setOnline(n);
     try { navigator.geolocation?.getCurrentPosition(async pos=>{ const loc={lat:pos.coords.latitude,lng:pos.coords.longitude};if(n)setDriverLocation(loc);await setDoc(doc(db,"drivers",user.uid),{isOnline:n,location:n?loc:null},{merge:true}); },async()=>{ await setDoc(doc(db,"drivers",user.uid),{isOnline:n},{merge:true}); }); } catch(e){}
   };
@@ -1185,6 +1190,7 @@ export default function DriverDashboard({ user, onLogout }) {
   },[online]);
   const [showMissions,setShowMissions]=useState(false);
   const [showDemand,setShowDemand]=useState(false);
+  const [showShared,setShowShared]=useState(false);
   const [showCodeGate,setShowCodeGate]=useState(false);
   const chatAlert=useChatAlert({ bookingId:acceptedBooking?.id, userId:user?.uid, open:showChat });
   const block=useAccountBlock("drivers",user?.uid);
@@ -1230,6 +1236,7 @@ export default function DriverDashboard({ user, onLogout }) {
   if(showWallet) return <DriverWalletScreen uid={user?.uid} driverData={data} onBack={()=>setShowWallet(false)} onOpenEarnings={()=>{setShowWallet(false);setShowEarnings(true);}} />;
   if(showEarnings) return <EarningsPro C={C} uid={user?.uid} driverData={data} onBack={()=>setShowEarnings(false)} />;
   if(showMissions) return <MissionsScreen C={C} uid={user?.uid} onBack={()=>setShowMissions(false)} />;
+  if(showShared) return <DriverSharedHub user={user} driverData={data} regions={regions} estimate={km=>calcPrice(km,"economy")} onBack={()=>setShowShared(false)} />;
   if(showDemand) return <DemandMap C={C} driverLocation={driverLocation} onBack={()=>setShowDemand(false)} />;
   if(showSubscription) return <SubscriptionScreen uid={user?.uid} driverData={data} subscriptionEnabled={false} onBack={()=>setShowSubscription(false)} />;
 
@@ -1314,8 +1321,9 @@ export default function DriverDashboard({ user, onLogout }) {
               </div>
             ))}
           </div>
-          <div style={{ padding:"10px 20px 0",display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10 }}>
-            {[["🎯","المهام",()=>setShowMissions(true)],["🔥","مناطق الطلب",()=>setShowDemand(true)],["🔔","اختبر الصوت",()=>{unlockAudio();alertNewBooking();}]].map(([ic,l,f],i)=>(
+          {regionOff&&<div style={{ margin:"10px 20px 0",background:"#3a2b00",border:"1px solid #8a6a00",borderRadius:14,padding:"12px 14px",fontSize:13,color:"#ffd978",lineHeight:1.7 }}>🚧 التطبيق غير مفعّل بعد في ولايتك ({data?.wilaya}). سنعلمك فور بدء الخدمة فيها.</div>}
+          <div style={{ padding:"10px 20px 0",display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8 }}>
+            {[["🚐","تشاركية",()=>setShowShared(true)],["🎯","المهام",()=>setShowMissions(true)],["🔥","مناطق الطلب",()=>setShowDemand(true)],["🔔","اختبر الصوت",()=>{unlockAudio();alertNewBooking();}]].map(([ic,l,f],i)=>(
               <button key={i} onClick={f} style={{ background:C.card,border:"none",boxShadow:"0 2px 14px rgba(0,0,0,0.07)",borderRadius:18,padding:"14px 4px",color:C.text,fontFamily:"inherit",fontWeight:800,fontSize:12,cursor:"pointer" }}><div style={{ fontSize:22,marginBottom:4 }}>{ic}</div>{l}</button>
             ))}
           </div>
