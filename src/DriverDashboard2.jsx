@@ -31,13 +31,14 @@ const C = {
   text:"#ffffff", textMuted:"#c7a9ae", textLight:"#9a7f85",
 };
 
-const PRICING={ perKm:30, base:40, min:100, mult:{ economy:1, comfort:1.4, xl:1.8 } };
+const PRICING={ perKm:30, base:40, min:100, perMin:0, surge:1, trafficK:1, trafficMax:1.5, mult:{ economy:1, comfort:1.4, xl:1.8 } };
 const pricingListeners=new Set();
 try{ onSnapshot(doc(db,"settings","pricing"),snap=>{ if(!snap.exists())return; const d=snap.data();
-  if(d.perKm>0)PRICING.perKm=d.perKm; if(d.base>=0)PRICING.base=d.base; if(d.min>0)PRICING.min=d.min; if(d.mult)PRICING.mult={...PRICING.mult,...d.mult};
+  if(d.perKm>0)PRICING.perKm=d.perKm; if(d.base>=0)PRICING.base=d.base; if(d.min>0)PRICING.min=d.min; if(d.perMin>=0)PRICING.perMin=d.perMin; if(d.surge>=1)PRICING.surge=d.surge; if(d.trafficK>=0)PRICING.trafficK=d.trafficK; if(d.trafficMax>=1)PRICING.trafficMax=d.trafficMax; if(d.mult)PRICING.mult={...PRICING.mult,...d.mult};
   pricingListeners.forEach(f=>f()); },()=>{}); }catch(e){}
 const usePricing=()=>{ const [,setV]=useState(0); useEffect(()=>{ const f=()=>setV(v=>v+1); pricingListeners.add(f); return ()=>pricingListeners.delete(f); },[]); };
-const calcPrice=(km,rideType)=>{ if(!km||km<=0) return PRICING.min; const p=Math.round((PRICING.base+km*PRICING.perKm)*(PRICING.mult[rideType]||1)); return km<2?Math.max(p,PRICING.min):p; };
+const autoSurge=(r)=>{ const k=PRICING.trafficK,mx=PRICING.trafficMax; if(!(r>1.2)||!(mx>1)) return 1; return Math.min(mx,1+(r-1.2)*k); };
+const calcPrice=(km,rideType,minutes=0,ratio=1)=>{ if(!km||km<=0) return PRICING.min; const p=Math.round((PRICING.base+km*PRICING.perKm+(minutes||0)*(PRICING.perMin||0))*(PRICING.mult[rideType]||1)*(PRICING.surge||1)*autoSurge(ratio)/10)*10; return km<2?Math.max(p,PRICING.min):p; };
 const getDistKm=(lat1,lng1,lat2,lng2)=>{ const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2; return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); };
 const openNavigation=(lat,lng)=>window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving&dir_action=navigate`,"_blank");
 
@@ -1236,7 +1237,7 @@ export default function DriverDashboard({ user, onLogout }) {
   if(showWallet) return <DriverWalletScreen uid={user?.uid} driverData={data} onBack={()=>setShowWallet(false)} onOpenEarnings={()=>{setShowWallet(false);setShowEarnings(true);}} />;
   if(showEarnings) return <EarningsPro C={C} uid={user?.uid} driverData={data} onBack={()=>setShowEarnings(false)} />;
   if(showMissions) return <MissionsScreen C={C} uid={user?.uid} onBack={()=>setShowMissions(false)} />;
-  if(showShared) return <DriverSharedHub user={user} driverData={data} regions={regions} estimate={km=>calcPrice(km,"economy")} onBack={()=>setShowShared(false)} />;
+  if(showShared) return <DriverSharedHub user={user} driverData={data} regions={regions} estimate={km=>calcPrice(km,"economy",Math.round(km/70*60))} onBack={()=>setShowShared(false)} />;
   if(showDemand) return <DemandMap C={C} driverLocation={driverLocation} onBack={()=>setShowDemand(false)} />;
   if(showSubscription) return <SubscriptionScreen uid={user?.uid} driverData={data} subscriptionEnabled={false} onBack={()=>setShowSubscription(false)} />;
 
@@ -1408,7 +1409,7 @@ export default function DriverDashboard({ user, onLogout }) {
                         {r.luggageWeight&&` · 🧳 ${r.luggageWeight==="less25"?"<25كغ":r.luggageWeight==="25to40"?"25-40كغ":">40كغ"}`}
                       </div>
                       {r.luggageDesc&&<div style={{ fontSize:11,color:C.textMuted }}>📦 {r.luggageDesc}</div>}
-                      <div style={{ fontSize:11,color:(r.originalPrice||r.price)>=calcPrice(r.distanceKm,r.rideType)?C.green:C.red,marginTop:3 }}>المعيار: {calcPrice(r.distanceKm,r.rideType)} دج {(r.originalPrice||r.price)>=calcPrice(r.distanceKm,r.rideType)?"✅":"⚠️"}</div>
+                      <div style={{ fontSize:11,color:(r.originalPrice||r.price)>=calcPrice(r.distanceKm,r.rideType,r.durationMin,r.trafficRatio)?C.green:C.red,marginTop:3 }}>المعيار: {calcPrice(r.distanceKm,r.rideType,r.durationMin,r.trafficRatio)} دج {(r.originalPrice||r.price)>=calcPrice(r.distanceKm,r.rideType,r.durationMin,r.trafficRatio)?"✅":"⚠️"}</div>
                     </div>
                     </div>
                     <div style={{ textAlign:"left" }}>
