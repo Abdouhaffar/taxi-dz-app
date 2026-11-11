@@ -1001,7 +1001,7 @@ exports.publishSharedTrip = onCall({ region: "europe-west1" }, async (req) => {
   const p = { perKm: 30, base: 40, min: 100, ...ps };
   const a = wByCode(fromCode), b = wByCode(toCode);
   const km = Math.round(hav(a.lat, a.lng, b.lat, b.lng) * 1.25);
-  const baseTotal = Math.max(p.min, Math.round((p.base + km * p.perKm) * ((p.mult || {}).economy || 1)));
+  const baseTotal = Math.max(p.min, Math.round(((p.base + km * p.perKm + Math.round(km / 70 * 60) * (p.perMin || 0)) * ((p.mult || {}).economy || 1) * (p.surge || 1)) / 10) * 10);
   const ref = await db.collection("shared_trips").add({
     driverId: uid, driverInfo: driverCard(dr, uid), fromCode, toCode, fromName: a.n, toName: b.n,
     originLat: a.lat, originLng: a.lng, destLat: b.lat, destLng: b.lng, km, baseTotal, uplift: R.uplift,
