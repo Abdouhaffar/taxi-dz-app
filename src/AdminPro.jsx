@@ -1,5 +1,6 @@
 /* eslint-disable */
 // لوحة الإدارة المتقدمة: لوحة معلومات حقيقية، عمليات مباشرة، سجل الرحلات، الطوارئ، بحث شامل
+import { WILAYA_LIST } from "./Wilayas";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from "@react-google-maps/api";
 import { doc, updateDoc, setDoc, deleteDoc, addDoc, collection, Timestamp, serverTimestamp, onSnapshot, arrayUnion, increment } from "firebase/firestore";
@@ -1118,3 +1119,75 @@ export const adminProStyles = `
   @keyframes adminPulse{0%,100%{box-shadow:0 0 0 0 rgba(248,81,73,.45)}50%{box-shadow:0 0 0 8px rgba(248,81,73,0)}}
   @keyframes adminSlide{from{transform:translateX(-40px);opacity:0}to{transform:none;opacity:1}}
 `;
+
+// ============ المناطق: التحكم بالولايات التي يعمل فيها التطبيق + إعدادات بين المدن ============
+export function RegionsPanel({ db, adminName, canEdit }) {
+  const [s, setS] = useState({ restrict: false, enabled: [], intercityKm: 40, uplift: 20, maxSeatsLimit: 6 });
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [q, setQ] = useState("");
+  useEffect(() => onSnapshot(doc(db, "settings", "regions"), (d) => { if (d.exists()) setS((x) => ({ ...x, ...d.data() })); setLoaded(true); }, () => setLoaded(true)), [db]);
+  const toggle = (c) => setS((x) => ({ ...x, enabled: x.enabled.includes(c) ? x.enabled.filter((y) => y !== c) : [...x.enabled, c] }));
+  const START = ["55", "57", "39", "30"]; // تقرت، المغير، الوادي، ورقلة
+  const valid = +s.intercityKm >= 5 && +s.uplift >= 0 && +s.uplift <= 100 && +s.maxSeatsLimit >= 2 && +s.maxSeatsLimit <= 8 && (!s.restrict || s.enabled.length > 0);
+  const save = async () => {
+    setSaving(true); setMsg("");
+    try {
+      await setDoc(doc(db, "settings", "regions"), { restrict: !!s.restrict, enabled: s.enabled, intercityKm: +s.intercityKm, uplift: +s.uplift, maxSeatsLimit: +s.maxSeatsLimit, updatedAt: serverTimestamp(), updatedBy: adminName || "" });
+      setMsg("✅ تم الحفظ — يسري فوراً عند الركاب والسائقين");
+    } catch (e) { setMsg("❌ " + (e.code === "permission-denied" ? "قواعد Firestore تمنع الكتابة في settings" : e.message)); }
+    setSaving(false);
+  };
+  const list = WILAYA_LIST.filter((w) => !q || w.n.includes(q) || w.c.includes(q));
+  const Num = ({ label, k, unit, min, max }) => (
+    <label style={{ display: "block", marginBottom: 12 }}>
+      <div style={{ fontSize: 12, color: T.muted, marginBottom: 6, fontWeight: 600 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, background: T.panel2, border: `1px solid ${T.border}`, borderRadius: 12, padding: "0 12px" }}>
+        <input type="number" min={min} max={max} disabled={!canEdit} value={s[k]} onChange={(e) => setS((x) => ({ ...x, [k]: e.target.value }))} style={{ flex: 1, background: "none", border: "none", outline: "none", color: T.text, fontFamily: "inherit", fontSize: 18, fontWeight: 800, padding: "10px 0", direction: "ltr", textAlign: "right" }} />
+        <span style={{ color: T.dim, fontSize: 12 }}>{unit}</span>
+      </div>
+    </label>
+  );
+  return (
+    <div>
+      <PageTitle title="🗺️ المناطق" sub="اختر الولايات التي يعمل فيها التطبيق، وأعدّ الرحلات التشاركية بين المدن" />
+      {!loaded ? <Empty icon="⏳" text="جارٍ التحميل…" /> : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 14 }}>
+          <Card>
+            <label style={{ display: "flex", alignItems: "center", gap: 12, cursor: canEdit ? "pointer" : "default", marginBottom: 14 }}>
+              <input type="checkbox" disabled={!canEdit} checked={!!s.restrict} onChange={(e) => setS((x) => ({ ...x, restrict: e.target.checked }))} style={{ width: 22, height: 22, accentColor: T.brand }} />
+              <div><div style={{ fontWeight: 800, color: T.text }}>حصر التطبيق في الولايات المحددة</div><div style={{ fontSize: 11, color: T.muted }}>{s.restrict ? "الركاب والسائقون خارج الولايات المفعّلة لا يستطيعون الطلب أو الاتصال" : "متوقف: التطبيق يعمل في كل الولايات"}</div></div>
+            </label>
+            <div style={{ fontWeight: 800, color: T.text, margin: "10px 0 10px" }}>إعدادات بين المدن والتشاركية</div>
+            <Num label="مسافة تعتبر «بين المدن» (إن اختلفت الولاية فهي بين مدن دائماً)" k="intercityKm" unit="كم" min={5} />
+            <Num label="النسبة الإضافية في التشاركية" k="uplift" unit="%" min={0} max={100} />
+            <Num label="أقصى عدد مقاعد يمكن للسائق تحديده" k="maxSeatsLimit" unit="مقعد" min={2} max={8} />
+            <div style={{ background: T.panel2, borderRadius: 12, padding: 12, fontSize: 12, color: T.muted, lineHeight: 1.9, marginBottom: 12 }}>
+              مثال لرحلة 3000 دج: راكب واحد = <b style={{ color: T.text }}>3000</b> · راكبان = <b style={{ color: T.text }}>{Math.round((3000 / 2) * (1 + s.uplift / 100) / 10) * 10}</b> لكل فرد · ثلاثة = <b style={{ color: T.text }}>{Math.round((3000 / 3) * (1 + s.uplift / 100) / 10) * 10}</b> لكل فرد
+            </div>
+            {canEdit ? <button onClick={save} disabled={saving || !valid} style={{ width: "100%", background: valid ? T.brand : T.border, border: "none", color: "#fff", borderRadius: 12, padding: 13, fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>{saving ? "جارٍ الحفظ…" : "حفظ"}</button> : <div style={{ color: T.muted, fontSize: 12 }}>التعديل للأدمن الرئيسي فقط</div>}
+            {s.restrict && !s.enabled.length && <div style={{ color: T.bad, fontSize: 12, marginTop: 8 }}>اختر ولاية واحدة على الأقل</div>}
+            {msg && <div style={{ marginTop: 10, fontSize: 13, color: msg.startsWith("✅") ? T.ok : T.bad }}>{msg}</div>}
+          </Card>
+          <Card>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontWeight: 800, color: T.text }}>الولايات المفعّلة ({s.enabled.length})</div>
+              {canEdit && <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => setS((x) => ({ ...x, restrict: true, enabled: START }))} style={{ background: T.panel2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "6px 10px", fontFamily: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>البداية: تقرت · المغير · الوادي · ورقلة</button>
+                <button onClick={() => setS((x) => ({ ...x, enabled: [] }))} style={{ background: T.panel2, border: `1px solid ${T.border}`, color: T.muted, borderRadius: 10, padding: "6px 10px", fontFamily: "inherit", fontSize: 11, cursor: "pointer" }}>مسح</button>
+              </div>}
+            </div>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 بحث عن ولاية" style={{ width: "100%", background: T.panel2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "9px 12px", color: T.text, fontFamily: "inherit", marginBottom: 10, outline: "none" }} />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, maxHeight: 420, overflowY: "auto" }}>
+              {list.map((w) => { const on = s.enabled.includes(w.c); return (
+                <button key={w.c} disabled={!canEdit} onClick={() => toggle(w.c)} style={{ background: on ? T.brand : T.panel2, color: on ? "#fff" : T.text, border: `1px solid ${on ? T.brand : T.border}`, borderRadius: 20, padding: "7px 13px", fontFamily: "inherit", fontSize: 12.5, fontWeight: 700, cursor: canEdit ? "pointer" : "default" }}>{on ? "✓ " : ""}{w.c} · {w.n}</button>
+              ); })}
+            </div>
+            <div style={{ fontSize: 11, color: T.dim, marginTop: 10, lineHeight: 1.7 }}>تُحدَّد ولاية الراكب من موقعه بأقرب مركز ولاية (تقريبي)، وولاية السائق من التي سجّلها في حسابه.</div>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
