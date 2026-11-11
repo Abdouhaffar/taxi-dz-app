@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { DashboardPro, LiveOps, RidesPanel, SafetyPanel, GlobalSearch, PricingPanel, PromosPanel, MissionsAdmin, ComplaintsPro, AccountsPanel, adminProStyles, useIsMobile } from "./AdminPro";
+import { DashboardPro, LiveOps, RidesPanel, SafetyPanel, GlobalSearch, PricingPanel, RegionsPanel, PromosPanel, MissionsAdmin, ComplaintsPro, AccountsPanel, adminProStyles, useIsMobile } from "./AdminPro";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
@@ -176,6 +176,7 @@ function Sidebar({ tab, setTab, admin, onLogout, counts, isMobile, open, onClose
     { id: "passengers", icon: "👥", label: "الركاب" },
     ...(isSuperAdmin ? [{ id: "admins", icon: "🛡️", label: "الأدمنات", badge: counts.pendingAdmins }] : []),
     { id: "pricing", icon: "💰", label: "التسعير" },
+    { id: "regions", icon: "🗺️", label: "المناطق" },
     { id: "missions", icon: "🎯", label: "المهام والحوافز" },
     { id: "accounts", icon: "⛔", label: "الحسابات والإيقاف" },
     { id: "promos", icon: "🎟️", label: "العروض والخصومات" },
@@ -1112,6 +1113,7 @@ export default function AdminApp() {
         {tab === "live" && <LiveOps bookings={bookings} drivers={drivers} sos={sos} isMobile={isMobile} />}
         {tab === "rides" && <RidesPanel bookings={bookings} isMobile={isMobile} />}
         {tab === "pricing" && <PricingPanel db={db} adminName={admin.name} canEdit={admin.role === "super"} />}
+        {tab === "regions" && <RegionsPanel db={db} adminName={admin.name} canEdit={admin.role === "super"} />}
         {tab === "missions" && <MissionsAdmin db={db} canEdit={admin.role === "super"} />}
         {tab === "promos" && <PromosPanel db={db} canEdit={admin.role === "super"} />}
         {tab === "safety" && <SafetyPanel sos={sos} db={db} isMobile={isMobile} />}
