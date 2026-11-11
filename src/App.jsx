@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { auth, db, requestNotificationPermission, onForegroundMessage } from "./firebase";
 import { playPing } from "./Sound";
 import LangDropdown from "./LangDropdown";
+import { C, useThemeMode, themeIcon } from "./Theme";
 import { LegalLinks, SupportButton, OfflineBanner } from "./Legal";
 import { useRegions, wilayaOf, isEnabled } from "./Wilayas";
 import { SharedModeBox, SharedTripPicker, SharedTripScreen, ActiveSharedBanner, createSharedBooking, joinTrip } from "./SharedTrips";
@@ -241,18 +242,7 @@ const MAP_STYLE = [
   { featureType:"water", elementType:"geometry", stylers:[{color:"#c9d6df"}] },
 ];
 
-const C = {
-  bg:"#f5f5f7", page:"#f5f5f7", brand:"linear-gradient(180deg,#0b1d4a 0%,#2d2a6e 24%,#8a3f86 50%,#e0507a 76%,#f59a4a 100%)", card:"#ffffff", dark:"#1c1a1d",
-  green:"#c4001d", greenLight:"#fde8eb", greenDark:"#8f0015",
-  orange:"#e0334d", orangeLight:"#fde8eb",
-  red:"#ef4444", redLight:"#fef2f2",
-  blue:"#1c1a1d", blueLight:"#f3e6e8",
-  yellow:"#e0334d", yellowLight:"#fde8eb",
-  gold:"#ff5a70", goldLight:"#fde8eb",
-  googleBlue:"#1c1a1d",
-  text:"#1c1a1d", textMuted:"#6e6469", textLight:"#a89ca1",
-  border:"#ebebef", shadow:"0 2px 18px rgba(20,16,18,0.07)",
-};
+
 
 const OTP_LEN = 4; // smssak يرسل رمزاً من 4 أرقام
 
@@ -392,7 +382,7 @@ function PasswordResetModal({ onClose, lang }) {
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,marginBottom:12 }}>{error}</div>}
             <div style={{ display:"flex",gap:10 }}>
               <button onClick={onClose} style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:14,color:C.textMuted,fontFamily:"inherit",fontWeight:600,cursor:"pointer" }}>{lang==="ar"?"إلغاء":"Annuler"}</button>
-              <button onClick={handleReset} disabled={loading} style={{ flex:2,background:`linear-gradient(135deg,${C.blue},#8f0015)`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",opacity:loading?0.7:1 }}>
+              <button onClick={handleReset} disabled={loading} style={{ flex:2,background:`linear-gradient(135deg,${C.blue},#5b3fe6)`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",opacity:loading?0.7:1 }}>
                 {loading?"...":t.sendReset}
               </button>
             </div>
@@ -511,7 +501,7 @@ function ChatBox({ bookingId, userId, userName, otherName, lang, onClose }) {
       </div>
 
       {/* Input */}
-      <div style={{ background:"#fff",padding:"12px 16px",borderTop:`1px solid ${C.border}`,display:"flex",gap:10,alignItems:"center" }}>
+      <div style={{ background:C.card,padding:"12px 16px",borderTop:`1px solid ${C.border}`,display:"flex",gap:10,alignItems:"center" }}>
         <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder={t.typeMessage}
           style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:24,padding:"12px 18px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:isRTL?"rtl":"ltr" }} />
         <button onClick={sendMsg} disabled={!text.trim()} style={{ width:46,height:46,borderRadius:"50%",background:text.trim()?`${C.dark}`:C.border,border:"none",cursor:text.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0 }}>
@@ -562,9 +552,9 @@ function WalletScreen({ userId, passengerData, lang, onBack }) {
 
       {/* Points card */}
       <div style={{ margin:"0 20px 14px",background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,borderRadius:24,padding:24,color:C.text,position:"relative",overflow:"hidden" }}>
-        <div style={{ position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:"#ff5a7022" }} />
-        <div style={{ fontSize:13,color:"#ff5a7099",marginBottom:4 }}>{lang==="ar"?"نقاطك المتراكمة":"Vos points accumulés"}</div>
-        <div style={{ fontSize:48,fontWeight:900,color:"#ff5a70" }}>⭐ {points}</div>
+        <div style={{ position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:(C.green+"22") }} />
+        <div style={{ fontSize:13,color:(C.green+"99"),marginBottom:4 }}>{lang==="ar"?"نقاطك المتراكمة":"Vos points accumulés"}</div>
+        <div style={{ fontSize:48,fontWeight:900,color:C.green }}>⭐ {points}</div>
         <div style={{ fontSize:12,color:"#ffffff55",marginTop:4 }}>{lang==="ar"?"نقطة = 1 دج خصم على رحلتك القادمة":"1 point = 1 DA discount on next trip"}</div>
         <div style={{ display:"flex",gap:16,marginTop:16 }}>
           <div style={{ textAlign:"center" }}>
@@ -633,7 +623,7 @@ function SOSButton({ passengerName, bookingId }) {
     setTimeout(()=>setPressed(false),3000);
   };
   return (
-    <button onClick={handleSOS} style={{ position:"fixed",bottom:100,left:20,width:56,height:56,borderRadius:"50%",background:pressed?"#dc2626":C.red,border:"none",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:900,boxShadow:"0 4px 20px rgba(239,68,68,0.5)",zIndex:500,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,fontFamily:"inherit",animation:"pulse-sos 2s infinite" }}>
+    <button onClick={handleSOS} style={{ position:"fixed",bottom:100,left:20,width:56,height:56,borderRadius:"50%",background:pressed?C.red:C.red,border:"none",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:900,boxShadow:"0 4px 20px rgba(239,68,68,0.5)",zIndex:500,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,fontFamily:"inherit",animation:"pulse-sos 2s infinite" }}>
       <span style={{ fontSize:20 }}>🆘</span><span>SOS</span>
       <style>{`@keyframes pulse-sos{0%,100%{box-shadow:0 4px 20px rgba(239,68,68,0.5)}50%{box-shadow:0 4px 32px rgba(239,68,68,0.9)}}`}</style>
     </button>
@@ -733,7 +723,7 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
       <LangDropdown lang={lang} setLang={setLang} />
       <div style={{ height:38 }} />
       <div style={{ fontSize:34,fontWeight:700,color:"#fff",marginBottom:6,letterSpacing:3,animation:"wordRise 0.7s ease 0.25s both",textShadow:"0 2px 12px rgba(0,0,0,0.5)" }}>AL-BURAQ</div>
-      <div style={{ fontSize:13,color:"#ff5a70",marginBottom:36,fontWeight:600,animation:"wordRise 0.7s ease 0.35s both",textShadow:"0 1px 8px rgba(0,0,0,0.6)" }}>{t.appTagline}</div>
+      <div style={{ fontSize:13,color:C.green,marginBottom:36,fontWeight:600,animation:"wordRise 0.7s ease 0.35s both",textShadow:"0 1px 8px rgba(0,0,0,0.6)" }}>{t.appTagline}</div>
 
       {/* حساب واحد للاتجاهين */}
       <div style={{ background:"#ffffff0d",borderRadius:"4px 18px 18px 18px",padding:"11px 20px",marginBottom:26,border:"1px solid #ffffff1f",textAlign:"center",animation:"wordRise 0.7s ease 0.4s both" }}>
@@ -745,17 +735,17 @@ function WelcomeScreen({ onSelect, lang, setLang }) {
       </div>
 
       <div style={{ width:"100%",maxWidth:340,display:"flex",flexDirection:"column",gap:12 }}>
-        <button onClick={()=>onSelect("passenger")} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:22,padding:"20px 24px",color:"#fff",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,boxShadow:"0 10px 28px rgba(196,0,29,0.4)",animation:"ctaRise 0.6s ease 0.5s both" }}>
+        <button onClick={()=>onSelect("passenger")} style={{ background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:22,padding:"20px 24px",color:"#fff",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,boxShadow:"0 10px 28px rgba(124,92,252,0.4)",animation:"ctaRise 0.6s ease 0.5s both" }}>
           <span style={{ fontSize:38 }}>🧑</span>
           <div style={{ textAlign:isRTL?"right":"left" }}>
             <div style={{ fontWeight:700,fontSize:18 }}>{t.passenger}</div>
             <div style={{ fontSize:12,opacity:0.85 }}>{t.passengerSub}</div>
           </div>
         </button>
-        <button onClick={()=>onSelect("driver")} style={{ background:"#ffffff0f",border:"1.5px solid #ff5a7055",borderRadius:22,padding:"16px 24px",color:"#fff",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,animation:"ctaRise 0.6s ease 0.6s both" }}>
+        <button onClick={()=>onSelect("driver")} style={{ background:"#ffffff0f",border:`1.5px solid ${C.green}55`,borderRadius:22,padding:"16px 24px",color:"#fff",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:16,animation:"ctaRise 0.6s ease 0.6s both" }}>
           <span style={{ fontSize:32 }}>👨‍✈️</span>
           <div style={{ textAlign:isRTL?"right":"left" }}>
-            <div style={{ fontWeight:700,fontSize:16,color:"#ff5a70" }}>{t.driver}</div>
+            <div style={{ fontWeight:700,fontSize:16,color:C.green }}>{t.driver}</div>
             <div style={{ fontSize:12,opacity:0.75 }}>{t.driverSub}</div>
           </div>
         </button>
@@ -777,15 +767,15 @@ function OtpVerifyingGrid({ digits }) {
         @keyframes otpFly{from{transform:translate(var(--dx),var(--dy))}to{transform:none}}
         @keyframes otpWireH{from{transform:scaleX(0)}to{transform:scaleX(1)}}
         @keyframes otpWireV{from{transform:scaleY(0)}to{transform:scaleY(1)}}
-        @keyframes otpGlow{0%,100%{box-shadow:0 0 0 0 rgba(196,0,29,0.0)}50%{box-shadow:0 0 18px 3px rgba(196,0,29,0.45)}}
+        @keyframes otpGlow{0%,100%{box-shadow:0 0 0 0 rgba(124,92,252,0.0)}50%{box-shadow:0 0 18px 3px rgba(124,92,252,0.45)}}
         @keyframes otpBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
       `}</style>
       <div style={{ position:"relative",width:152,height:144,animation:"otpBreath 1.6s ease-in-out 1.3s infinite" }}>
         {[[56,28,40,2,"H"],[56,112,40,2,"H"],[27,60,2,24,"V"],[123,60,2,24,"V"]].map(([l,t,w,h,d],k)=>(
-          <div key={k} style={{ position:"absolute",left:l,top:t,width:w,height:h,background:C.red,borderRadius:2,boxShadow:"0 0 8px rgba(196,0,29,0.7)",transformOrigin:d==="H"?"left center":"center top",animation:`${d==="H"?"otpWireH":"otpWireV"} 0.4s ease ${0.7+k*0.12}s both` }} />
+          <div key={k} style={{ position:"absolute",left:l,top:t,width:w,height:h,background:C.red,borderRadius:2,boxShadow:"0 0 8px rgba(124,92,252,0.7)",transformOrigin:d==="H"?"left center":"center top",animation:`${d==="H"?"otpWireH":"otpWireV"} 0.4s ease ${0.7+k*0.12}s both` }} />
         ))}
         {F.map(([x,y],i)=>(
-          <div key={i} style={{ "--dx":`${I[i]-x}px`,"--dy":`${42-y}px`,position:"absolute",left:x,top:y,width:56,height:60,borderRadius:14,background:"#fff",border:`2px solid ${C.red}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:900,fontFamily:"monospace",color:C.text,animation:`otpFly 0.65s cubic-bezier(.77,0,.18,1) both, otpGlow 1.4s ease ${1.1+i*0.12}s infinite` }}>{digits[i]}</div>
+          <div key={i} style={{ "--dx":`${I[i]-x}px`,"--dy":`${42-y}px`,position:"absolute",left:x,top:y,width:56,height:60,borderRadius:14,background:C.card,border:`2px solid ${C.red}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:900,fontFamily:"monospace",color:C.text,animation:`otpFly 0.65s cubic-bezier(.77,0,.18,1) both, otpGlow 1.4s ease ${1.1+i*0.12}s infinite` }}>{digits[i]}</div>
         ))}
       </div>
     </div>
@@ -823,7 +813,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
   const isRTL = lang === "ar";
   const isPassenger = role === "passenger";
   const accent = isPassenger ? C.green : C.orange;
-  const accentDark = isPassenger ? C.greenDark : "#8f0015";
+  const accentDark = isPassenger ? C.greenDark : C.greenDark;
 
   const [authTab, setAuthTab] = useState("login"); // login | register | reset
   const [phone, setPhone] = useState("");
@@ -1138,7 +1128,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
 
         {/* Tabs */}
         {step==="form"&&authTab!=="reset"&&(
-          <div style={{ background:"#e4e4e4",borderRadius:14,padding:4,display:"flex",marginBottom:16 }}>
+          <div style={{ background:C.border,borderRadius:14,padding:4,display:"flex",marginBottom:16 }}>
             {[
               {id:"login",label:lang==="ar"?"🔑 تسجيل الدخول":lang==="fr"?"🔑 Connexion":"🔑 Login"},
               {id:"register",label:lang==="ar"?"✅ حساب جديد":lang==="fr"?"✅ Inscription":"✅ Register"},
@@ -1253,7 +1243,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
             </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
             <button onClick={()=>sendOTP(resetPhone)} disabled={loading||resetPhone.replace(/\D/g,"").length<9}
-              style={{ background:resetPhone.replace(/\D/g,"").length>=9?`linear-gradient(135deg,${C.blue},#8f0015)`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+              style={{ background:resetPhone.replace(/\D/g,"").length>=9?`linear-gradient(135deg,${C.blue},#5b3fe6)`:C.border,border:"none",borderRadius:16,padding:16,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer",opacity:loading?0.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
               {loading?"...":`📨 ${lang==="ar"?"إرسال رمز التحقق":"Envoyer"}`}
             </button>
             <button onClick={()=>switchTab("login")} style={{ background:"none",border:"none",color:C.textMuted,fontFamily:"inherit",fontSize:13,cursor:"pointer",textAlign:"center" }}>
@@ -1282,7 +1272,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
                   onChange={e=>handleOtpChange(i,e.target.value)}
                   onKeyDown={e=>{ if(e.key==="Backspace"&&!digit&&i>0) otpRefs[i-1].current?.focus(); }}
                   maxLength={i===0?OTP_LEN:1} type="tel" inputMode="numeric" autoComplete={i===0?"one-time-code":"off"} onFocus={e=>e.target.select()}
-                  style={{ width:62,height:68,textAlign:"center",fontSize:24,fontWeight:900,fontFamily:"monospace",background:digit?"#fff":C.bg,border:`2px solid ${digit?C.red:C.border}`,boxShadow:digit?"0 0 0 4px rgba(196,0,29,0.10), 0 6px 16px rgba(196,0,29,0.18)":"none",transform:digit?"translateY(-2px)":"none",transition:"all 0.2s cubic-bezier(.2,.8,.2,1)",borderRadius:14,color:C.text,outline:"none" }} />
+                  style={{ width:62,height:68,textAlign:"center",fontSize:24,fontWeight:900,fontFamily:"monospace",background:digit?"#fff":C.bg,border:`2px solid ${digit?C.red:C.border}`,boxShadow:digit?"0 0 0 4px rgba(124,92,252,0.10), 0 6px 16px rgba(124,92,252,0.18)":"none",transform:digit?"translateY(-2px)":"none",transition:"all 0.2s cubic-bezier(.2,.8,.2,1)",borderRadius:14,color:C.text,outline:"none" }} />
               ))}
             </div>
             ):otpStage==="verifying"?<OtpVerifyingGrid digits={otp} />:<OtpSuccess lang={lang} />}
@@ -1709,19 +1699,19 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       {/* شريط علوي عائم */}
       <div style={{ position:"fixed",top:0,left:0,right:0,zIndex:20,padding:"14px 16px",display:"flex",flexDirection:isRTL?"row":"row-reverse",justifyContent:"space-between",alignItems:"center",pointerEvents:"none" }}>
         <div style={{ display:"flex",gap:10,pointerEvents:"auto" }}>
-          <button onClick={onLogout} aria-label="logout" style={{ width:46,height:46,borderRadius:"50%",background:"#fff",border:"none",boxShadow:"0 4px 16px rgba(0,0,0,0.18)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1c1a1d" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></button>
+          <button onClick={onLogout} aria-label="logout" style={{ width:46,height:46,borderRadius:"50%",background:C.card,border:"none",boxShadow:"0 4px 16px rgba(0,0,0,0.18)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></button>
         </div>
         <div style={{ width:46 }} />
       </div>
       {showPhoto&&<PhotoSheet photo={passengerData?.photoURL} name={passengerName} lang={lang==="fr"||lang==="en"?lang:"ar"} onSave={savePhoto} onClose={()=>setShowPhoto(false)} />}
       {/* اللوحة السفلية */}
-      <div style={{ position:"fixed",left:0,right:0,bottom:0,zIndex:20,background:"#fff",borderRadius:"28px 28px 0 0",boxShadow:"0 -10px 40px rgba(0,0,0,0.14)",padding:"10px 20px calc(env(safe-area-inset-bottom,0px) + 22px)",animation:"sheetUp .5s cubic-bezier(.2,.8,.2,1) both" }}>
+      <div style={{ position:"fixed",left:0,right:0,bottom:0,zIndex:20,background:C.card,borderRadius:"28px 28px 0 0",boxShadow:"0 -10px 40px rgba(0,0,0,0.14)",padding:"10px 20px calc(env(safe-area-inset-bottom,0px) + 22px)",animation:"sheetUp .5s cubic-bezier(.2,.8,.2,1) both" }}>
         <div style={{ width:40,height:4,borderRadius:2,background:"#d4d4d4",margin:"0 auto 14px" }} />
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
           <div style={{ display:"flex",alignItems:"center",gap:12 }}>
             <div onClick={()=>setShowPhoto(true)} style={{ position:"relative",cursor:"pointer" }}>
               <Avatar src={passengerData?.photoURL} name={passengerName} size={48} />
-              <div style={{ position:"absolute",bottom:-2,right:-2,width:20,height:20,borderRadius:"50%",background:"#111",color:"#fff",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #fff" }}>📷</div>
+              <div style={{ position:"absolute",bottom:-2,right:-2,width:20,height:20,borderRadius:"50%",background:C.dark,color:"#fff",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #fff" }}>📷</div>
             </div>
             <div>
               <div style={{ fontSize:13,color:C.textMuted }}>{t.hello}</div>
@@ -1733,10 +1723,10 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         <OffersBanner lang={lang==="fr"||lang==="en"?lang:"ar"} onUse={c=>{setPromoPrefill(c);setScreen("booking");}} />
         <ActiveSharedBanner uid={user?.uid} lang={L2} onOpen={id=>{setSharedBookingId(id);setScreen("shared");}} />
         <UpcomingRides userId={user?.uid} lang={lang==="fr"||lang==="en"?lang:"ar"} onResume={resumeBooking} />
-        <div onClick={()=>setScreen("booking")} style={{ background:"#f3f3f3",borderRadius:16,padding:"15px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",border:"1px solid #ececec" }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1c1a1d" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <div onClick={()=>setScreen("booking")} style={{ background:C.soft,borderRadius:16,padding:"15px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",border:`1px solid ${C.border}` }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
           <span style={{ fontSize:17,fontWeight:700,color:C.text,flex:1 }}>{t.whereGo}</span>
-          <span style={{ background:"#fff",borderRadius:20,padding:"6px 12px",fontSize:12,fontWeight:700,color:C.text,boxShadow:"0 1px 4px rgba(0,0,0,0.08)" }}>🕒 {lang==="ar"?"لاحقاً":lang==="fr"?"Plus tard":"Later"}</span>
+          <span style={{ background:C.card,borderRadius:20,padding:"6px 12px",fontSize:12,fontWeight:700,color:C.text,boxShadow:"0 1px 4px rgba(0,0,0,0.08)" }}>🕒 {lang==="ar"?"لاحقاً":lang==="fr"?"Plus tard":"Later"}</span>
         </div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:12 }}>
           {[
@@ -1780,7 +1770,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         <button onClick={handleGPS} disabled={gpsLoading} style={{ width:"100%",background:gpsLoading?C.border:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",marginBottom:8,fontFamily:"inherit",fontWeight:700,fontSize:14,color:gpsLoading?C.textMuted:C.greenDark }}>
           <span style={{ fontSize:18 }}>📍</span>{gpsLoading?t.locating:t.useMyLocation}
         </button>
-        {gpsError&&<div style={{ background:C.redLight||"#ef444422",border:"1px solid #ef444444",borderRadius:12,padding:"10px 14px",fontSize:12,color:"#ef4444",marginBottom:12,textAlign:"center" }}>{gpsError}</div>}
+        {gpsError&&<div style={{ background:C.redLight||(C.red+"22"),border:`1px solid ${C.red}44`,borderRadius:12,padding:"10px 14px",fontSize:12,color:C.red,marginBottom:12,textAlign:"center" }}>{gpsError}</div>}
         <div style={{ display:"flex",gap:8,marginBottom:12 }}>
           <button onClick={()=>setPickMode(pickMode==="origin"?null:"origin")} style={{ flex:1,background:pickMode==="origin"?C.green:C.card,border:`1px solid ${C.green}44`,borderRadius:12,padding:"10px",fontFamily:"inherit",fontWeight:700,fontSize:12,color:pickMode==="origin"?"#fff":C.green,cursor:"pointer" }}>
             📍 {lang==="ar"?"حدّد الانطلاق من الخريطة":lang==="fr"?"Départ sur la carte":"Pick pickup on map"}
@@ -1899,9 +1889,9 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       {!sharedOn&&<PromoBox price={offerPrice} rideType={rideType} applied={promo} onApply={setPromo} onClear={()=>setPromo(null)} initialCode={promoPrefill} lang={lang==="fr"||lang==="en"?lang:"ar"} />}
       <div style={{ margin:"0 20px" }}>
         {regionBlocked&&<div style={{ background:"#fff3cd",border:"1px solid #ffe08a",borderRadius:12,padding:"12px 14px",fontSize:13,color:"#7a5b00",marginBottom:12,textAlign:"center" }}>{regionMsg}</div>}
-        {restrictedMsg&&<div style={{ background:C.redLight||"#ef444422",border:"1px solid #ef444444",borderRadius:12,padding:"12px 14px",fontSize:13,color:"#ef4444",marginBottom:12,textAlign:"center" }}>{restrictedMsg}</div>}
+        {restrictedMsg&&<div style={{ background:C.redLight||(C.red+"22"),border:`1px solid ${C.red}44`,borderRadius:12,padding:"12px 14px",fontSize:13,color:C.red,marginBottom:12,textAlign:"center" }}>{restrictedMsg}</div>}
         {sharedOn&&<button onClick={()=>startShared(null)} disabled={sharedBusy||regionBlocked||!scheduleValid(scheduleAt)} style={{ width:"100%",background:regionBlocked||sharedBusy?C.border:`linear-gradient(135deg,${C.dark},#2b1a1e)`,border:"none",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:900,fontSize:16,cursor:"pointer" }}>🚐 {lang==="ar"?"أرسل طلباً تشاركياً":lang==="fr"?"Envoyer une demande partagée":"Send a shared request"}</button>}
-        {!sharedOn&&<button onClick={()=>startSearch(offerPrice)} disabled={submittingBooking||regionBlocked||!scheduleValid(scheduleAt)} style={{ width:"100%",background:submittingBooking?C.border:`linear-gradient(135deg,${C.dark},#2b1a1e)`,border:"1px solid #ff5a7033",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:17,cursor:submittingBooking?"default":"pointer",opacity:submittingBooking?0.7:1 }}>
+        {!sharedOn&&<button onClick={()=>startSearch(offerPrice)} disabled={submittingBooking||regionBlocked||!scheduleValid(scheduleAt)} style={{ width:"100%",background:submittingBooking?C.border:`linear-gradient(135deg,${C.dark},#2b1a1e)`,border:`1px solid ${C.green}33`,borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:17,cursor:submittingBooking?"default":"pointer",opacity:submittingBooking?0.7:1 }}>
           {scheduleAt?(lang==="ar"?"🗓️ احجز الرحلة":lang==="fr"?"🗓️ Planifier":"🗓️ Schedule ride"):t.sendOffer} — {promo?<><s style={{opacity:0.5}}>{offerPrice}</s> {Math.max(50,offerPrice-promo.discount)}</>:offerPrice} DA
         </button>}
       </div>
@@ -1914,7 +1904,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       {fcmToast&&<NotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showForceLogout&&<ForceLogoutModal lang={lang} onConfirm={handleForceLogout} onCancel={handleForceLogoutCancel} />}
       <TaxiMap origin={booking?.originPlace} destination={booking?.destPlace} showDrivers={true} />
-      <div style={{ margin:"-24px 0 0",position:"relative",zIndex:2,background:"#fff",borderRadius:"28px 28px 0 0",boxShadow:"0 -10px 40px rgba(0,0,0,0.12)",padding:"22px 20px 8px",animation:"sheetUp .5s cubic-bezier(.2,.8,.2,1) both" }}>
+      <div style={{ margin:"-24px 0 0",position:"relative",zIndex:2,background:C.card,borderRadius:"28px 28px 0 0",boxShadow:"0 -10px 40px rgba(0,0,0,0.12)",padding:"22px 20px 8px",animation:"sheetUp .5s cubic-bezier(.2,.8,.2,1) both" }}>
         <div style={{ margin:"0 auto 8px",width:120,height:120,position:"relative",display:"flex",alignItems:"center",justifyContent:"center" }}>
           {[0,1,2].map(i=><div key={i} style={{ position:"absolute",width:44+i*32,height:44+i*32,borderRadius:"50%",background:`${C.green}${i===0?"22":"14"}`,animation:"pg 2s ease-out infinite",animationDelay:`${i*0.5}s` }} />)}
           <div style={{ width:56,height:56,borderRadius:"50%",background:C.dark,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1,boxShadow:"0 8px 22px rgba(0,0,0,0.3)" }}>
@@ -1925,8 +1915,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         <div style={{ textAlign:"center",fontWeight:900,fontSize:19,color:C.text }}>{t.searching}</div>
         <div style={{ textAlign:"center",fontSize:12,color:C.textMuted,marginTop:3 }}>⏱ {timer}s</div>
         <div style={{ display:"flex",gap:10,margin:"16px 0 8px" }}>
-          <div style={{ flex:1,background:"#f3f3f3",borderRadius:14,padding:"10px 12px",textAlign:"center" }}><div style={{ fontSize:10,color:C.textMuted }}>{t.yourOffer2}</div><div style={{ fontWeight:900,fontSize:17,color:C.text }}>{booking?.price} DA</div></div>
-          <div style={{ flex:1,background:"#f3f3f3",borderRadius:14,padding:"10px 12px",textAlign:"center" }}><div style={{ fontSize:10,color:C.textMuted }}>{lang==="ar"?"المسافة":lang==="fr"?"Distance":"Distance"}</div><div style={{ fontWeight:900,fontSize:17,color:C.text }}>{booking?.distanceKm?.toFixed(1)} km</div></div>
+          <div style={{ flex:1,background:C.soft,borderRadius:14,padding:"10px 12px",textAlign:"center" }}><div style={{ fontSize:10,color:C.textMuted }}>{t.yourOffer2}</div><div style={{ fontWeight:900,fontSize:17,color:C.text }}>{booking?.price} DA</div></div>
+          <div style={{ flex:1,background:C.soft,borderRadius:14,padding:"10px 12px",textAlign:"center" }}><div style={{ fontSize:10,color:C.textMuted }}>{lang==="ar"?"المسافة":lang==="fr"?"Distance":"Distance"}</div><div style={{ fontWeight:900,fontSize:17,color:C.text }}>{booking?.distanceKm?.toFixed(1)} km</div></div>
         </div>
         <div style={{ display:"flex",gap:10,alignItems:"center",fontSize:12.5,color:C.text,padding:"6px 2px" }}>
           <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2 }}><span style={{ width:9,height:9,borderRadius:"50%",background:C.green }} /><span style={{ width:2,height:16,background:"#ddd" }} /><span style={{ width:9,height:9,borderRadius:2,background:C.dark }} /></div>
@@ -1938,7 +1928,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           <div style={{ fontSize:36,marginBottom:8 }}>😔</div>
           <div style={{ fontWeight:800,color:C.orange,fontSize:16,marginBottom:16 }}>{t.noDrivers}</div>
           <div style={{ display:"flex",gap:10 }}>
-            <button onClick={()=>{setOfferPrice(Math.round((booking?.price||suggestedPrice)*1.2));setScreen("offer");}} style={{ flex:1,background:`linear-gradient(135deg,${C.orange},#8f0015)`,border:"none",borderRadius:14,padding:"12px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:14 }}>{t.raisePrice}</button>
+            <button onClick={()=>{setOfferPrice(Math.round((booking?.price||suggestedPrice)*1.2));setScreen("offer");}} style={{ flex:1,background:`linear-gradient(135deg,${C.orange},#5b3fe6)`,border:"none",borderRadius:14,padding:"12px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:14 }}>{t.raisePrice}</button>
             <button onClick={cancelBooking} style={{ flex:1,background:C.redLight,border:"none",borderRadius:14,padding:"12px",color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14 }}>{t.cancel}</button>
           </div>
         </div>
@@ -1960,7 +1950,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       <div style={{ margin:"14px 20px",background:C.card,borderRadius:20,padding:22,boxShadow:C.shadow }}>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16 }}>
           <div>
-            <div style={{ display:"flex",alignItems:"center",gap:8 }}><span style={{ width:10,height:10,borderRadius:"50%",background:"#37d67a",animation:"pulseDot 1.4s infinite" }} /><span style={{ fontWeight:900,fontSize:18,color:C.text }}>{t.accepted}</span></div>
+            <div style={{ display:"flex",alignItems:"center",gap:8 }}><span style={{ width:10,height:10,borderRadius:"50%",background:C.ok,animation:"pulseDot 1.4s infinite" }} /><span style={{ fontWeight:900,fontSize:18,color:C.text }}>{t.accepted}</span></div>
             <div style={{ fontSize:12,color:C.textMuted,marginTop:3 }}>{lang==="ar"?"السائق في الطريق إليك":lang==="fr"?"Votre chauffeur arrive":"Your driver is on the way"}</div>
           </div>
           {eta&&<div style={{ background:C.dark,borderRadius:16,padding:"8px 14px",textAlign:"center",color:"#fff" }}><div style={{ fontSize:20,fontWeight:900,lineHeight:1 }}>{eta}</div><div style={{ fontSize:10,opacity:.7 }}>{t.etaMin}</div></div>}
@@ -1974,7 +1964,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
             <div style={{ flex:1 }}>
               <div style={{ fontWeight:800,fontSize:15,color:C.text }}>{selectedDriver?.name||"السائق"}</div>
               <div style={{ fontSize:12,color:C.textMuted }}>{selectedDriver?.carBrand} {selectedDriver?.carModel} {selectedDriver?.carColor}</div>
-              {selectedDriver?.plateNumber&&<div style={{ display:"inline-block",margin:"4px 0",background:"#fff",border:"2px solid #111",borderRadius:6,padding:"1px 9px",fontWeight:900,fontSize:14,letterSpacing:1.5,direction:"ltr",color:"#111" }}>{selectedDriver.plateNumber}</div>}
+              {selectedDriver?.plateNumber&&<div style={{ display:"inline-block",margin:"4px 0",background:C.card,border:`2px solid ${C.text}`,borderRadius:6,padding:"1px 9px",fontWeight:900,fontSize:14,letterSpacing:1.5,direction:"ltr",color:C.text }}>{selectedDriver.plateNumber}</div>}
               {selectedDriver?.rating>0&&<StarRating rating={Math.round(selectedDriver.rating)} size={14} />}
             </div>
             <div style={{ textAlign:"left" }}>
@@ -1989,7 +1979,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           </div>
         </div>
         <div style={{ marginBottom:10 }}><PhoneButton phone={selectedDriver?.phone} label={lang==="ar"?"اتصل بالسائق":lang==="fr"?"Appeler":"Call driver"} /></div>
-        <button onClick={openShare} style={{ width:"100%",background:"#fff",border:"1.5px solid #111",borderRadius:12,padding:"11px",color:"#111",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>📡 {lang==="ar"?"شارك رحلتي مع شخص موثوق":lang==="fr"?"Partager mon trajet":"Share my trip"}</button>
+        <button onClick={openShare} style={{ width:"100%",background:C.card,border:`1.5px solid ${C.text}`,borderRadius:12,padding:"11px",color:C.text,fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>📡 {lang==="ar"?"شارك رحلتي مع شخص موثوق":lang==="fr"?"Partager mon trajet":"Share my trip"}</button>
         {/* Chat Button */}
         <button onClick={()=>setShowChat(true)} style={{ width:"100%",background:C.blueLight,border:`1px solid ${C.blue}44`,borderRadius:12,padding:"12px",color:C.blue,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:14,marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
           <span style={{ fontSize:18 }}>💬</span>{t.chat}<ChatBadge n={chatAlert.unread} />
@@ -2046,7 +2036,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
             <button onClick={()=>setShowReport(true)} style={{ width:44,background:`${C.orange}15`,border:`1px solid ${C.orange}44`,borderRadius:12,padding:"10px",color:C.orange,fontFamily:"inherit",cursor:"pointer",fontSize:16 }}>🚨</button>
           </div>
           <div style={{ marginBottom:8 }}><PhoneButton phone={selectedDriver?.phone} label={lang==="ar"?"اتصل بالسائق":lang==="fr"?"Appeler":"Call driver"} /></div>
-          <button onClick={openShare} style={{ width:"100%",background:"#fff",border:"1.5px solid #111",borderRadius:12,padding:"11px",color:"#111",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>📡 {lang==="ar"?"شارك رحلتي مع شخص موثوق":lang==="fr"?"Partager mon trajet":"Share my trip"}</button>
+          <button onClick={openShare} style={{ width:"100%",background:C.card,border:`1.5px solid ${C.text}`,borderRadius:12,padding:"11px",color:C.text,fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>📡 {lang==="ar"?"شارك رحلتي مع شخص موثوق":lang==="fr"?"Partager mon trajet":"Share my trip"}</button>
         {destPlace&&<button onClick={()=>{ const d=getLatLng(destPlace); openNavigation(d.lat,d.lng); }} style={{ width:"100%",background:`linear-gradient(135deg,${C.googleBlue},#000000)`,border:"none",borderRadius:14,padding:13,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}><span style={{ fontSize:18 }}>🗺️</span>{t.trackRoute}</button>}
           <button onClick={finishRide} style={{ width:"100%",background:`${C.dark}`,border:"none",borderRadius:14,padding:14,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:16,cursor:"pointer" }}>{t.arrived}</button>
         </div>
@@ -2067,6 +2057,7 @@ export default function App() {
   const[user,setUser]=useState(null);
   const[lang,setLang]=useState(localStorage.getItem("taxidz_lang")||"ar");
 
+  const theme=useThemeMode();
   const changeLang=l=>{setLang(l);localStorage.setItem("taxidz_lang",l);};
   const resetGuardRef = useRef(false);
 
@@ -2119,16 +2110,17 @@ export default function App() {
     <div style={{ maxWidth:390,margin:"0 auto",minHeight:"100vh" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-        body{ font-family:'IBM Plex Sans Arabic',Cairo,system-ui,-apple-system,'Segoe UI',sans-serif; background:#f5f5f7; color:#1c1a1d; }
-        ::selection{ background:#c4001d33; }
+        body{ font-family:'IBM Plex Sans Arabic',Cairo,system-ui,-apple-system,'Segoe UI',sans-serif; background:${C.bg}; color:${C.text}; transition:background .25s,color .25s; }
+        ::selection{ background:${C.green}33; }
         ::-webkit-scrollbar{ width:0; height:0; }
         html,body{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; overscroll-behavior-y:none; }
         button{ transition: transform .12s ease, box-shadow .2s ease, background .2s ease, opacity .2s; }
         button:active:not(:disabled){ transform: scale(.96); }
-        input:focus,select:focus,textarea:focus{ outline:none; border-color:#c4001d !important; box-shadow:0 0 0 3px rgba(196,0,29,.14); }
+        input:focus,select:focus,textarea:focus{ outline:none; border-color:${C.green} !important; box-shadow:0 0 0 3px ${C.green}24; }
         @keyframes sheetUp{ from{ transform:translateY(40px); opacity:0 } to{ transform:none; opacity:1 } }
         @keyframes fadeIn{ from{ opacity:0 } to{ opacity:1 } }
         @keyframes pulseDot{ 0%{ box-shadow:0 0 0 0 rgba(55,214,122,.55) } 100%{ box-shadow:0 0 0 10px rgba(55,214,122,0) } }`}</style>
+      <button onClick={()=>{const n=theme.mode==="dark"?"light":"dark";theme.setPref(n);}} aria-label="theme" style={{ position:"fixed",top:"calc(env(safe-area-inset-top,0px) + 12px)",left:62,zIndex:9998,width:38,height:38,borderRadius:"50%",border:`1px solid ${C.border}`,background:C.card,boxShadow:C.shadow,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>{themeIcon(theme.mode)}</button>
       <PermissionGate lang={lang} />
       <OfflineBanner lang={lang} />
       {screen==="app"&&<SupportButton lang={lang} />}
