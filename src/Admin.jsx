@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { DashboardPro, LiveOps, RidesPanel, SafetyPanel, GlobalSearch, PricingPanel, RegionsPanel, PromosPanel, MissionsAdmin, ComplaintsPro, AccountsPanel, adminProStyles, useIsMobile } from "./AdminPro";
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken, sendPasswordResetEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, query, orderBy, addDoc, increment } from "firebase/firestore";
 
@@ -38,24 +38,24 @@ const C = {
   card: "#161113",
   cardHover: "#211a1d",
   border: "#33262b",
-  green: "#c4001d",
-  greenLight: "#e0334d",
-  greenGlow: "#c4001d22",
-  orange: "#e0334d",
-  orangeLight: "#e0334d",
+  green: "#7c5cfc",
+  greenLight: "#a78bfa",
+  greenGlow: "#7c5cfc22",
+  orange: "#a78bfa",
+  orangeLight: "#a78bfa",
   red: "#da3633",
   redLight: "#f85149",
   redGlow: "#da363322",
-  blue: "#c4001d",
-  blueLight: "#e0334d",
-  blueGlow: "#c4001d22",
-  purple: "#ff8fa0",
-  purpleGlow: "#ff8fa022",
-  yellow: "#ff5a70",
+  blue: "#7c5cfc",
+  blueLight: "#a78bfa",
+  blueGlow: "#7c5cfc22",
+  purple: "#c4b5fd",
+  purpleGlow: "#c4b5fd22",
+  yellow: "#a78bfa",
   text: "#fff5f6",
   textMuted: "#c7a9ae",
   textDim: "#7a5c62",
-  accent: "#ff5a70",
+  accent: "#a78bfa",
 };
 
 // ===== HELPERS =====
@@ -79,7 +79,7 @@ const StatCard = ({ icon, label, value, sub, color, trend }) => (
 );
 
 const Avatar = ({ src, name, size = 40 }) => (
-  <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, #c4001d, #ff8fa0)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.4, overflow: "hidden", flexShrink: 0, border: `2px solid ${C.border}` }}>
+  <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, #7c5cfc, #c4b5fd)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.4, overflow: "hidden", flexShrink: 0, border: `2px solid ${C.border}` }}>
     {src ? <img src={src} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (name?.[0] || "?").toUpperCase()}
   </div>
 );
@@ -91,73 +91,150 @@ const Btn = ({ onClick, children, color = C.blue, outline = false, small = false
   </button>
 );
 
-// ===== LOGIN =====
+// ===== LOGIN (دخول + تحقق ثنائي + استرجاع الرمز) =====
+const fnCall = (n) => httpsCallable(getFunctions(app, "europe-west1"), n);
+const niceErr = (e) => (e?.message || "حدث خطأ غير متوقع").replace(/^.*?: /, "");
+const loginInput = { width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "11px 14px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", direction: "ltr" };
+const loginBtn = (loading) => ({ background: "linear-gradient(135deg, #7c5cfc, #c4b5fd)", border: "none", borderRadius: 8, padding: "13px", color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer", opacity: loading ? 0.7 : 1, boxShadow: "0 4px 16px #7c5cfc44", width: "100%" });
+const linkBtn = { background: "none", border: "none", color: C.blueLight, fontFamily: "inherit", fontSize: 12, cursor: "pointer", padding: 4 };
+
 function AdminLogin({ onLogin }) {
+  const [mode, setMode] = useState("login"); // login | otp | forgot | reset
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [otp, setOtp] = useState("");
+  const [newCode, setNewCode] = useState("");
+  const [newCode2, setNewCode2] = useState("");
+  const [challenge, setChallenge] = useState(null);
+  const [hint, setHint] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+
+  const go = (m) => { setMode(m); setError(""); setOtp(""); };
+  const isSuper = (e) => e.trim().toLowerCase() === SUPER_ADMIN_EMAIL;
 
   const handle = async () => {
     if (!email || !code) { setError("أدخل البريد والرمز"); return; }
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setInfo("");
     try {
-      if (email === SUPER_ADMIN_EMAIL) {
+      if (isSuper(email)) {
         try {
-          await signInWithEmailAndPassword(auth, email, code);
+          await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), code);
           onLogin({ email, role: "super", name: "عبد الواحد هفار" });
-          setLoading(false);
-          return;
-        } catch(authErr) {
+        } catch (authErr) {
           const msgs = {
             "auth/wrong-password": "كلمة المرور خاطئة",
             "auth/invalid-credential": "البريد أو كلمة المرور خاطئة",
             "auth/user-not-found": "الحساب غير موجود في Firebase",
-            "auth/too-many-requests": "محاولات كثيرة — انتظر قليلاً",
+            "auth/too-many-requests": "محاولات كثيرة — انتظر قليلاً أو استرجع كلمة المرور",
           };
           setError(msgs[authErr.code] || `خطأ: ${authErr.code}`);
-          setLoading(false);
-          return;
         }
+        setLoading(false); return;
       }
-      const res = await httpsCallable(getFunctions(app, "europe-west1"), "adminSignIn")({ email: email.trim().toLowerCase(), code });
+      const res = await fnCall("adminSignIn")({ email: email.trim().toLowerCase(), code });
+      if (res.data.needOtp) { setChallenge(res.data.challenge); setHint(res.data.hint || ""); go("otp"); setLoading(false); return; }
       await signInWithCustomToken(auth, res.data.token);
       onLogin({ email, role: "sub", name: res.data.name, id: res.data.id });
-      setLoading(false);
-    } catch (e) {
-      setError(e?.message?.replace(/^.*?: /, "") || "حدث خطأ غير متوقع"); setLoading(false);
-    }
+    } catch (e) { setError(niceErr(e)); }
+    setLoading(false);
   };
+
+  const verify2fa = async () => {
+    if (otp.length !== 6) { setError("أدخل الرمز المكوّن من 6 أرقام"); return; }
+    setLoading(true); setError("");
+    try {
+      const res = await fnCall("adminVerify2fa")({ challenge, otp });
+      await signInWithCustomToken(auth, res.data.token);
+      onLogin({ email, role: "sub", name: res.data.name, id: res.data.id });
+    } catch (e) { setError(niceErr(e)); }
+    setLoading(false);
+  };
+
+  const sendReset = async () => {
+    if (!email) { setError("أدخل بريدك الإلكتروني"); return; }
+    setLoading(true); setError(""); setInfo("");
+    try {
+      if (isSuper(email)) {
+        await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+        setInfo("أُرسل رابط تعيين كلمة المرور إلى بريدك. افتحه واختر كلمة جديدة ثم ارجع للدخول.");
+        go("login");
+      } else {
+        await fnCall("adminForgot")({ email: email.trim().toLowerCase() });
+        setInfo("إذا كان البريد مسجلاً فقد أُرسل إليه رمز من 6 أرقام (صالح 10 دقائق).");
+        go("reset");
+      }
+    } catch (e) { setError(niceErr(e)); }
+    setLoading(false);
+  };
+
+  const doReset = async () => {
+    if (otp.length !== 6) { setError("أدخل الرمز المكوّن من 6 أرقام"); return; }
+    if (newCode !== newCode2) { setError("الرمزان غير متطابقين"); return; }
+    setLoading(true); setError("");
+    try {
+      await fnCall("adminReset")({ email: email.trim().toLowerCase(), otp, newCode });
+      setCode(""); setNewCode(""); setNewCode2("");
+      setInfo("تم تعيين الرمز الجديد ✅ يمكنك الدخول الآن.");
+      go("login");
+    } catch (e) { setError(niceErr(e)); }
+    setLoading(false);
+  };
+
+  const Field = ({ label, children }) => (<div><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6, fontWeight: 600 }}>{label}</div>{children}</div>);
+  const Msg = () => (<>
+    {error && <div style={{ background: C.redGlow, border: `1px solid ${C.red}44`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: C.redLight, textAlign: "center" }}>{error}</div>}
+    {info && <div style={{ background: "#16a34a22", border: "1px solid #16a34a55", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#4ade80", textAlign: "center" }}>{info}</div>}
+  </>);
+  const onEnter = (fn) => (e) => { if (e.key === "Enter") fn(); };
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'IBM Plex Sans Arabic',Cairo,sans-serif", direction: "rtl" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap'); *{box-sizing:border-box;margin:0;padding:0}`}</style>
       <div style={{ width: "100%", maxWidth: 420, padding: 24 }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <div style={{ width: 64, height: 64, borderRadius: 16, background: "linear-gradient(135deg, #c4001d, #ff8fa0)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 16px", boxShadow: "0 8px 32px #c4001d44" }}>🛡️</div>
+          <div style={{ width: 64, height: 64, borderRadius: 16, background: "linear-gradient(135deg, #7c5cfc, #c4b5fd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 16px", boxShadow: "0 8px 32px #7c5cfc44" }}>🛡️</div>
           <div style={{ fontSize: 24, fontWeight: 900, color: C.text }}>TaxiDZ Admin</div>
           <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>لوحة التحكم الإدارية</div>
         </div>
-
         <div style={{ background: C.card, borderRadius: "6px 22px 22px 22px", padding: 28, border: `1px solid ${C.border}`, boxShadow: "0 16px 48px rgba(0,0,0,0.4)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6, fontWeight: 600 }}>البريد الإلكتروني</div>
-              <input value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@taxidz.dz" type="email"
-                style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "11px 14px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", direction: "ltr" }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6, fontWeight: 600 }}>رمز الدخول</div>
-              <input value={code} onChange={e => setCode(e.target.value)} placeholder="••••••" type="password"
-                style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "11px 14px", fontFamily: "inherit", fontSize: 14, color: C.text, outline: "none", direction: "ltr" }} />
-            </div>
-            {error && <div style={{ background: C.redGlow, border: `1px solid ${C.red}44`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: C.redLight, textAlign: "center" }}>{error}</div>}
-            <button onClick={handle} disabled={loading}
-              style={{ background: "linear-gradient(135deg, #c4001d, #ff8fa0)", border: "none", borderRadius: 8, padding: "13px", color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer", opacity: loading ? 0.7 : 1, boxShadow: "0 4px 16px #c4001d44" }}>
-              {loading ? "جارٍ الدخول..." : "🔑 دخول"}
-            </button>
+            {mode === "login" && (<>
+              <Field label="البريد الإلكتروني"><input value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@taxidz.dz" type="email" autoComplete="username" style={loginInput} /></Field>
+              <Field label="رمز الدخول"><input value={code} onChange={e => setCode(e.target.value)} onKeyDown={onEnter(handle)} placeholder="••••••••" type="password" autoComplete="current-password" style={loginInput} /></Field>
+              <Msg />
+              <button onClick={handle} disabled={loading} style={loginBtn(loading)}>{loading ? "جارٍ الدخول..." : "🔑 دخول"}</button>
+              <button onClick={() => go("forgot")} style={linkBtn}>نسيت الرمز / كلمة المرور؟</button>
+            </>)}
+            {mode === "otp" && (<>
+              <div style={{ textAlign: "center", color: C.text, fontWeight: 800, fontSize: 16 }}>🔐 التحقق بخطوتين</div>
+              <div style={{ textAlign: "center", color: C.textMuted, fontSize: 13 }}>أرسلنا رمزاً من 6 أرقام إلى <span dir="ltr">{hint}</span></div>
+              <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} onKeyDown={onEnter(verify2fa)} inputMode="numeric" autoFocus placeholder="000000" style={{ ...loginInput, textAlign: "center", letterSpacing: 8, fontSize: 22, fontWeight: 800 }} />
+              <Msg />
+              <button onClick={verify2fa} disabled={loading} style={loginBtn(loading)}>{loading ? "جارٍ التحقق..." : "تأكيد"}</button>
+              <button onClick={() => go("login")} style={linkBtn}>← رجوع</button>
+            </>)}
+            {mode === "forgot" && (<>
+              <div style={{ textAlign: "center", color: C.text, fontWeight: 800, fontSize: 16 }}>استرجاع الدخول</div>
+              <div style={{ textAlign: "center", color: C.textMuted, fontSize: 13 }}>اكتب بريدك وسنرسل إليه رمز تحقق</div>
+              <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={onEnter(sendReset)} type="email" placeholder="admin@taxidz.dz" style={loginInput} />
+              <Msg />
+              <button onClick={sendReset} disabled={loading} style={loginBtn(loading)}>{loading ? "جارٍ الإرسال..." : "إرسال الرمز"}</button>
+              <button onClick={() => go("login")} style={linkBtn}>← رجوع</button>
+            </>)}
+            {mode === "reset" && (<>
+              <div style={{ textAlign: "center", color: C.text, fontWeight: 800, fontSize: 16 }}>تعيين رمز جديد</div>
+              <Msg />
+              <Field label="الرمز المرسل إلى بريدك (6 أرقام)"><input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="000000" style={{ ...loginInput, textAlign: "center", letterSpacing: 6, fontWeight: 800 }} /></Field>
+              <Field label="الرمز الجديد (8 أحرف على الأقل، حروف وأرقام)"><input value={newCode} onChange={e => setNewCode(e.target.value)} type="password" autoComplete="new-password" style={loginInput} /></Field>
+              <Field label="أعد كتابة الرمز الجديد"><input value={newCode2} onChange={e => setNewCode2(e.target.value)} onKeyDown={onEnter(doReset)} type="password" autoComplete="new-password" style={loginInput} /></Field>
+              <button onClick={doReset} disabled={loading} style={loginBtn(loading)}>{loading ? "جارٍ الحفظ..." : "حفظ الرمز الجديد"}</button>
+              <button onClick={sendReset} disabled={loading} style={linkBtn}>إعادة إرسال الرمز</button>
+              <button onClick={() => go("login")} style={linkBtn}>← رجوع</button>
+            </>)}
           </div>
-          <div style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 16 }}>للحصول على حساب أدمن ثانوي تواصل مع المدير الرئيسي</div>
+          {mode === "login" && <div style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 16 }}>للحصول على حساب أدمن ثانوي تواصل مع المدير الرئيسي</div>}
         </div>
       </div>
     </div>
@@ -191,7 +268,7 @@ function Sidebar({ tab, setTab, admin, onLogout, counts, isMobile, open, onClose
     <div style={{ width: 220, minHeight: "100vh", background: C.sidebar, borderLeft: `1px solid ${C.border}`, display: "flex", flexDirection: "column", position: "fixed", right: 0, top: 0, bottom: 0, zIndex: 150, transform: isMobile && !open ? "translateX(100%)" : "none", transition: "transform .25s ease", overflowY: "auto" }}>
       <div style={{ padding: "20px 16px", borderBottom: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#c4001d,#ff8fa0)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🛡️</div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#7c5cfc,#c4b5fd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🛡️</div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>TaxiDZ</div>
             <div style={{ fontSize: 10, color: C.textMuted }}>Admin Panel</div>
@@ -789,6 +866,65 @@ function AnalyticsPanel({ bookings }) {
 }
 
 // ===== SETTINGS =====
+function SecurityCard({ admin }) {
+  const isSuper = admin?.role === "super";
+  const [cur, setCur] = useState(""), [n1, setN1] = useState(""), [n2, setN2] = useState("");
+  const [busy, setBusy] = useState(false), [msg, setMsg] = useState(null);
+  const [twofa, setTwofa] = useState(false);
+  useEffect(() => {
+    if (!isSuper) return;
+    return onSnapshot(doc(db, "settings", "security"), s => setTwofa(s.data()?.admin2fa === true), () => {});
+  }, [isSuper]);
+  const strong = (c) => c.length >= 8 && /[A-Za-z]/.test(c) && /[0-9]/.test(c);
+  const change = async () => {
+    setMsg(null);
+    if (!cur) return setMsg({ bad: 1, t: "أدخل الرمز الحالي" });
+    if (!strong(n1)) return setMsg({ bad: 1, t: "الرمز الجديد: 8 أحرف على الأقل، حروف وأرقام" });
+    if (n1 !== n2) return setMsg({ bad: 1, t: "الرمزان غير متطابقين" });
+    setBusy(true);
+    try {
+      if (isSuper) {
+        const u = auth.currentUser;
+        await reauthenticateWithCredential(u, EmailAuthProvider.credential(u.email, cur));
+        await updatePassword(u, n1);
+      } else {
+        await fnCall("adminChangeCode")({ oldCode: cur, newCode: n1 });
+      }
+      setCur(""); setN1(""); setN2(""); setMsg({ t: "تم تغيير الرمز بنجاح ✅" });
+    } catch (e) {
+      const m = { "auth/wrong-password": "الرمز الحالي غير صحيح", "auth/invalid-credential": "الرمز الحالي غير صحيح", "auth/too-many-requests": "محاولات كثيرة، انتظر قليلاً", "auth/requires-recent-login": "أعد تسجيل الدخول ثم حاول" };
+      setMsg({ bad: 1, t: m[e?.code] || niceErr(e) });
+    }
+    setBusy(false);
+  };
+  const toggle2fa = async () => {
+    try { await setDoc(doc(db, "settings", "security"), { admin2fa: !twofa, updatedAt: serverTimestamp() }, { merge: true }); }
+    catch (e) { setMsg({ bad: 1, t: "تعذّر الحفظ: " + niceErr(e) }); }
+  };
+  const inp = { ...loginInput, marginBottom: 10 };
+  return (
+    <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", padding: 20, border: `1px solid ${C.border}`, marginBottom: 16 }}>
+      <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 14 }}>🔐 الأمان</div>
+      <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8 }}>{isSuper ? "تغيير كلمة مرور المدير الرئيسي" : "تغيير رمز الدخول"}</div>
+      <input value={cur} onChange={e => setCur(e.target.value)} type="password" placeholder="الرمز الحالي" autoComplete="current-password" style={inp} />
+      <input value={n1} onChange={e => setN1(e.target.value)} type="password" placeholder="الرمز الجديد (8+ أحرف، حروف وأرقام)" autoComplete="new-password" style={inp} />
+      <input value={n2} onChange={e => setN2(e.target.value)} type="password" placeholder="أعد كتابة الرمز الجديد" autoComplete="new-password" style={inp} />
+      {msg && <div style={{ fontSize: 13, marginBottom: 10, color: msg.bad ? C.redLight : "#4ade80" }}>{msg.t}</div>}
+      <Btn onClick={change} disabled={busy}>{busy ? "جارٍ الحفظ..." : "حفظ الرمز الجديد"}</Btn>
+      {isSuper && (
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>التحقق بخطوتين للأدمنات الثانويين</div>
+            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>رمز يصل للبريد عند كل دخول. يتطلب إعداد البريد (MAIL_USER / MAIL_PASS) في الخادم.</div>
+          </div>
+          <Btn onClick={toggle2fa} color={twofa ? C.green : C.textMuted} outline={!twofa}>{twofa ? "مفعّل ✓" : "معطّل"}</Btn>
+        </div>
+      )}
+      {isSuper && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 14 }}>لحماية أقوى لحسابك الرئيسي: فعّل التحقق بخطوتين في حساب Gmail نفسه.</div>}
+    </div>
+  );
+}
+
 function SettingsPanel({ admin }) {
   return (
     <div>
@@ -796,6 +932,7 @@ function SettingsPanel({ admin }) {
         <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}>⚙️ الإعدادات</div>
         <div style={{ fontSize: 13, color: C.textMuted }}>إعدادات التطبيق والنظام</div>
       </div>
+      <SecurityCard admin={admin} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div style={{ background: C.card, borderRadius: "4px 18px 18px 18px", padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 16 }}>💰 نظام التسعير</div>
