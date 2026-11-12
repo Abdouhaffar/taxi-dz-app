@@ -9,6 +9,7 @@ import { ShareButton, TierProgress } from "./ReferralShare";
 import { Avatar } from "./ProfilePhoto";
 import { RideCodeGate, TagPicker } from "./TripKit";
 import { DC as C } from "./Theme";
+import { LegalLinks } from "./Legal";
 import { useRegions, isEnabled, codeOfLabel } from "./Wilayas";
 import { DriverSharedHub } from "./SharedTrips";
 import { useChatAlert, ChatBadge, ChatToast, PhoneButton } from "./ChatNotify";
@@ -1486,6 +1487,7 @@ export default function DriverDashboard({ user, onLogout }) {
                 <span style={{ color:C.textMuted }}>←</span>
               </button>
               <button onClick={onLogout} style={{ background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:16,padding:16,color:C.red,fontFamily:"inherit",fontWeight:800,fontSize:15,cursor:"pointer" }}>🚪 تسجيل الخروج</button>
+              <LegalLinks lang="ar" dark={false} />
             </div>
           </div>
         )}
