@@ -1,11 +1,12 @@
 /* eslint-disable */
 // أدوات الرحلة: رمز الركوب، تقييم بنقاط، مشاركة الرحلة مع جهة موثوقة (رابط تتبع مباشر)، وصفحة التتبع العامة
+import { C } from "./Theme";
 import { useState, useEffect, useRef } from "react";
 import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
 import { doc, setDoc, updateDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 
-const K = { dark: "#111", red: "#c4001d", ok: "#1a9d5b", muted: "#777", line: "#e6e6e6", soft: "#f3f3f3" };
+const K = { get dark(){return C.dark;}, get red(){return C.green;}, get ok(){return C.ok;}, get okBg(){return C.okLight;}, get muted(){return C.textMuted;}, get line(){return C.border;}, get soft(){return C.soft;}, get warn(){return "#d98a00";} };
 const FONT = "'IBM Plex Sans Arabic',Cairo,sans-serif";
 
 // ================= رمز الركوب =================
@@ -29,7 +30,7 @@ export function RideCodeGate({ code, verify, passengerName, onOk, onCancel }) {
   };
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 3000, background: "rgba(0,0,0,.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: FONT, direction: "rtl" }}>
-      <div style={{ background: "#fff", borderRadius: 24, padding: 26, width: "100%", maxWidth: 360, textAlign: "center" }}>
+      <div style={{ background: C.card, borderRadius: 24, padding: 26, width: "100%", maxWidth: 360, textAlign: "center" }}>
         <div style={{ fontSize: 40 }}>🔐</div>
         <div style={{ fontWeight: 900, fontSize: 19, color: K.dark, margin: "6px 0 4px" }}>رمز تأكيد الركوب</div>
         <div style={{ fontSize: 13, color: K.muted, marginBottom: 16 }}>اطلب من {passengerName || "الراكب"} الرمز المكوّن من 4 أرقام</div>
@@ -64,11 +65,11 @@ export function TagPicker({ kind, stars, value, onChange, lang = "ar", dark }) {
   const toggle = (k) => onChange(value.includes(k) ? value.filter((x) => x !== k) : [...value, k]);
   return (
     <div style={{ marginTop: 14 }}>
-      <div style={{ fontSize: 12, color: dark ? "#c7a9ae" : K.muted, marginBottom: 8, fontWeight: 700 }}>{L}</div>
+      <div style={{ fontSize: 12, color: dark ? C.textMuted : K.muted, marginBottom: 8, fontWeight: 700 }}>{L}</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
         {list.map(([k, labels]) => {
           const on = value.includes(k);
-          return <button key={k} onClick={() => toggle(k)} style={{ border: `1px solid ${on ? (stars >= 4 ? K.ok : K.red) : (dark ? "#2c2126" : K.line)}`, background: on ? (stars >= 4 ? K.ok : K.red) : "transparent", color: on ? "#fff" : (dark ? "#fff5f6" : K.dark), borderRadius: 20, padding: "7px 14px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{labels[lang] || labels.ar}</button>;
+          return <button key={k} onClick={() => toggle(k)} style={{ border: `1px solid ${on ? (stars >= 4 ? K.ok : K.red) : (dark ? C.border : K.line)}`, background: on ? (stars >= 4 ? K.ok : K.red) : "transparent", color: on ? "#fff" : (dark ? "#fff5f6" : K.dark), borderRadius: 20, padding: "7px 14px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{labels[lang] || labels.ar}</button>;
         })}
       </div>
     </div>
@@ -125,7 +126,7 @@ export function ShareTripSheet({ link, passengerName, contacts = [], onSaveConta
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 3500 }}>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.55)" }} />
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "86vh", overflowY: "auto", background: "#fff", borderRadius: "24px 24px 0 0", padding: "22px 20px 28px", fontFamily: FONT, direction: lang === "ar" ? "rtl" : "ltr" }}>
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "86vh", overflowY: "auto", background: C.card, borderRadius: "24px 24px 0 0", padding: "22px 20px 28px", fontFamily: FONT, direction: lang === "ar" ? "rtl" : "ltr" }}>
         <div style={{ fontWeight: 900, fontSize: 19, color: K.dark }}>📡 {T[0]}</div>
         <div style={{ fontSize: 12, color: K.muted, margin: "4px 0 16px" }}>{T[1]}</div>
         <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8 }}>{T[2]}</div>
@@ -187,7 +188,7 @@ export function TrackPage({ token }) {
             onLoad={(m) => (mapRef.current = m)} options={{ disableDefaultUI: true, zoomControl: true }}>
             {s.origin && <Marker position={s.origin} label="A" />}
             {s.dest && <Marker position={s.dest} label="B" />}
-            {s.driverLocation && <Marker position={s.driverLocation} icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: "#c4001d", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 }} />}
+            {s.driverLocation && <Marker position={s.driverLocation} icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: C.green, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 }} />}
           </GoogleMap>
         ) : <div style={{ padding: 40, textAlign: "center", color: K.muted }}>جارٍ تحميل الخريطة…</div>}
       </div>
@@ -201,4 +202,4 @@ export function TrackPage({ token }) {
     </Shell>
   );
 }
-const Shell = ({ children }) => <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, direction: "rtl", maxWidth: 520, margin: "0 auto" }}>{children}</div>;
+const Shell = ({ children }) => <div style={{ minHeight: "100vh", background: C.card, fontFamily: FONT, direction: "rtl", maxWidth: 520, margin: "0 auto" }}>{children}</div>;
