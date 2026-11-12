@@ -551,7 +551,7 @@ function WalletScreen({ userId, passengerData, lang, onBack }) {
       </div>
 
       {/* Points card */}
-      <div style={{ margin:"0 20px 14px",background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,borderRadius:24,padding:24,color:C.text,position:"relative",overflow:"hidden" }}>
+      <div style={{ margin:"0 20px 14px",background:C.brand,borderRadius:24,padding:24,color:"#fff",position:"relative",overflow:"hidden" }}>
         <div style={{ position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:(C.green+"22") }} />
         <div style={{ fontSize:13,color:(C.green+"99"),marginBottom:4 }}>{lang==="ar"?"نقاطك المتراكمة":"Vos points accumulés"}</div>
         <div style={{ fontSize:48,fontWeight:900,color:C.green }}>⭐ {points}</div>
@@ -1107,7 +1107,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
       `}</style>
       {blade&&(
         <div key={blade.key} style={{ position:"fixed",inset:0,zIndex:9500,pointerEvents:"none",overflow:"hidden" }}>
-          <div style={{ position:"absolute",top:"-5%",bottom:"-5%",left:0,width:"200vw",background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,borderLeft:`7px solid ${C.red}`,animation:`${blade.dir>0?"bladeR":"bladeL"} 0.95s cubic-bezier(.77,0,.18,1) forwards` }} />
+          <div style={{ position:"absolute",top:"-5%",bottom:"-5%",left:0,width:"200vw",background:`linear-gradient(135deg,${C.dark},${C.greenDark})`,borderLeft:`7px solid ${C.red}`,animation:`${blade.dir>0?"bladeR":"bladeL"} 0.95s cubic-bezier(.77,0,.18,1) forwards` }} />
           <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:32,color:"#fff",animation:"bladeText 0.95s ease forwards" }}>
             <div style={{ fontSize:12,letterSpacing:3,color:C.red,fontWeight:800,marginBottom:10 }}>AL-BURAQ</div>
             <div style={{ fontSize:34,fontWeight:900,lineHeight:1.2 }}>{blade.tab==="register"?(lang==="ar"?"ابدأ رحلتك الأولى.":lang==="fr"?"Commencez votre premier trajet.":"Start your first ride."):(lang==="ar"?"مرحباً بعودتك.":lang==="fr"?"Bon retour.":"Welcome back.")}</div>
@@ -1117,7 +1117,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
       )}
 
       {/* Header */}
-      <div style={{ background:`linear-gradient(135deg,${C.dark},#2b1a1e)`,padding:"48px 24px 54px",textAlign:"center",position:"relative",clipPath:authTab==="register"?"polygon(0 0,100% 0,100% 84%,0 100%)":"polygon(0 0,100% 0,100% 100%,0 84%)",transition:"clip-path 0.7s cubic-bezier(.77,0,.18,1)" }}>
+      <div style={{ background:`linear-gradient(135deg,${C.dark},${C.greenDark})`,padding:"48px 24px 54px",textAlign:"center",position:"relative",clipPath:authTab==="register"?"polygon(0 0,100% 0,100% 84%,0 100%)":"polygon(0 0,100% 0,100% 100%,0 84%)",transition:"clip-path 0.7s cubic-bezier(.77,0,.18,1)" }}>
         <button onClick={step==="form"?onBack:()=>{if(resetGuardRef)resetGuardRef.current=false;sessionStorage.removeItem("taxidz_reset_in_progress");setStep("form");setOtp(Array(OTP_LEN).fill(""));setError("");}}
           style={{ position:"absolute",top:62,[isRTL?"right":"left"]:20,width:36,height:36,borderRadius:10,background:"#ffffff22",border:"none",color:"#fff",cursor:"pointer",fontSize:16 }}>←</button>
         <img src="/logo192.png" alt="AL-BURAQ" style={{ width:60,height:60,objectFit:"contain",marginBottom:8 }} onError={e=>e.target.style.display="none"} />
@@ -1737,7 +1737,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
             {k:"wal",label:lang==="ar"?"محفظتي":lang==="fr"?"Portefeuille":"Wallet",go:"wallet",
              ico:<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1.1"/></svg>},
           ].map(x=>(
-            <button key={x.k} onClick={()=>setScreen(x.go)} style={{ background:x.primary?C.dark:"#f3f3f3",color:x.primary?"#fff":C.text,border:"none",borderRadius:16,padding:"14px 6px 12px",fontFamily:"inherit",fontWeight:800,fontSize:12.5,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6,boxShadow:x.primary?"0 8px 20px rgba(0,0,0,0.25)":"none" }}>
+            <button key={x.k} onClick={()=>setScreen(x.go)} style={{ background:x.primary?C.dark:C.soft,color:x.primary?"#fff":C.text,border:"none",borderRadius:16,padding:"14px 6px 12px",fontFamily:"inherit",fontWeight:800,fontSize:12.5,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6,boxShadow:x.primary?"0 8px 20px rgba(0,0,0,0.25)":"none" }}>
               {x.ico}{x.label}
             </button>
           ))}
@@ -1890,8 +1890,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       <div style={{ margin:"0 20px" }}>
         {regionBlocked&&<div style={{ background:"#fff3cd",border:"1px solid #ffe08a",borderRadius:12,padding:"12px 14px",fontSize:13,color:"#7a5b00",marginBottom:12,textAlign:"center" }}>{regionMsg}</div>}
         {restrictedMsg&&<div style={{ background:C.redLight||(C.red+"22"),border:`1px solid ${C.red}44`,borderRadius:12,padding:"12px 14px",fontSize:13,color:C.red,marginBottom:12,textAlign:"center" }}>{restrictedMsg}</div>}
-        {sharedOn&&<button onClick={()=>startShared(null)} disabled={sharedBusy||regionBlocked||!scheduleValid(scheduleAt)} style={{ width:"100%",background:regionBlocked||sharedBusy?C.border:`linear-gradient(135deg,${C.dark},#2b1a1e)`,border:"none",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:900,fontSize:16,cursor:"pointer" }}>🚐 {lang==="ar"?"أرسل طلباً تشاركياً":lang==="fr"?"Envoyer une demande partagée":"Send a shared request"}</button>}
-        {!sharedOn&&<button onClick={()=>startSearch(offerPrice)} disabled={submittingBooking||regionBlocked||!scheduleValid(scheduleAt)} style={{ width:"100%",background:submittingBooking?C.border:`linear-gradient(135deg,${C.dark},#2b1a1e)`,border:`1px solid ${C.green}33`,borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:17,cursor:submittingBooking?"default":"pointer",opacity:submittingBooking?0.7:1 }}>
+        {sharedOn&&<button onClick={()=>startShared(null)} disabled={sharedBusy||regionBlocked||!scheduleValid(scheduleAt)} style={{ width:"100%",background:regionBlocked||sharedBusy?C.border:`linear-gradient(135deg,${C.dark},${C.greenDark})`,border:"none",borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:900,fontSize:16,cursor:"pointer" }}>🚐 {lang==="ar"?"أرسل طلباً تشاركياً":lang==="fr"?"Envoyer une demande partagée":"Send a shared request"}</button>}
+        {!sharedOn&&<button onClick={()=>startSearch(offerPrice)} disabled={submittingBooking||regionBlocked||!scheduleValid(scheduleAt)} style={{ width:"100%",background:submittingBooking?C.border:`linear-gradient(135deg,${C.dark},${C.greenDark})`,border:`1px solid ${C.green}33`,borderRadius:16,padding:18,color:"#fff",fontFamily:"inherit",fontWeight:800,fontSize:17,cursor:submittingBooking?"default":"pointer",opacity:submittingBooking?0.7:1 }}>
           {scheduleAt?(lang==="ar"?"🗓️ احجز الرحلة":lang==="fr"?"🗓️ Planifier":"🗓️ Schedule ride"):t.sendOffer} — {promo?<><s style={{opacity:0.5}}>{offerPrice}</s> {Math.max(50,offerPrice-promo.discount)}</>:offerPrice} DA
         </button>}
       </div>
