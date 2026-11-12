@@ -3,10 +3,9 @@
 //  - ShareButton : زر مشاركة متحرّك (يتحول إلى دائرة وتنتشر منه أيقونات المشاركة)
 //  - TierProgress : مستوى الإحالة وتقدّمه
 //  - referralPerInvite : نقاط كل دعوة حسب ترتيبها (يجب أن تطابق دالة Firebase)
+import { C } from "./Theme";
 import { useState, useRef, useEffect } from "react";
 
-const RED = "#c4001d";
-const DARK = "#1c1a1d";
 
 // ===== نظام النقاط: كلما زاد عدد المدعوين زادت نقاط كل دعوة =====
 export const REFERRAL_BONUSES = { 5: 50, 15: 150, 30: 400 }; // مكافأة إضافية عند بلوغ العدد
@@ -61,16 +60,16 @@ const Ico = {
       <path d="M8 13.4l2.6-3.4 2 1.7 2.4-1.7-2.6 3.5-2-1.7z" fill="#7a3cff" /></svg>
   ),
   sms: (
-    <svg viewBox="0 0 24 24" width="28" height="28"><circle cx="12" cy="12" r="12" fill="#1c1a1d" />
+    <svg viewBox="0 0 24 24" width="28" height="28"><circle cx="12" cy="12" r="12" fill={C.text} />
       <path d="M6 7.5h12a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 18 16.5h-6.3L8 19v-2.5H6A1.5 1.5 0 0 1 4.5 15V9A1.5 1.5 0 0 1 6 7.5z" fill="#fff" />
-      <circle cx="9" cy="12" r="1" fill="#1c1a1d" /><circle cx="12" cy="12" r="1" fill="#1c1a1d" /><circle cx="15" cy="12" r="1" fill="#1c1a1d" /></svg>
+      <circle cx="9" cy="12" r="1" fill={C.text} /><circle cx="12" cy="12" r="1" fill={C.text} /><circle cx="15" cy="12" r="1" fill={C.text} /></svg>
   ),
   more: (
     <svg viewBox="0 0 24 24" width="28" height="28"><circle cx="12" cy="12" r="12" fill="#fff" />
-      <circle cx="7" cy="12" r="1.8" fill="#1c1a1d" /><circle cx="12" cy="12" r="1.8" fill="#1c1a1d" /><circle cx="17" cy="12" r="1.8" fill="#1c1a1d" /></svg>
+      <circle cx="7" cy="12" r="1.8" fill={C.text} /><circle cx="12" cy="12" r="1.8" fill={C.text} /><circle cx="17" cy="12" r="1.8" fill={C.text} /></svg>
   ),
   copy: (
-    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#1c1a1d" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke={C.text} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></svg>
   ),
   check: (
@@ -89,7 +88,7 @@ const LABELS = {
 const POS = { whatsapp: [0, -104], messenger: [-76, -66], sms: [76, -66], more: [-116, -2], copy: [116, -2] };
 const ORDER = ["whatsapp", "messenger", "sms", "more", "copy"];
 
-export function ShareButton({ code, lang = "ar", accent = DARK, labelColor = "#6b5a5f" }) {
+export function ShareButton({ code, lang = "ar", accent = C.dark, labelColor = C.textMuted }) {
   const L = LABELS[lang] || LABELS.ar;
   const [stage, setStage] = useState("idle"); // idle | open | copying | copied
   const timers = useRef([]);
@@ -130,7 +129,7 @@ export function ShareButton({ code, lang = "ar", accent = DARK, labelColor = "#6
         const isCopy = id === "copy";
         const hidden = !open || (busy && !isCopy);
         const [cx, cy] = busy && !isCopy ? POS.copy : [x, y];
-        const copyBg = stage === "copied" ? RED : stage === "copying" ? DARK : "#fff";
+        const copyBg = stage === "copied" ? C.green : stage === "copying" ? C.dark : "#fff";
         return (
           <button key={id} aria-label={L[id]} onClick={() => act(id)}
             style={{
@@ -188,7 +187,7 @@ export function ShareButton({ code, lang = "ar", accent = DARK, labelColor = "#6
 // ===== مستوى الإحالة وتقدّمه =====
 export function TierProgress({ count = 0, lang = "ar", dark = false }) {
   const { idx, level, next } = referralLevel(count);
-  const T = dark ? { text: "#fff", muted: "#c7a9ae", track: "#3a2a2f", bg: "#201a1d", border: "#3a2a2f" } : { text: "#1c1a1d", muted: "#7a6268", track: "#e9e2e4", bg: "#fff", border: "#eee" };
+  const T = { text: C.text, muted: C.textMuted, track: C.border, bg: C.card, border: C.border };
   const nm = level[lang] || level.ar;
   const nextOrdinal = count + 1;
   const nextPts = referralPerInvite(nextOrdinal) + (REFERRAL_BONUSES[nextOrdinal] || 0);
@@ -209,13 +208,13 @@ export function TierProgress({ count = 0, lang = "ar", dark = false }) {
           <div style={{ fontSize: 12, color: T.muted }}>{tt.lvl}</div>
           <div style={{ fontSize: 20, fontWeight: 900, color: T.text }}>{["🥉", "🥈", "🥇", "💎"][idx]} {nm}</div>
         </div>
-        <div style={{ textAlign: "center", background: RED, color: "#fff", borderRadius: 14, padding: "8px 14px" }}>
+        <div style={{ textAlign: "center", background: C.green, color: "#fff", borderRadius: 14, padding: "8px 14px" }}>
           <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1 }}>+{nextPts}</div>
           <div style={{ fontSize: 10, opacity: 0.9, marginTop: 3 }}>{tt.per}</div>
         </div>
       </div>
       <div style={{ height: 10, background: T.track, borderRadius: 6, overflow: "hidden" }}>
-        <div style={{ width: `${pct}%`, height: "100%", background: `linear-gradient(90deg,${RED},#ff5a70)`, borderRadius: 6, transition: "width .8s cubic-bezier(.2,.8,.2,1)" }} />
+        <div style={{ width: `${pct}%`, height: "100%", background: `linear-gradient(90deg,${C.green},#a78bfa)`, borderRadius: 6, transition: "width .8s cubic-bezier(.2,.8,.2,1)" }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.muted, marginTop: 8 }}>
         <span>{count} / {next ? next.from : count}</span>
@@ -223,7 +222,7 @@ export function TierProgress({ count = 0, lang = "ar", dark = false }) {
       </div>
       <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
         {REFERRAL_LEVELS.map((l, i) => (
-          <div key={i} style={{ flex: "1 1 22%", textAlign: "center", padding: "6px 4px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: i === idx ? DARK : "transparent", color: i === idx ? "#fff" : T.muted, border: `1px solid ${i === idx ? DARK : T.border}` }}>
+          <div key={i} style={{ flex: "1 1 22%", textAlign: "center", padding: "6px 4px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: i === idx ? C.dark : "transparent", color: i === idx ? "#fff" : T.muted, border: `1px solid ${i === idx ? C.dark : T.border}` }}>
             {l[lang] || l.ar}<div style={{ fontSize: 10, fontWeight: 600, opacity: 0.85 }}>{l.per}</div>
           </div>
         ))}
