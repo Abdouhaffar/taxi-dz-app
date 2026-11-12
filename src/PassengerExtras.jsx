@@ -1,11 +1,12 @@
 /* eslint-disable */
 // ميزات الراكب: أماكن محفوظة، رحلات مجدولة، سجل الرحلات + فاتورة + إعادة الطلب، أكواد الخصم
+import { C } from "./Theme";
 import { useState, useEffect, useMemo } from "react";
 import { collection, query, where, orderBy, limit, getDocs, onSnapshot, updateDoc, doc, Timestamp } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "./firebase";
 
-const K = { dark: "#111", red: "#c4001d", ok: "#1a9d5b", okBg: "#e6f6ee", muted: "#777", line: "#e6e6e6", soft: "#f3f3f3", warn: "#d98a00" };
+const K = { get dark(){return C.dark;}, get red(){return C.green;}, get ok(){return C.ok;}, get okBg(){return C.okLight;}, get muted(){return C.textMuted;}, get line(){return C.border;}, get soft(){return C.soft;}, get warn(){return "#d98a00";} };
 const FONT = "'IBM Plex Sans Arabic',Cairo,sans-serif";
 const fns = getFunctions(undefined, "europe-west1");
 const L3 = (lang, ar, fr, en) => (lang === "fr" ? fr : lang === "en" ? en : ar);
@@ -45,7 +46,7 @@ export function SavedPlacesBar({ places = [], current, onUse, onSave, lang = "ar
         <div style={{ background: K.soft, borderRadius: 14, padding: 12, marginTop: 8 }}>
           <div style={{ fontSize: 12, color: K.muted, marginBottom: 8 }}>{current.text?.slice(0, 60)}</div>
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            {presets.map(([ic, nm]) => <button key={nm} onClick={() => save(ic, nm)} style={{ flex: 1, background: "#fff", border: `1px solid ${K.line}`, borderRadius: 12, padding: 10, fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>{ic} {nm}</button>)}
+            {presets.map(([ic, nm]) => <button key={nm} onClick={() => save(ic, nm)} style={{ flex: 1, background: C.card, border: `1px solid ${K.line}`, borderRadius: 12, padding: 10, fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>{ic} {nm}</button>)}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={L3(lang, "اسم آخر (مثال: الجامعة)", "Autre nom", "Other name")} style={{ flex: 1, border: `1px solid ${K.line}`, borderRadius: 12, padding: "10px 12px", fontFamily: "inherit", fontSize: 13, outline: "none" }} />
@@ -63,7 +64,7 @@ export function SchedulePicker({ value, onChange, lang = "ar" }) {
   const later = !!value;
   const min = minSchedule(), max = new Date(Date.now() + 7 * 86400000);
   return (
-    <div style={{ background: "#fff", borderRadius: 18, padding: 14, margin: "0 20px 14px", boxShadow: "0 2px 10px rgba(0,0,0,.06)" }}>
+    <div style={{ background: C.card, borderRadius: 18, padding: 14, margin: "0 20px 14px", boxShadow: "0 2px 10px rgba(0,0,0,.06)" }}>
       <div style={{ display: "flex", background: K.soft, borderRadius: 12, padding: 3 }}>
         {[[false, "🚕 " + L3(lang, "الآن", "Maintenant", "Now")], [true, "🗓️ " + L3(lang, "لاحقاً", "Plus tard", "Later")]].map(([v, l]) => (
           <button key={String(v)} onClick={() => onChange(v ? localInput(new Date(Date.now() + 60 * 60000)) : "")} style={{ flex: 1, border: "none", borderRadius: 10, padding: 10, fontFamily: "inherit", fontWeight: 800, fontSize: 14, cursor: "pointer", background: later === v ? K.dark : "transparent", color: later === v ? "#fff" : K.muted }}>{l}</button>
@@ -103,7 +104,7 @@ export function PromoBox({ price, rideType, applied, onApply, onClear, initialCo
     setBusy(false);
   };
   return (
-    <div style={{ background: "#fff", borderRadius: 18, padding: 14, margin: "0 20px 14px", boxShadow: "0 2px 10px rgba(0,0,0,.06)" }}>
+    <div style={{ background: C.card, borderRadius: 18, padding: 14, margin: "0 20px 14px", boxShadow: "0 2px 10px rgba(0,0,0,.06)" }}>
       {applied ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: K.okBg, borderRadius: 12, padding: "10px 14px" }}>
           <div><div style={{ fontWeight: 900, color: K.ok, fontSize: 14 }}>🎟️ {applied.code} — {L3(lang, "خصم", "Remise", "Off")} {applied.discount} DA</div>{applied.title && <div style={{ fontSize: 11, color: K.muted }}>{applied.title}</div>}</div>
@@ -131,7 +132,7 @@ export function OffersBanner({ lang = "ar", onUse }) {
   return (
     <div style={{ display: "flex", gap: 10, overflowX: "auto", marginBottom: 12 }}>
       {offers.map((o) => (
-        <div key={o.code} onClick={() => onUse && onUse(o.code)} style={{ flexShrink: 0, minWidth: 220, background: "linear-gradient(135deg,#c4001d,#ff5a70)", color: "#fff", borderRadius: 16, padding: "12px 16px", cursor: "pointer" }}>
+        <div key={o.code} onClick={() => onUse && onUse(o.code)} style={{ flexShrink: 0, minWidth: 220, background: `linear-gradient(135deg,${C.green},${C.green})`, color: "#fff", borderRadius: 16, padding: "12px 16px", cursor: "pointer" }}>
           <div style={{ fontWeight: 900, fontSize: 15 }}>🎁 {o.title || o.code}</div>
           <div style={{ fontSize: 12, opacity: 0.95, marginTop: 4 }}>{o.type === "percent" ? `-${o.value}%` : `-${o.value} DA`} · {L3(lang, "الكود", "Code", "Code")}: <b style={{ letterSpacing: 1 }}>{o.code}</b></div>
         </div>
@@ -165,7 +166,7 @@ export function UpcomingRides({ userId, lang = "ar", onResume }) {
           {b.status === "accepted" && b.driverInfo && <div style={{ fontSize: 12, color: K.dark, marginBottom: 8 }}>🚕 {b.driverInfo.name} — {b.driverInfo.carBrand} {b.driverInfo.carModel} {b.driverInfo.plateNumber}</div>}
           <div style={{ display: "flex", gap: 8 }}>
             {b.status === "accepted" && <button onClick={() => onResume(b)} style={{ flex: 1, background: K.dark, color: "#fff", border: "none", borderRadius: 10, padding: 10, fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>{L3(lang, "تتبّع السائق", "Suivre", "Track driver")}</button>}
-            {(b.status === "scheduled" || b.status === "pending") && <button onClick={() => cancel(b.id)} style={{ flex: 1, background: "#fff", color: K.red, border: `1px solid ${K.red}55`, borderRadius: 10, padding: 10, fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>{L3(lang, "إلغاء الحجز", "Annuler", "Cancel")}</button>}
+            {(b.status === "scheduled" || b.status === "pending") && <button onClick={() => cancel(b.id)} style={{ flex: 1, background: C.card, color: K.red, border: `1px solid ${K.red}55`, borderRadius: 10, padding: 10, fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>{L3(lang, "إلغاء الحجز", "Annuler", "Cancel")}</button>}
           </div>
         </div>
       ))}
@@ -197,7 +198,7 @@ export function InvoiceModal({ ride, passengerName, lang = "ar", onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 3600 }}>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.55)" }} />
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "90vh", overflowY: "auto", background: "#fff", borderRadius: "24px 24px 0 0", padding: "22px 20px 26px", fontFamily: FONT, direction: lang === "ar" ? "rtl" : "ltr" }}>
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "90vh", overflowY: "auto", background: C.card, borderRadius: "24px 24px 0 0", padding: "22px 20px 26px", fontFamily: FONT, direction: lang === "ar" ? "rtl" : "ltr" }}>
         <div style={{ textAlign: "center", marginBottom: 14 }}>
           <div style={{ fontWeight: 900, fontSize: 20 }}>🧾 {L3(lang, "فاتورة الرحلة", "Reçu de course", "Trip receipt")}</div>
           <div style={{ fontSize: 12, color: K.muted, marginTop: 4 }}>{no} · {fmtDate(d, lang)}</div>
@@ -231,14 +232,14 @@ export function HistoryScreen({ userId, passengerName, lang = "ar", onBack, onRe
   const list = (rides || []).filter((r) => filter === "all" || (filter === "done" ? done(r) : r.status === "cancelled"));
   const stats = useMemo(() => { const d = (rides || []).filter(done); return { n: d.length, sum: d.reduce((s, r) => s + (r.price || 0), 0), km: d.reduce((s, r) => s + (r.distanceKm || 0), 0) }; }, [rides]);
   return (
-    <div style={{ minHeight: "100vh", background: "#f3f3f3", fontFamily: FONT, direction: lang === "ar" ? "rtl" : "ltr", paddingBottom: 40 }}>
+    <div style={{ minHeight: "100vh", background: C.soft, fontFamily: FONT, direction: lang === "ar" ? "rtl" : "ltr", paddingBottom: 40 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "48px 20px 14px" }}>
-        <button onClick={onBack} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: "#fff", fontSize: 18, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.08)" }}>{lang === "ar" ? "→" : "←"}</button>
+        <button onClick={onBack} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.card, fontSize: 18, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.08)" }}>{lang === "ar" ? "→" : "←"}</button>
         <div style={{ fontWeight: 900, fontSize: 20 }}>🧾 {L3(lang, "رحلاتي", "Mes courses", "My trips")}</div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, margin: "0 20px 14px" }}>
         {[[stats.n, L3(lang, "رحلة", "courses", "trips")], [stats.sum, "DA"], [stats.km.toFixed(0), "km"]].map(([v, l], i) => (
-          <div key={i} style={{ background: "#fff", borderRadius: 16, padding: "14px 8px", textAlign: "center" }}><div style={{ fontWeight: 900, fontSize: 20 }}>{v}</div><div style={{ fontSize: 11, color: K.muted }}>{l}</div></div>
+          <div key={i} style={{ background: C.card, borderRadius: 16, padding: "14px 8px", textAlign: "center" }}><div style={{ fontWeight: 900, fontSize: 20 }}>{v}</div><div style={{ fontSize: 11, color: K.muted }}>{l}</div></div>
         ))}
       </div>
       <div style={{ display: "flex", gap: 8, margin: "0 20px 12px" }}>
@@ -250,7 +251,7 @@ export function HistoryScreen({ userId, passengerName, lang = "ar", onBack, onRe
         {rides === null && <div style={{ textAlign: "center", color: K.muted, padding: 40 }}>⏳</div>}
         {rides && !list.length && <div style={{ textAlign: "center", color: K.muted, padding: 40, fontSize: 13 }}>{L3(lang, "لا توجد رحلات", "Aucune course", "No trips")}</div>}
         {list.map((r) => (
-          <div key={r.id} style={{ background: "#fff", borderRadius: 18, padding: 16, marginBottom: 10 }}>
+          <div key={r.id} style={{ background: C.card, borderRadius: 18, padding: 16, marginBottom: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <span style={{ fontSize: 12, color: K.muted }}>{fmtDate(dateOf(r.createdAt), lang)}</span>
               <span style={{ fontSize: 11, fontWeight: 800, borderRadius: 20, padding: "3px 10px", background: done(r) ? K.okBg : "#fdeaea", color: done(r) ? K.ok : K.red }}>{done(r) ? L3(lang, "مكتملة", "Terminée", "Completed") : L3(lang, "ملغاة", "Annulée", "Cancelled")}</span>
