@@ -688,7 +688,10 @@ exports.verifyOtpTwilio = onCall(
 // ============ دخول الأدمن الثانوي (آمن، من جهة الخادم) ============
 // يستبدل مقارنة الرمز داخل المتصفح. الرمز لا يغادر الخادم، وبعد النجاح يُصدر توكن مخصص يحمل admin:true
 const crypto = require("crypto");
-exports.adminSignIn = onCall({ region: "europe-west1" }, async (req) => {
+const nodemailer = require("nodemailer");
+const MAIL_USER = defineSecret("MAIL_USER");
+const MAIL_PASS = defineSecret("MAIL_PASS");
+exports.adminSignIn = onCall({ region: "europe-west1", secrets: [MAIL_USER, MAIL_PASS] }, async (req) => {
   const email = String(req.data?.email || "").trim().toLowerCase();
   const code = String(req.data?.code || "");
   if (!email || !code) throw new HttpsError("invalid-argument", "أدخل البريد والرمز");
@@ -712,9 +715,124 @@ exports.adminSignIn = onCall({ region: "europe-west1" }, async (req) => {
     await ref.update({ failedAttempts: fails, ...(fails >= 5 ? { failedAttempts: 0, lockedUntil: admin.firestore.Timestamp.fromMillis(Date.now() + 15 * 60000) } : {}) });
     throw generic;
   }
-  await ref.update({ failedAttempts: 0, lastLoginAt: admin.firestore.FieldValue.serverTimestamp() });
+  await ref.update({ failedAttempts: 0 });
+  // تحقق ثنائي بالبريد (اختياري: يفعّله المدير الرئيسي من الإعدادات ← الأمان)
+  const sec = (await db.collection("settings").doc("security").get()).data() || {};
+  if (sec.admin2fa === true) {
+    const cid = crypto.randomBytes(12).toString("hex");
+    const otp = await issueOtp(db.collection("admin_challenges").doc(cid), { adminId: snap.docs[0].id });
+    try { await sendMail(email, "رمز الدخول إلى لوحة AL-BURAQ", otpMail(otp, "رمز تأكيد الدخول")); }
+    catch (e) { console.error("2FA mail failed", e?.message); throw new HttpsError("unavailable", "تعذّر إرسال رمز التحقق إلى البريد، حاول لاحقاً"); }
+    return { needOtp: true, challenge: cid, hint: email.replace(/^(.).*(@.*)$/, "$1***$2") };
+  }
+  await ref.update({ lastLoginAt: admin.firestore.FieldValue.serverTimestamp() });
   const token = await admin.auth().createCustomToken("admin_" + snap.docs[0].id, { admin: true, subAdmin: true });
   return { token, name: a.name || email, id: snap.docs[0].id };
+});
+
+// ============================================================
+// ====== أمان الأدمن: نسيان الرمز + تغييره + تحقق ثنائي ======
+// ============================================================
+function newCodeError(c) {
+  c = String(c || "");
+  if (c.length < 8) return "الرمز الجديد يجب ألا يقل عن 8 أحرف";
+  if (!/[A-Za-z]/.test(c) || !/[0-9]/.test(c)) return "استعمل حروفاً وأرقاماً معاً";
+  return null;
+}
+function hashCode(code) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  return { codeSalt: salt, codeHash: crypto.scryptSync(String(code), salt, 32).toString("hex") };
+}
+function checkCode(a, code) {
+  code = String(code || "");
+  if (a.codeHash && a.codeSalt) {
+    const H = Buffer.from(a.codeHash, "hex"), G = crypto.scryptSync(code, a.codeSalt, 32);
+    return H.length === G.length && crypto.timingSafeEqual(H, G);
+  }
+  if (a.code) { const A = Buffer.from(String(a.code)), B = Buffer.from(code); return A.length === B.length && crypto.timingSafeEqual(A, B); }
+  return false;
+}
+async function sendMail(to, subject, html) {
+  const t = nodemailer.createTransport({ service: "gmail", auth: { user: MAIL_USER.value(), pass: MAIL_PASS.value() } });
+  await t.sendMail({ from: `AL-BURAQ <${MAIL_USER.value()}>`, to, subject, html });
+}
+function otpMail(otp, title) {
+  return `<div dir="rtl" style="font-family:Arial,sans-serif;max-width:420px;margin:auto;padding:24px;border:1px solid #e7e4fa;border-radius:16px"><h2 style="margin:0 0 8px;color:#1e1b4b">AL-BURAQ</h2><p style="color:#555">${title}</p><div style="font-size:34px;font-weight:800;letter-spacing:8px;text-align:center;background:#f1eefc;color:#5b3fe6;border-radius:12px;padding:14px;margin:16px 0">${otp}</div><p style="color:#888;font-size:12px">صالح لمدة 10 دقائق. إذا لم تطلبه فتجاهل الرسالة وغيّر رمزك.</p></div>`;
+}
+// يُنشئ رمزاً من 6 أرقام ويحفظ مشفّره في الوثيقة (لا يُحفظ نصاً)
+async function issueOtp(ref, extra = {}) {
+  const otp = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+  const salt = crypto.randomBytes(16).toString("hex");
+  await ref.set({ ...extra, salt, hash: crypto.scryptSync(otp, salt, 32).toString("hex"), expiresAt: Date.now() + 10 * 60000, attempts: 0 }, { merge: true });
+  return otp;
+}
+// يتحقق من الرمز (5 محاولات كحد أقصى) ويُرجع بيانات الوثيقة، أو يرمي خطأً
+async function consumeOtp(ref, otp) {
+  const bad = new HttpsError("permission-denied", "الرمز غير صحيح أو منتهي الصلاحية");
+  const snap = await ref.get();
+  if (!snap.exists) throw bad;
+  const d = snap.data();
+  if (!d.hash || d.expiresAt < Date.now() || (d.attempts || 0) >= 5) { await ref.delete().catch(() => {}); throw bad; }
+  const H = Buffer.from(d.hash, "hex"), G = crypto.scryptSync(String(otp || ""), d.salt, 32);
+  if (!(H.length === G.length && crypto.timingSafeEqual(H, G))) { await ref.update({ attempts: (d.attempts || 0) + 1 }); throw bad; }
+  await ref.delete();
+  return d;
+}
+
+// 1) طلب رمز استرجاع على البريد (يردّ دائماً بنجاح حتى لا يُكشف وجود الحساب)
+exports.adminForgot = onCall({ region: "europe-west1", secrets: [MAIL_USER, MAIL_PASS] }, async (req) => {
+  const email = String(req.data?.email || "").trim().toLowerCase();
+  const ok = { ok: true };
+  if (!email) throw new HttpsError("invalid-argument", "أدخل البريد");
+  const snap = await db.collection("admins").where("email", "==", email).limit(1).get();
+  if (snap.empty || snap.docs[0].data().approved !== true) return ok;
+  const id = snap.docs[0].id, ref = db.collection("admin_resets").doc(id);
+  const cur = (await ref.get()).data() || {};
+  const now = Date.now();
+  if (cur.sentAt && now - cur.sentAt < 60000) return ok;                       // مرة كل دقيقة
+  const inHour = cur.hourStart && now - cur.hourStart < 3600000;
+  if (inHour && (cur.hourCount || 0) >= 5) return ok;                            // 5 في الساعة
+  const otp = await issueOtp(ref, { sentAt: now, hourStart: inHour ? cur.hourStart : now, hourCount: inHour ? (cur.hourCount || 0) + 1 : 1 });
+  try { await sendMail(email, "استرجاع رمز الدخول — AL-BURAQ", otpMail(otp, "رمز استرجاع الدخول")); }
+  catch (e) { console.error("reset mail failed", e?.message); }
+  return ok;
+});
+
+// 2) تعيين رمز جديد بعد إدخال رمز البريد
+exports.adminReset = onCall({ region: "europe-west1" }, async (req) => {
+  const email = String(req.data?.email || "").trim().toLowerCase();
+  const err = newCodeError(req.data?.newCode);
+  if (err) throw new HttpsError("invalid-argument", err);
+  const snap = await db.collection("admins").where("email", "==", email).limit(1).get();
+  if (snap.empty || snap.docs[0].data().approved !== true) throw new HttpsError("permission-denied", "الرمز غير صحيح أو منتهي الصلاحية");
+  await consumeOtp(db.collection("admin_resets").doc(snap.docs[0].id), req.data?.otp);
+  await snap.docs[0].ref.update({ ...hashCode(req.data.newCode), code: FV.delete(), failedAttempts: 0, lockedUntil: FV.delete(), codeChangedAt: FV.serverTimestamp() });
+  await db.collection("admin_actions").add({ action: "admin_code_reset", target: email, at: FV.serverTimestamp() }).catch(() => {});
+  return { ok: true };
+});
+
+// 3) تغيير الرمز من داخل اللوحة (المدير الفرعي المسجَّل)
+exports.adminChangeCode = onCall({ region: "europe-west1" }, async (req) => {
+  if (!req.auth?.token?.subAdmin) throw new HttpsError("permission-denied", "غير مصرّح");
+  const err = newCodeError(req.data?.newCode);
+  if (err) throw new HttpsError("invalid-argument", err);
+  const ref = db.collection("admins").doc(String(req.auth.uid).replace(/^admin_/, ""));
+  const snap = await ref.get();
+  if (!snap.exists || !checkCode(snap.data(), req.data?.oldCode)) throw new HttpsError("permission-denied", "الرمز الحالي غير صحيح");
+  await ref.update({ ...hashCode(req.data.newCode), code: FV.delete(), codeChangedAt: FV.serverTimestamp() });
+  return { ok: true };
+});
+
+// 4) إتمام الدخول بعد رمز التحقق الثنائي
+exports.adminVerify2fa = onCall({ region: "europe-west1" }, async (req) => {
+  const cid = String(req.data?.challenge || "");
+  if (!/^[a-f0-9]{24}$/.test(cid)) throw new HttpsError("invalid-argument", "طلب غير صالح");
+  const d = await consumeOtp(db.collection("admin_challenges").doc(cid), req.data?.otp);
+  const ref = db.collection("admins").doc(d.adminId), snap = await ref.get();
+  if (!snap.exists || snap.data().approved !== true) throw new HttpsError("permission-denied", "غير مصرّح");
+  await ref.update({ lastLoginAt: FV.serverTimestamp() });
+  const token = await admin.auth().createCustomToken("admin_" + d.adminId, { admin: true, subAdmin: true });
+  return { token, name: snap.data().name || snap.data().email, id: d.adminId };
 });
 
 // ============================================================
