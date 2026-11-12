@@ -29,7 +29,7 @@ export default function LangDropdown({ lang, setLang }) {
           <button key={l.code} aria-label={l.name} onClick={() => pick(l.code)}
             style={{
               position: "absolute", left: 0, top: 0, width: 40, height: 40, borderRadius: "50%", padding: 0, cursor: "pointer",
-              border: active ? "2px solid #c4001d" : "none", background: "#fff", fontSize: 20,
+              border: active ? "2px solid #7c5cfc" : "none", background: "#fff", fontSize: 20,
               display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 16px rgba(0,0,0,0.28)",
               transform: open ? `translate(${x}px,${y}px) scale(1)` : "translate(0,0) scale(0.2)",
               opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none",
@@ -40,7 +40,7 @@ export default function LangDropdown({ lang, setLang }) {
       <button aria-label="language" onClick={() => setOpen(!open)}
         style={{
           position: "absolute", left: 0, top: 0, width: 40, height: 40, borderRadius: "50%", padding: 0, border: "none", cursor: "pointer",
-          background: "#1c1a1d", color: "#fff", fontSize: 19, boxShadow: "0 6px 18px rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center",
+          background: "#1e1b4b", color: "#fff", fontSize: 19, boxShadow: "0 6px 18px rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center",
           transform: open ? "rotate(90deg)" : "rotate(0)", transition: "transform .4s cubic-bezier(.34,1.3,.64,1)",
         }}>
         <span style={{ transform: open ? "rotate(-90deg)" : "none", transition: "transform .4s", display: "block" }}>{open ? "✕" : cur.flag}</span>
