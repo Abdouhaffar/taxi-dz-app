@@ -950,7 +950,7 @@ function DriverWalletScreen({ uid, driverData, onBack, onOpenEarnings }) {
         <div style={{ fontWeight:800,fontSize:18,color:C.text }}>💰 المحفظة والإحالة</div>
       </div>
 
-      <div style={{ margin:"0 20px 14px",background:`linear-gradient(135deg,#2b1a1e,${C.bg})`,border:`1px solid ${C.border}`,borderRadius:24,padding:24,position:"relative",overflow:"hidden" }}>
+      <div style={{ margin:"0 20px 14px",background:`linear-gradient(135deg,${C.greenLight},${C.card})`,border:`1px solid ${C.border}`,borderRadius:24,padding:24,position:"relative",overflow:"hidden" }}>
         <div style={{ position:"absolute",top:-24,left:-24,width:120,height:120,borderRadius:"50%",background:(C.green+"33") }} />
         <div style={{ fontSize:13,color:C.textMuted,marginBottom:4 }}>نقاطك المتراكمة</div>
         <div style={{ fontSize:48,fontWeight:900,color:C.green }}>⭐ {points}</div>
