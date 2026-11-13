@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "short_name": "البراق",
   "name": "AL-BURAQ - تاكسي الجزائر",
   "description": "تطبيق النقل الذكي في الجزائر - فاوض على سعرك",
@@ -12,22 +13,38 @@
       "src": "logo192.png",
       "type": "image/png",
       "sizes": "192x192",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "logo512.png",
       "type": "image/png",
       "sizes": "512x512",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "logo192-maskable.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    },
+    {
+      "src": "logo512-maskable.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "theme_color": "#0a0f1e",
-  "background_color": "#0a0f1e",
+  "theme_color": "#7c5cfc",
+  "background_color": "#1e1b4b",
   "orientation": "portrait",
   "lang": "ar",
   "dir": "rtl",
-  "categories": ["travel", "transportation"],
+  "categories": [
+    "travel",
+    "transportation"
+  ],
   "screenshots": []
 }
