@@ -4,7 +4,12 @@ import { auth, db, requestNotificationPermission, onForegroundMessage } from "./
 import { playPing } from "./Sound";
 import LangDropdown from "./LangDropdown";
 import { C, useThemeMode, themeIcon } from "./Theme";
-import { LegalLinks, LegalOverlay, SupportButton, OfflineBanner } from "./Legal";
+import * as LegalMod from "./Legal";
+// نسخ آمنة: لو كان ملف Legal.jsx على GitHub قديماً لا ينهار التطبيق
+const LegalLinks = (p) => (LegalMod.LegalLinks ? <LegalMod.LegalLinks {...p} /> : null);
+const LegalOverlay = (p) => (LegalMod.LegalOverlay ? <LegalMod.LegalOverlay {...p} /> : null);
+const SupportButton = (p) => (LegalMod.SupportButton ? <LegalMod.SupportButton {...p} /> : null);
+const OfflineBanner = (p) => (LegalMod.OfflineBanner ? <LegalMod.OfflineBanner {...p} /> : null);
 import { useRegions, wilayaOf, isEnabled } from "./Wilayas";
 import { SharedModeBox, SharedTripPicker, SharedTripScreen, ActiveSharedBanner, createSharedBooking, joinTrip } from "./SharedTrips";
 import { useSingleSession, KickedScreen, PermissionGate, clearDeviceClaim } from "./DeviceGuard";
@@ -2123,9 +2128,9 @@ export default function App() {
       <button onClick={()=>{const n=theme.mode==="dark"?"light":"dark";theme.setPref(n);}} aria-label="theme" style={{ position:"fixed",top:"calc(env(safe-area-inset-top,0px) + 12px)",left:62,zIndex:9998,width:38,height:38,borderRadius:"50%",border:`1px solid ${C.border}`,background:C.card,boxShadow:C.shadow,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>{themeIcon(theme.mode)}</button>
       <PermissionGate lang={lang} />
       <OfflineBanner lang={lang} />
-      {typeof LegalOverlay==="function"&&<LegalOverlay />}
+      <LegalOverlay />
       {screen==="app"&&<SupportButton lang={lang} />}
-      <div style={{ position:"fixed",bottom:2,left:0,right:0,textAlign:"center",fontSize:9,color:"#8884",pointerEvents:"none",zIndex:1 }}>AL-BURAQ v2.6</div>
+      <div style={{ position:"fixed",bottom:2,left:0,right:0,textAlign:"center",fontSize:9,color:"#8884",pointerEvents:"none",zIndex:1 }}>AL-BURAQ v2.7</div>
       {screen==="auth"&&<div style={{ position:"fixed",bottom:22,left:0,right:0,zIndex:5 }}><LegalLinks lang={lang} /></div>}
       {screen==="welcome"&&<WelcomeScreen onSelect={r=>{setRole(r);setScreen("auth");}} lang={lang} setLang={changeLang} />}
       {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} setLang={changeLang} resetGuardRef={resetGuardRef} />}
