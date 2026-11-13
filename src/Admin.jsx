@@ -98,6 +98,8 @@ const loginInput = { width: "100%", background: C.bg, border: `1px solid ${C.bor
 const loginBtn = (loading) => ({ background: "linear-gradient(135deg, #7c5cfc, #c4b5fd)", border: "none", borderRadius: 8, padding: "13px", color: "#fff", fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer", opacity: loading ? 0.7 : 1, boxShadow: "0 4px 16px #7c5cfc44", width: "100%" });
 const linkBtn = { background: "none", border: "none", color: C.blueLight, fontFamily: "inherit", fontSize: 12, cursor: "pointer", padding: 4 };
 
+const Field = ({ label, children }) => (<div><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6, fontWeight: 600 }}>{label}</div>{children}</div>);
+
 function AdminLogin({ onLogin }) {
   const [mode, setMode] = useState("login"); // login | otp | forgot | reset
   const [email, setEmail] = useState("");
@@ -182,7 +184,6 @@ function AdminLogin({ onLogin }) {
     setLoading(false);
   };
 
-  const Field = ({ label, children }) => (<div><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6, fontWeight: 600 }}>{label}</div>{children}</div>);
   const Msg = () => (<>
     {error && <div style={{ background: C.redGlow, border: `1px solid ${C.red}44`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: C.redLight, textAlign: "center" }}>{error}</div>}
     {info && <div style={{ background: "#16a34a22", border: "1px solid #16a34a55", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#4ade80", textAlign: "center" }}>{info}</div>}
@@ -203,7 +204,7 @@ function AdminLogin({ onLogin }) {
             {mode === "login" && (<>
               <Field label="البريد الإلكتروني"><input value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@taxidz.dz" type="email" autoComplete="username" style={loginInput} /></Field>
               <Field label="رمز الدخول"><input value={code} onChange={e => setCode(e.target.value)} onKeyDown={onEnter(handle)} placeholder="••••••••" type="password" autoComplete="current-password" style={loginInput} /></Field>
-              <Msg />
+              {Msg()}
               <button onClick={handle} disabled={loading} style={loginBtn(loading)}>{loading ? "جارٍ الدخول..." : "🔑 دخول"}</button>
               <button onClick={() => go("forgot")} style={linkBtn}>نسيت الرمز / كلمة المرور؟</button>
             </>)}
@@ -211,7 +212,7 @@ function AdminLogin({ onLogin }) {
               <div style={{ textAlign: "center", color: C.text, fontWeight: 800, fontSize: 16 }}>🔐 التحقق بخطوتين</div>
               <div style={{ textAlign: "center", color: C.textMuted, fontSize: 13 }}>أرسلنا رمزاً من 6 أرقام إلى <span dir="ltr">{hint}</span></div>
               <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} onKeyDown={onEnter(verify2fa)} inputMode="numeric" autoFocus placeholder="000000" style={{ ...loginInput, textAlign: "center", letterSpacing: 8, fontSize: 22, fontWeight: 800 }} />
-              <Msg />
+              {Msg()}
               <button onClick={verify2fa} disabled={loading} style={loginBtn(loading)}>{loading ? "جارٍ التحقق..." : "تأكيد"}</button>
               <button onClick={() => go("login")} style={linkBtn}>← رجوع</button>
             </>)}
@@ -219,13 +220,13 @@ function AdminLogin({ onLogin }) {
               <div style={{ textAlign: "center", color: C.text, fontWeight: 800, fontSize: 16 }}>استرجاع الدخول</div>
               <div style={{ textAlign: "center", color: C.textMuted, fontSize: 13 }}>اكتب بريدك وسنرسل إليه رمز تحقق</div>
               <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={onEnter(sendReset)} type="email" placeholder="admin@taxidz.dz" style={loginInput} />
-              <Msg />
+              {Msg()}
               <button onClick={sendReset} disabled={loading} style={loginBtn(loading)}>{loading ? "جارٍ الإرسال..." : "إرسال الرمز"}</button>
               <button onClick={() => go("login")} style={linkBtn}>← رجوع</button>
             </>)}
             {mode === "reset" && (<>
               <div style={{ textAlign: "center", color: C.text, fontWeight: 800, fontSize: 16 }}>تعيين رمز جديد</div>
-              <Msg />
+              {Msg()}
               <Field label="الرمز المرسل إلى بريدك (6 أرقام)"><input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="000000" style={{ ...loginInput, textAlign: "center", letterSpacing: 6, fontWeight: 800 }} /></Field>
               <Field label="الرمز الجديد (8 أحرف على الأقل، حروف وأرقام)"><input value={newCode} onChange={e => setNewCode(e.target.value)} type="password" autoComplete="new-password" style={loginInput} /></Field>
               <Field label="أعد كتابة الرمز الجديد"><input value={newCode2} onChange={e => setNewCode2(e.target.value)} onKeyDown={onEnter(doReset)} type="password" autoComplete="new-password" style={loginInput} /></Field>
