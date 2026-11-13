@@ -612,6 +612,8 @@ function WalletScreen({ userId, passengerData, lang, onBack }) {
 }
 
 // ===== SOS BUTTON =====
+const ForceLogoutModal = () => null;
+
 function SOSButton({ passengerName, bookingId }) {
   const [pressed,setPressed]=useState(false);
   const handleSOS=()=>{
@@ -1430,10 +1432,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         // Check session
         const savedSession = localStorage.getItem(SESSION_KEY);
         const activeSession = s.data()?.activeSession;
-        if (activeSession && savedSession && activeSession !== savedSession) {
-          // تم فتح الحساب من جهاز آخر — أظهر modal بدل التسجيل الفوري
-          setShowForceLogout(true);
-        }
+        // (الجهاز الواحد يُدار الآن عبر DeviceGuard)
       }
     });
     const unsub=onForegroundMessage(msg=>{if(msg.data?.type==="new_message")return;playPing();setFcmToast({title:msg.notification?.title,body:msg.notification?.body});});
@@ -2124,7 +2123,7 @@ export default function App() {
       <button onClick={()=>{const n=theme.mode==="dark"?"light":"dark";theme.setPref(n);}} aria-label="theme" style={{ position:"fixed",top:"calc(env(safe-area-inset-top,0px) + 12px)",left:62,zIndex:9998,width:38,height:38,borderRadius:"50%",border:`1px solid ${C.border}`,background:C.card,boxShadow:C.shadow,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>{themeIcon(theme.mode)}</button>
       <PermissionGate lang={lang} />
       <OfflineBanner lang={lang} />
-      <LegalOverlay />
+      {typeof LegalOverlay==="function"&&<LegalOverlay />}
       {screen==="app"&&<SupportButton lang={lang} />}
       <div style={{ position:"fixed",bottom:2,left:0,right:0,textAlign:"center",fontSize:9,color:"#8884",pointerEvents:"none",zIndex:1 }}>AL-BURAQ v2.6</div>
       {screen==="auth"&&<div style={{ position:"fixed",bottom:22,left:0,right:0,zIndex:5 }}><LegalLinks lang={lang} /></div>}
