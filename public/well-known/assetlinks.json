@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.alburaqtaxi.app",
+    "sha256_cert_fingerprints": ["F2:B1:BE:33:4E:09:51:29:0E:9C:AB:61:DD:5D:52:54:EB:7D:AC:4E:78:03:67:B5:73:E0:E8:98:AD:49:3A:67"]
+  }
+}]
