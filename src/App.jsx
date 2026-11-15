@@ -1155,12 +1155,12 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
           <div style={{ background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow,display:"flex",flexDirection:"column",gap:12 }}>
             <div style={{ fontSize:13,color:C.textMuted,fontWeight:600 }}>{lang==="ar"?"رقم الهاتف الجزائري":"Numéro algérien"}</div>
             <div style={{ display:"flex",gap:8 }}>
-              <div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"13px 12px",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap" }}>
+              <div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"13px 12px",flexShrink:0,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap" }}>
                 <span>🇩🇿</span><span style={{ fontSize:14,color:C.greenDark,fontWeight:700 }}>+213</span>
               </div>
               <input value={loginPhone} onChange={e=>setLoginPhone(e.target.value.replace(/\D/g,""))}
                 placeholder="0XXXXXXXXX" type="tel" maxLength={10}
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
+                style={{ flex:1,minWidth:0,width:"100%",boxSizing:"border-box",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 10px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
             </div>
             <div style={{ fontSize:13,color:C.textMuted,fontWeight:600 }}>{lang==="ar"?"كود الحساب":"Code du compte"}</div>
             <div style={{ position:"relative" }}>
@@ -1189,12 +1189,12 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
           <div style={{ background:C.card,borderRadius:24,padding:24,boxShadow:C.shadow,display:"flex",flexDirection:"column",gap:12 }}>
             <input value={name} onChange={e=>setName(e.target.value)} placeholder={lang==="ar"?"اسم المستخدم":"Nom d'utilisateur"} style={inputStyle} />
             <div style={{ display:"flex",gap:8 }}>
-              <div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"13px 12px",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap" }}>
+              <div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"13px 12px",flexShrink:0,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap" }}>
                 <span>🇩🇿</span><span style={{ fontSize:14,color:C.greenDark,fontWeight:700 }}>+213</span>
               </div>
               <input value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g,""))}
                 placeholder="0XXXXXXXXX" type="tel" maxLength={10}
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
+                style={{ flex:1,minWidth:0,width:"100%",boxSizing:"border-box",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 10px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
             </div>
             {/* كلمة المرور مع زر الإظهار */}
             <div style={{ position:"relative" }}>
@@ -1245,12 +1245,12 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
               <div style={{ fontSize:12,color:C.textMuted,marginTop:4 }}>{lang==="ar"?"سنرسل رمز تحقق لرقمك":"Nous enverrons un code de vérification"}</div>
             </div>
             <div style={{ display:"flex",gap:8 }}>
-              <div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"13px 12px",display:"flex",alignItems:"center",gap:6 }}>
+              <div style={{ background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:14,padding:"13px 12px",flexShrink:0,display:"flex",alignItems:"center",gap:6 }}>
                 <span>🇩🇿</span><span style={{ fontSize:14,color:C.greenDark,fontWeight:700 }}>+213</span>
               </div>
               <input value={resetPhone} onChange={e=>setResetPhone(e.target.value.replace(/\D/g,""))}
                 placeholder="0XXXXXXXXX" type="tel" maxLength={10}
-                style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 16px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
+                style={{ flex:1,minWidth:0,width:"100%",boxSizing:"border-box",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 10px",fontFamily:"inherit",fontSize:16,color:C.text,outline:"none",direction:"ltr",textAlign:"center",fontWeight:700 }} />
             </div>
             {error&&<div style={{ background:C.redLight,borderRadius:12,padding:"10px 14px",fontSize:13,color:C.red,textAlign:"center" }}>{error}</div>}
             <button onClick={()=>sendOTP(resetPhone)} disabled={loading||resetPhone.replace(/\D/g,"").length<9}
