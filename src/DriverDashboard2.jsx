@@ -149,9 +149,11 @@ function DriverPinChange({ uid, phone, currentPin, onClose }) {
   const [error,setError]=useState("");
   const [done,setDone]=useState(false);
 
+  const [viaOld,setViaOld]=useState(false);
   const checkOldPin=()=>{
-    if(oldPin!==currentPin){ setError("كلمة المرور الحالية غير صحيحة"); return; }
-    setError(""); setMode("newPin");
+    if(!oldPin){ setError("أدخل كلمة المرور الحالية"); return; }
+    // يُتحقق من الكود القديم على الخادم عند الحفظ
+    setError(""); setViaOld(true); setMode("newPin");
   };
 
   const sendOtp=async()=>{
@@ -185,8 +187,8 @@ function DriverPinChange({ uid, phone, currentPin, onClose }) {
     if(newPin.length<4){ setError("كلمة المرور قصيرة (4 أحرف على الأقل)"); return; }
     if(newPin!==newPinConfirm){ setError("الكودان غير متطابقان"); return; }
     setLoading(true); setError("");
-    try { await setDoc(doc(db,"drivers",uid),{pinCode:newPin},{merge:true}); setDone(true); }
-    catch(e){ setError("تعذر الحفظ، حاول مجدداً"); }
+    try { await httpsCallable(cloudFunctions,"setPin")({ pin:newPin, ...(viaOld?{ oldPin }:{}) }); setDone(true); }
+    catch(e){ setError(/الحالية|غير صحيحة|قفل/.test(e?.message||"")?"كلمة المرور الحالية غير صحيحة":"تعذر الحفظ، حاول مجدداً"); }
     setLoading(false);
   };
 
