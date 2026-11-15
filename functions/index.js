@@ -521,6 +521,51 @@ const OTP_REGION = "europe-west1"; // يطابق المنطقة في App.jsx (cl
 // الذي يمنح كل جلسة معرّفاً (uid) عشوائياً مختلفاً عن معرّف الحساب الحقيقي المسجَّل
 // وقت التسجيل (المرتبط برقم الهاتف عبر verifyOtpTwilio) — فيبدو الحساب "جديداً"
 // في كل تسجيل دخول رغم وجوده فعلاً. هذه الدالة تُسجّل الدخول بنفس المعرّف الحقيقي دائماً.
+// ---- أكواد الحساب (PIN): تُحفظ مشفّرة في user_secrets (للخادم فقط) ----
+function pinHashOf(pin) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  return { pinSalt: salt, pinHash: crypto.scryptSync(String(pin), salt, 32).toString("hex") };
+}
+function pinHashMatches(sec, pin) {
+  if (!sec || !sec.pinHash || !sec.pinSalt) return false;
+  const H = Buffer.from(sec.pinHash, "hex"), G = crypto.scryptSync(String(pin || ""), sec.pinSalt, 32);
+  return H.length === G.length && crypto.timingSafeEqual(H, G);
+}
+function plainEq(a, b) {
+  const A = Buffer.from(String(a ?? "")), B = Buffer.from(String(b ?? ""));
+  return A.length === B.length && A.length > 0 && crypto.timingSafeEqual(A, B);
+}
+// حد المحاولات: 5 أخطاء ← قفل 15 دقيقة (لكل حساب)
+async function pinLockCheck(uid) {
+  const s = await db.collection("pin_attempts").doc(uid).get();
+  const until = s.exists ? (s.data().lockedUntil || 0) : 0;
+  if (until > Date.now()) throw new HttpsError("resource-exhausted", "تم قفل الحساب مؤقتاً بسبب محاولات خاطئة، حاول بعد 15 دقيقة");
+}
+async function pinFail(uid) {
+  const ref = db.collection("pin_attempts").doc(uid);
+  const s = await ref.get();
+  const fails = (s.exists ? (s.data().fails || 0) : 0) + 1;
+  await ref.set(fails >= 5 ? { fails: 0, lockedUntil: Date.now() + 15 * 60000 } : { fails, lockedUntil: 0 }, { merge: true });
+}
+async function pinOkReset(uid) { await db.collection("pin_attempts").doc(uid).set({ fails: 0, lockedUntil: 0 }, { merge: true }); }
+// يتحقق من PIN مقابل المشفّر، وإلا مقابل النص القديم (ثم يرحّله ويحذف النص)
+async function verifyPinFor(uid, pin) {
+  const secRef = db.collection("user_secrets").doc(uid);
+  const [secSnap, dSnap, pSnap] = await Promise.all([secRef.get(), db.collection("drivers").doc(uid).get(), db.collection("passengers").doc(uid).get()]);
+  if (secSnap.exists && secSnap.data().pinHash) return pinHashMatches(secSnap.data(), pin);
+  const legacy = [dSnap, pSnap].find((x) => x.exists && x.data().pinCode != null);
+  if (legacy && plainEq(legacy.data().pinCode, pin)) { await storePin(uid, pin); return true; }
+  return false;
+}
+async function storePin(uid, pin) {
+  await db.collection("user_secrets").doc(uid).set({ ...pinHashOf(pin), pinUpdatedAt: FV.serverTimestamp() }, { merge: true });
+  for (const col of ["drivers", "passengers"]) {
+    const r = db.collection(col).doc(uid);
+    const s = await r.get();
+    if (s.exists && s.data().pinCode !== undefined) await r.update({ pinCode: FV.delete() });
+  }
+}
+
 exports.loginWithPin = onCall(
   { region: OTP_REGION },
   async (request) => {
@@ -536,16 +581,18 @@ exports.loginWithPin = onCall(
       throw new HttpsError("not-found", "الرقم غير مسجل");
     }
     const uid = userRecord.uid;
+    await pinLockCheck(uid);
     const [driverSnap, passengerSnap] = await Promise.all([
       admin.firestore().collection("drivers").doc(uid).get(),
       admin.firestore().collection("passengers").doc(uid).get(),
     ]);
     const driverData = driverSnap.exists ? driverSnap.data() : null;
     const passengerData = passengerSnap.exists ? passengerSnap.data() : null;
-    const pinMatches = (driverData && driverData.pinCode === pin) || (passengerData && passengerData.pinCode === pin);
-    if (!pinMatches) {
+    if (!(driverData || passengerData) || !(await verifyPinFor(uid, pin))) {
+      await pinFail(uid);
       throw new HttpsError("invalid-argument", "كود الحساب غير صحيح");
     }
+    await pinOkReset(uid);
     const customToken = await admin.auth().createCustomToken(uid);
     return {
       customToken, uid,
@@ -554,6 +601,49 @@ exports.loginWithPin = onCall(
     };
   }
 );
+
+// تعيين/تغيير كود الحساب: إما بالكود القديم الصحيح، أو بعد اجتياز OTP قبل أقل من 15 دقيقة
+exports.setPin = onCall({ region: OTP_REGION }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "سجّل الدخول أولاً");
+  const pin = String(request.data?.pin || "");
+  if (pin.length < 4 || pin.length > 64) throw new HttpsError("invalid-argument", "الكود قصير (4 أحرف على الأقل)");
+  const oldPin = request.data?.oldPin;
+  if (oldPin != null && oldPin !== "") {
+    await pinLockCheck(uid);
+    if (!(await verifyPinFor(uid, oldPin))) { await pinFail(uid); throw new HttpsError("permission-denied", "كلمة المرور الحالية غير صحيحة"); }
+    await pinOkReset(uid);
+  } else {
+    const mRef = db.collection("pin_reset_ok").doc(uid);
+    const m = await mRef.get();
+    if (!m.exists || (Date.now() - (m.data().at || 0)) > 15 * 60000) throw new HttpsError("permission-denied", "أعد التحقق برمز SMS ثم حاول مجدداً");
+    await mRef.delete().catch(() => {});
+  }
+  await storePin(uid, pin);
+  return { ok: true };
+});
+
+// ترحيل مرة واحدة: يحوّل كل الأكواد النصية القديمة إلى مشفّرة (المدير الرئيسي فقط)
+exports.migratePins = onCall({ region: OTP_REGION, timeoutSeconds: 540 }, async (req) => {
+  const t = req.auth?.token || {};
+  if (t.email !== "abdouhaffar@gmail.com" || t.firebase?.sign_in_provider !== "password") throw new HttpsError("permission-denied", "للمدير الرئيسي فقط");
+  let migrated = 0;
+  for (const col of ["drivers", "passengers"]) {
+    for (let round = 0; round < 200; round++) {
+      const snap = await db.collection(col).orderBy("pinCode").limit(200).get();
+      if (snap.empty) break;
+      for (const d of snap.docs) {
+        const pin = d.data().pinCode;
+        const secRef = db.collection("user_secrets").doc(d.id);
+        const sec = await secRef.get();
+        if (!(sec.exists && sec.data().pinHash) && pin != null && String(pin).length > 0) await secRef.set({ ...pinHashOf(pin), pinUpdatedAt: FV.serverTimestamp() }, { merge: true });
+        await d.ref.update({ pinCode: FV.delete() });
+        migrated++;
+      }
+    }
+  }
+  return { migrated };
+});
 
 // ===== التحقق من وجود حساب مسبقاً بنفس الرقم (قبل إرسال أي SMS) =====
 exports.checkPhoneRegistered = onCall(
@@ -680,6 +770,8 @@ exports.verifyOtpTwilio = onCall(
       userRecord = await admin.auth().createUser({ phoneNumber: phone });
     }
 
+    // علامة قصيرة العمر تثبت أن هذا الحساب اجتاز OTP للتو (تُستعمل لتعيين كود الحساب)
+    await db.collection("pin_reset_ok").doc(userRecord.uid).set({ at: Date.now() });
     const customToken = await admin.auth().createCustomToken(userRecord.uid);
     return { customToken, uid: userRecord.uid };
   }
@@ -833,6 +925,36 @@ exports.adminVerify2fa = onCall({ region: "europe-west1" }, async (req) => {
   await ref.update({ lastLoginAt: FV.serverTimestamp() });
   const token = await admin.auth().createCustomToken("admin_" + d.adminId, { admin: true, subAdmin: true });
   return { token, name: snap.data().name || snap.data().email, id: d.adminId };
+});
+
+// ---- تحقق ثنائي بالبريد للمدير الرئيسي (Firebase email/password) ----
+// يُمنح بعد النجاح claim اسمه mfaUntil (12 ساعة) تشترطه قواعد Firestore عند تفعيل superMfa
+const SUPER_EMAIL = "abdouhaffar@gmail.com";
+function isSuperReq(req) {
+  const t = req.auth?.token || {};
+  return t.email === SUPER_EMAIL && t.firebase?.sign_in_provider === "password";
+}
+exports.adminSuperChallenge = onCall({ region: "europe-west1", secrets: [MAIL_USER, MAIL_PASS] }, async (req) => {
+  if (!isSuperReq(req)) throw new HttpsError("permission-denied", "غير مصرّح");
+  const force = req.data?.force === true; // اختبار البريد قبل التفعيل
+  const sec = (await db.collection("settings").doc("security").get()).data() || {};
+  if (!force && sec.superMfa !== true) return { needOtp: false };
+  const ref = db.collection("admin_challenges").doc("super_" + req.auth.uid);
+  const cur = (await ref.get()).data() || {};
+  const now = Date.now();
+  if (cur.sentAt && now - cur.sentAt < 45000) throw new HttpsError("resource-exhausted", "انتظر قليلاً قبل طلب رمز جديد");
+  const otp = await issueOtp(ref, { sentAt: now });
+  try { await sendMail(SUPER_EMAIL, "رمز دخول المدير الرئيسي - AL-BURAQ", otpMail(otp, "رمز تأكيد دخول المدير الرئيسي")); }
+  catch (e) { console.error("super 2FA mail failed", e?.message); throw new HttpsError("unavailable", "تعذّر إرسال الرمز إلى البريد (تحقق من MAIL_USER / MAIL_PASS)"); }
+  return { needOtp: true, hint: SUPER_EMAIL.replace(/^(.).*(@.*)$/, "$1***$2") };
+});
+exports.adminSuperVerify = onCall({ region: "europe-west1" }, async (req) => {
+  if (!isSuperReq(req)) throw new HttpsError("permission-denied", "غير مصرّح");
+  await consumeOtp(db.collection("admin_challenges").doc("super_" + req.auth.uid), req.data?.otp);
+  const u = await admin.auth().getUser(req.auth.uid);
+  const until = Math.floor(Date.now() / 1000) + 12 * 3600;
+  await admin.auth().setCustomUserClaims(req.auth.uid, { ...(u.customClaims || {}), mfaUntil: until });
+  return { ok: true, until };
 });
 
 // ============================================================
