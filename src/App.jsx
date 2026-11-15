@@ -1032,13 +1032,15 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
         }
       } catch(e){}
       await setDoc(doc(db, col, u.uid), {
-        uid:u.uid, name:finalName, phone:phoneF, pinCode,
+        uid:u.uid, name:finalName, phone:phoneF,
         role, status:role==="driver"?"pending":"active",
         verificationStatus:role==="driver"?"none":null,
         rating:0, totalRatings:0, totalRides:0, points:0,
         referralCode:generateReferralCode(u.uid), referralCount:0, referredBy:(refCode||"").trim().toUpperCase()||null,
         createdAt:serverTimestamp()
       });
+      // كود الحساب يُشفَّر ويُحفظ على الخادم فقط (لا يُكتب في مستند المستخدم)
+      await httpsCallable(cloudFunctions,"setPin")({ pin:pinCode });
       if (isPassenger) { localStorage.setItem("taxidz_name",finalName); localStorage.setItem("taxidz_phone",phoneF); }
       localStorage.setItem("taxidz_role", role);
       try { const fcmToken = await requestNotificationPermission(); if(fcmToken) await setDoc(doc(db,col,u.uid),{fcmToken},{merge:true}); } catch(e){}
@@ -1089,7 +1091,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
       const u = auth.currentUser;
       if (!u) { setError("Session expired"); setLoading(false); return; }
       const col = isPassenger ? "passengers" : "drivers";
-      await setDoc(doc(db, col, u.uid), { pinCode: newPin }, { merge: true });
+      await httpsCallable(cloudFunctions,"setPin")({ pin:newPin });
       sessionStorage.removeItem("taxidz_reset_in_progress");
       setStep("done");
     } catch(e) { setError(lang==="ar"?"خطأ في الحفظ":"Erreur"); }
