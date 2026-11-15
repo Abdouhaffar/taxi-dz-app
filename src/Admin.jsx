@@ -108,6 +108,7 @@ function AdminLogin({ onLogin }) {
   const [newCode, setNewCode] = useState("");
   const [newCode2, setNewCode2] = useState("");
   const [challenge, setChallenge] = useState(null);
+  const [superFlow, setSuperFlow] = useState(false); // تحقق ثنائي للمدير الرئيسي بعد كلمة المرور
   const [hint, setHint] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -123,6 +124,11 @@ function AdminLogin({ onLogin }) {
       if (isSuper(email)) {
         try {
           await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), code);
+          // تحقق ثنائي بالبريد إن كان مفعّلاً في الإعدادات (يُقرَّر من الخادم)
+          try {
+            const r = await fnCall("adminSuperChallenge")({});
+            if (r.data?.needOtp) { setSuperFlow(true); setHint(r.data.hint || ""); go("otp"); setLoading(false); return; }
+          } catch (mfaErr) { await signOut(auth).catch(() => {}); setError(niceErr(mfaErr)); setLoading(false); return; }
           onLogin({ email, role: "super", name: "عبد الواحد هفار" });
         } catch (authErr) {
           const msgs = {
@@ -147,6 +153,12 @@ function AdminLogin({ onLogin }) {
     if (otp.length !== 6) { setError("أدخل الرمز المكوّن من 6 أرقام"); return; }
     setLoading(true); setError("");
     try {
+      if (superFlow) {
+        await fnCall("adminSuperVerify")({ otp });
+        await auth.currentUser.getIdToken(true); // لتحميل claim التحقق الجديد
+        onLogin({ email, role: "super", name: "عبد الواحد هفار" });
+        setLoading(false); return;
+      }
       const res = await fnCall("adminVerify2fa")({ challenge, otp });
       await signInWithCustomToken(auth, res.data.token);
       onLogin({ email, role: "sub", name: res.data.name, id: res.data.id });
@@ -214,7 +226,7 @@ function AdminLogin({ onLogin }) {
               <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} onKeyDown={onEnter(verify2fa)} inputMode="numeric" autoFocus placeholder="000000" style={{ ...loginInput, textAlign: "center", letterSpacing: 8, fontSize: 22, fontWeight: 800 }} />
               {Msg()}
               <button onClick={verify2fa} disabled={loading} style={loginBtn(loading)}>{loading ? "جارٍ التحقق..." : "تأكيد"}</button>
-              <button onClick={() => go("login")} style={linkBtn}>← رجوع</button>
+              <button onClick={async () => { if (superFlow) { await signOut(auth).catch(() => {}); setSuperFlow(false); } go("login"); }} style={linkBtn}>← رجوع</button>
             </>)}
             {mode === "forgot" && (<>
               <div style={{ textAlign: "center", color: C.text, fontWeight: 800, fontSize: 16 }}>استرجاع الدخول</div>
@@ -872,10 +884,39 @@ function SecurityCard({ admin }) {
   const [cur, setCur] = useState(""), [n1, setN1] = useState(""), [n2, setN2] = useState("");
   const [busy, setBusy] = useState(false), [msg, setMsg] = useState(null);
   const [twofa, setTwofa] = useState(false);
+  const [superMfa, setSuperMfa] = useState(false);
+  const [mfaStage, setMfaStage] = useState("idle"); // idle | sent
+  const [mfaOtp, setMfaOtp] = useState("");
   useEffect(() => {
     if (!isSuper) return;
-    return onSnapshot(doc(db, "settings", "security"), s => setTwofa(s.data()?.admin2fa === true), () => {});
+    return onSnapshot(doc(db, "settings", "security"), s => { setTwofa(s.data()?.admin2fa === true); setSuperMfa(s.data()?.superMfa === true); }, () => {});
   }, [isSuper]);
+  const startSuperMfa = async () => {
+    setMsg(null); setBusy(true);
+    try {
+      if (superMfa) { await setDoc(doc(db, "settings", "security"), { superMfa: false, updatedAt: serverTimestamp() }, { merge: true }); }
+      else { await fnCall("adminSuperChallenge")({ force: true }); setMfaStage("sent"); setMfaOtp(""); setMsg({ t: "أُرسل رمز إلى بريدك. أدخله لتأكيد أن البريد يعمل ثم يُفعَّل التحقق." }); }
+    } catch (e) { setMsg({ bad: 1, t: niceErr(e) }); }
+    setBusy(false);
+  };
+  const confirmSuperMfa = async () => {
+    if (mfaOtp.length !== 6) return setMsg({ bad: 1, t: "أدخل الرمز المكوّن من 6 أرقام" });
+    setBusy(true); setMsg(null);
+    try {
+      await fnCall("adminSuperVerify")({ otp: mfaOtp });
+      await auth.currentUser.getIdToken(true);
+      await setDoc(doc(db, "settings", "security"), { superMfa: true, updatedAt: serverTimestamp() }, { merge: true });
+      setMfaStage("idle"); setMfaOtp(""); setMsg({ t: "تم تفعيل التحقق بخطوتين للمدير الرئيسي ✅" });
+    } catch (e) { setMsg({ bad: 1, t: niceErr(e) }); }
+    setBusy(false);
+  };
+  const runMigrate = async () => {
+    if (!window.confirm("تشفير أكواد دخول كل المستخدمين الحالية (مرة واحدة). متابعة؟")) return;
+    setBusy(true); setMsg(null);
+    try { const r = await fnCall("migratePins")({}); setMsg({ t: `تم تشفير ${r.data?.migrated ?? 0} حساب ✅` }); }
+    catch (e) { setMsg({ bad: 1, t: niceErr(e) }); }
+    setBusy(false);
+  };
   const strong = (c) => c.length >= 8 && /[A-Za-z]/.test(c) && /[0-9]/.test(c);
   const change = async () => {
     setMsg(null);
@@ -919,6 +960,30 @@ function SecurityCard({ admin }) {
             <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>رمز يصل للبريد عند كل دخول. يتطلب إعداد البريد (MAIL_USER / MAIL_PASS) في الخادم.</div>
           </div>
           <Btn onClick={toggle2fa} color={twofa ? C.green : C.textMuted} outline={!twofa}>{twofa ? "مفعّل ✓" : "معطّل"}</Btn>
+        </div>
+      )}
+      {isSuper && (
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>التحقق بخطوتين للمدير الرئيسي</div>
+              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>رمز يصل لبريدك عند كل دخول، وتفرضه قواعد Firestore نفسها. لا يُفعَّل قبل نجاح إرسال رمز اختبار.</div>
+            </div>
+            <Btn onClick={startSuperMfa} disabled={busy} color={superMfa ? C.green : C.textMuted} outline={!superMfa}>{superMfa ? "مفعّل ✓ (إيقاف)" : "تفعيل"}</Btn>
+          </div>
+          {mfaStage === "sent" && !superMfa && (
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <input value={mfaOtp} onChange={e => setMfaOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="000000" style={{ ...loginInput, textAlign: "center", letterSpacing: 6, flex: 1 }} />
+              <Btn onClick={confirmSuperMfa} disabled={busy}>تأكيد</Btn>
+            </div>
+          )}
+          <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>تشفير أكواد دخول المستخدمين</div>
+              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>مرة واحدة بعد نشر التحديث: يحوّل الأكواد القديمة المكشوفة إلى مشفّرة.</div>
+            </div>
+            <Btn onClick={runMigrate} disabled={busy} outline>تشفير الآن</Btn>
+          </div>
         </div>
       )}
       {isSuper && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 14 }}>لحماية أقوى لحسابك الرئيسي: فعّل التحقق بخطوتين في حساب Gmail نفسه.</div>}
