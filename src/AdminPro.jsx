@@ -9,7 +9,7 @@ import { doc, updateDoc, setDoc, deleteDoc, addDoc, collection, Timestamp, serve
 export const T = {
   bg: "#0f0b0d", panel: "#161113", panel2: "#1d1619", border: "#2c2126",
   text: "#fff5f6", muted: "#c7a9ae", dim: "#7a5c62",
-  brand: "#c4001d", brandL: "#ff5a70",
+  brand: "#7c5cfc", brandL: "#a78bfa",
   ok: "#3fb950", warn: "#e3a008", bad: "#f85149", info: "#58a6ff",
 };
 const FONT = "'IBM Plex Sans Arabic',Cairo,sans-serif";
@@ -653,7 +653,8 @@ export function GlobalSearch({ drivers, passengers, bookings, onNav }) {
 // ================================================================
 // التسعير (settings/pricing) — يقرأه تطبيق الراكب مباشرة
 // ================================================================
-const DEF_PRICE = { perKm: 30, base: 40, min: 100, perMin: 0, surge: 1, trafficK: 1, trafficMax: 1.5, mult: { economy: 1, comfort: 1.4, xl: 1.8 } };
+const DEF_PRICE = { perKm: 30, base: 40, min: 100, perMin: 0, surge: 1, trafficK: 1, trafficMax: 1.5, trafficWilayas: [], mult: { economy: 1, comfort: 1.4, xl: 1.8 } };
+const BIG_CITIES = ["16", "31", "25", "09", "23", "19", "35", "42"];
 export function PricingPanel({ db, adminName, canEdit }) {
   const [p, setP] = useState(DEF_PRICE);
   const [loaded, setLoaded] = useState(false);
@@ -661,17 +662,19 @@ export function PricingPanel({ db, adminName, canEdit }) {
   const [msg, setMsg] = useState("");
   const [km, setKm] = useState(10);
   useEffect(() => onSnapshot(doc(db, "settings", "pricing"), (s) => {
-    if (s.exists()) setP({ ...DEF_PRICE, ...s.data(), mult: { ...DEF_PRICE.mult, ...(s.data().mult || {}) } });
+    if (s.exists()) setP({ ...DEF_PRICE, ...s.data(), trafficWilayas: Array.isArray(s.data().trafficWilayas) ? s.data().trafficWilayas.map(String) : [], mult: { ...DEF_PRICE.mult, ...(s.data().mult || {}) } });
     setLoaded(true);
   }, () => setLoaded(true)), [db]);
   const set = (k, v) => setP((x) => ({ ...x, [k]: v }));
+  const tw = p.trafficWilayas || [];
+  const toggleW = (c) => setP((x) => { const a = x.trafficWilayas || []; return { ...x, trafficWilayas: a.includes(c) ? a.filter((y) => y !== c) : [...a, c] }; });
   const setM = (k, v) => setP((x) => ({ ...x, mult: { ...x.mult, [k]: v } }));
   const price = (mult) => { const r = Math.round((+p.base + km * p.perKm + km * 2 * (+p.perMin || 0)) * mult * (+p.surge || 1) / 10) * 10; return km < 2 ? Math.max(r, p.min) : r; };
   const valid = p.perKm > 0 && p.base >= 0 && p.min > 0 && +p.perMin >= 0 && +p.surge >= 1 && +p.surge <= 3 && +p.trafficK >= 0 && +p.trafficMax >= 1 && +p.trafficMax <= 3 && Object.values(p.mult).every((m) => m >= 1 && m <= 5);
   const save = async () => {
     setSaving(true); setMsg("");
     try {
-      await setDoc(doc(db, "settings", "pricing"), { perKm: +p.perKm, base: +p.base, min: +p.min, perMin: +p.perMin || 0, surge: +p.surge || 1, trafficK: +p.trafficK >= 0 ? +p.trafficK : 1, trafficMax: +p.trafficMax >= 1 ? +p.trafficMax : 1.5, mult: { economy: +p.mult.economy, comfort: +p.mult.comfort, xl: +p.mult.xl }, updatedAt: serverTimestamp(), updatedBy: adminName || "admin" }, { merge: true });
+      await setDoc(doc(db, "settings", "pricing"), { perKm: +p.perKm, base: +p.base, min: +p.min, perMin: +p.perMin || 0, surge: +p.surge || 1, trafficK: +p.trafficK >= 0 ? +p.trafficK : 1, trafficMax: +p.trafficMax >= 1 ? +p.trafficMax : 1.5, trafficWilayas: (p.trafficWilayas || []).map(String), mult: { economy: +p.mult.economy, comfort: +p.mult.comfort, xl: +p.mult.xl }, updatedAt: serverTimestamp(), updatedBy: adminName || "admin" }, { merge: true });
       setMsg("✅ تم الحفظ — يطبَّق فوراً على الطلبات الجديدة");
     } catch (e) { setMsg("❌ " + (e.code === "permission-denied" ? "قواعد Firestore تمنع الكتابة في settings" : e.message)); }
     setSaving(false);
@@ -700,6 +703,18 @@ export function PricingPanel({ db, adminName, canEdit }) {
             <Field label="حساسية الازدحام التلقائي (كم تزيد الأسعار مع كل 100% تأخير عن الوضع العادي)" k="trafficK" unit="×" step={0.1} />
             <Field label="أقصى زيادة تلقائية بسبب الازدحام (1 = إيقاف، 1.5 = حتى +50%)" k="trafficMax" unit="×" step={0.05} />
             <Field label="معامل الذروة اليدوي (1 = بدون، 1.3 = +30% في أوقات الزحام)" k="surge" unit="×" step={0.05} />
+            <div style={{ fontWeight: 800, color: T.text, margin: "18px 0 6px" }}>🚦 الولايات التي يُفعَّل فيها الوقت والازدحام</div>
+            <div style={{ fontSize: 12, color: T.muted, marginBottom: 10, lineHeight: 1.7 }}>يُحتسب «سعر الدقيقة» و«الزيادة التلقائية للازدحام» فقط عندما تكون <b style={{ color: T.text }}>ولاية نقطة الانطلاق</b> مختارة هنا. أي ولاية غير مختارة يكون سعرها (أساس + كم) فقط. «معامل الذروة اليدوي» يبقى عاماً.</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+              <button type="button" disabled={!canEdit} onClick={() => set("trafficWilayas", [...BIG_CITIES])} style={{ background: T.panel2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "7px 12px", fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>المدن الكبرى</button>
+              <button type="button" disabled={!canEdit} onClick={() => set("trafficWilayas", [])} style={{ background: T.panel2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "7px 12px", fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>إلغاء الكل</button>
+              <span style={{ color: T.dim, fontSize: 12, alignSelf: "center" }}>مفعّلة: {tw.length}</span>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 260, overflowY: "auto", marginBottom: 16 }}>
+              {WILAYA_LIST.map((w) => { const on = tw.includes(w.c); return (
+                <button key={w.c} type="button" disabled={!canEdit} onClick={() => toggleW(w.c)} style={{ background: on ? T.brand : T.panel2, color: on ? "#fff" : T.muted, border: `1px solid ${on ? T.brand : T.border}`, borderRadius: 999, padding: "6px 11px", fontFamily: "inherit", fontSize: 12, fontWeight: on ? 800 : 500, cursor: canEdit ? "pointer" : "default" }}>{w.c} {w.n}</button>
+              ); })}
+            </div>
             <div style={{ fontWeight: 800, color: T.text, margin: "18px 0 12px" }}>معاملات الفئات</div>
             <Field label="اقتصادي" k="economy" unit="×" step={0.1} mult />
             <Field label="مريح" k="comfort" unit="×" step={0.1} mult />
