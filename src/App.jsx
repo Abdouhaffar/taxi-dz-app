@@ -1003,16 +1003,19 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
     const code = otp.join("");
     if (code.length < OTP_LEN) { setError(lang==="ar"?"أدخل الرمز كاملاً":"Code incomplet"); return; }
     setLoading(true); setError("");
+    let stage="verify";
 
     try {
       const verifyOtpTwilio = httpsCallable(cloudFunctions, "verifyOtpTwilio");
       const { data } = await verifyOtpTwilio({ phone: confirmResult.phone, code });
+      stage="signin";
       const cred = await signInWithCustomToken(auth, data.customToken);
       const u = cred.user;
       const digits = phone.replace(/\D/g,"");
       const phoneF = `+213${digits.replace(/^0/,"")}`;
       const col = isPassenger ? "passengers" : "drivers";
       // منع إنشاء/إعادة تعيين حساب موجود مسبقًا بنفس الرقم
+      stage="check";
       const existingSnap = await getDoc(doc(db, col, u.uid));
       if (existingSnap.exists()) {
         setError(lang==="ar"?"هذا الرقم مسجّل مسبقاً — استعمل تسجيل الدخول":"Ce numéro est déjà enregistré — utilisez la connexion");
@@ -1031,6 +1034,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
           if (otherName) finalName = otherName;
         }
       } catch(e){}
+      stage="profile";
       await setDoc(doc(db, col, u.uid), {
         uid:u.uid, name:finalName, phone:phoneF,
         role, status:role==="driver"?"pending":"active",
@@ -1040,6 +1044,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
         createdAt:serverTimestamp()
       });
       // كود الحساب يُشفَّر ويُحفظ على الخادم فقط (لا يُكتب في مستند المستخدم)
+      stage="pin";
       await httpsCallable(cloudFunctions,"setPin")({ pin:pinCode });
       if (isPassenger) { localStorage.setItem("taxidz_name",finalName); localStorage.setItem("taxidz_phone",phoneF); }
       localStorage.setItem("taxidz_role", role);
@@ -1051,7 +1056,7 @@ function AuthForm({ role, onSuccess, onBack, lang, setLang, resetGuardRef }) {
     } catch(e) {
       setVerified(false);
       const locked = e.code==="functions/resource-exhausted"||e.details?.code==="resource-exhausted"||/قفل|resource-exhausted/i.test(e.message||"");
-      setError(locked?(lang==="ar"?"تم قفل حسابك مؤقتاً 24 ساعة بسبب محاولات خاطئة متكررة":"Compte verrouillé 24h — trop de tentatives"):(lang==="ar"?"رمز التحقق خاطئ أو منتهي":"Code incorrect ou expiré"));
+      if(!locked&&stage!=="verify"){ console.error("register failed at",stage,e); setError((lang==="ar"?"تعذّر إكمال التسجيل — الخطوة: ":"Échec à l’étape : ")+stage+" ("+(e.code||e.message||"")+")"); } else setError(locked?(lang==="ar"?"تم قفل حسابك مؤقتاً 24 ساعة بسبب محاولات خاطئة متكررة":"Compte verrouillé 24h — trop de tentatives"):(lang==="ar"?"رمز التحقق خاطئ أو منتهي":"Code incorrect ou expiré"));
       setOtp(Array(OTP_LEN).fill(""));
       setTimeout(() => otpRefs[0].current?.focus(), 100);
     }
