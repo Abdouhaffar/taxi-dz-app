@@ -1288,6 +1288,24 @@ export default function AdminApp() {
     return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
   }, [admin]);
 
+  // انتهاء صلاحية التحقق الثنائي (12 ساعة): نعيد المدير الرئيسي لشاشة الدخول بدل أن تختفي البيانات
+  useEffect(() => {
+    if (!admin || admin.role !== "super") return;
+    const chk = async () => {
+      try {
+        const u = auth.currentUser; if (!u) return;
+        const t = await u.getIdTokenResult();
+        const m = Number(t.claims.mfaUntil || 0);
+        if (m && Date.now() / 1000 > m - 30) { await signOut(auth).catch(() => {}); setAdmin(null); }
+      } catch (e) {}
+    };
+    chk();
+    const id = setInterval(chk, 60000);
+    const vis = () => { if (document.visibilityState === "visible") chk(); };
+    document.addEventListener("visibilitychange", vis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", vis); };
+  }, [admin]);
+
   if (!admin) return <AdminLogin onLogin={setAdmin} />;
 
   const counts = {
