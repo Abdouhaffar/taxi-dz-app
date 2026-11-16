@@ -11,7 +11,7 @@ const LegalOverlay = (p) => (LegalMod.LegalOverlay ? <LegalMod.LegalOverlay {...
 const SupportButton = (p) => (LegalMod.SupportButton ? <LegalMod.SupportButton {...p} /> : null);
 const OfflineBanner = (p) => (LegalMod.OfflineBanner ? <LegalMod.OfflineBanner {...p} /> : null);
 import { useRegions, wilayaOf, isEnabled } from "./Wilayas";
-import { SharedModeBox, SharedTripPicker, SharedTripScreen, ActiveSharedBanner, createSharedBooking, joinTrip } from "./SharedTrips";
+import { SharedModeBox, SharedTripPickeSharedTripScreen, ActiveSharedBanner, createSharedBooking, joinTrip } from "./SharedTrips";
 import { useSingleSession, KickedScreen, PermissionGate, clearDeviceClaim } from "./DeviceGuard";
 import {
   signOut, onAuthStateChanged, updateProfile, signInWithCustomToken
