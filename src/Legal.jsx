@@ -4,7 +4,7 @@ import { C } from "./Theme";
 import { useState, useEffect } from "react";
 
 // ضع بيانات الدعم الحقيقية في Vercel → Environment Variables (لا تُكتب في الكود)
-const SUPPORT_PHONE = process.env.REACT_APP_SUPPORT_PHONE || "";   // مثال: 213555123456 (بدون + أو أصفار)
+const SUPPORT_CALL = "+213553686356";   // رقم اتصال الإدارة (للزر فقط، لا يظهر نصّاً)
 const SUPPORT_EMAIL = process.env.REACT_APP_SUPPORT_EMAIL || "";
 const FONT = "'IBM Plex Sans Arabic',Cairo,system-ui,sans-serif";
 import { DOCS, UPDATED } from "./LegalText";
@@ -34,7 +34,7 @@ export function LegalPage({ kind = "privacy", onClose = null }) {
             <div style={{ fontSize: 14, lineHeight: 1.9, color: C.text, whiteSpace: "pre-line" }}>{b}</div>
           </div>
         ))}
-        {(SUPPORT_EMAIL || SUPPORT_PHONE) && <div style={{ fontSize: 13, color: C.textMuted, textAlign: "center", marginTop: 10 }}>{SUPPORT_EMAIL}{SUPPORT_EMAIL && SUPPORT_PHONE ? " · " : ""}{SUPPORT_PHONE ? "+" + SUPPORT_PHONE : ""}</div>}
+        {SUPPORT_EMAIL && <div style={{ fontSize: 13, color: C.textMuted, textAlign: "center", marginTop: 10 }}>{SUPPORT_EMAIL}</div>}
         <div style={{ textAlign: "center", marginTop: 18 }}>{onClose ? <button onClick={onClose} style={{ background: C.green, color: "#fff", border: "none", borderRadius: 14, padding: "12px 28px", fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>{rtl ? "رجوع" : lang === "fr" ? "Retour" : "Back"}</button> : <a href="/" style={{ color: C.green, fontWeight: 800, textDecoration: "none" }}>← AL-BURAQ</a>}</div>
       </div>
     </div>
@@ -58,15 +58,13 @@ export function LegalLinks({ lang = "ar", dark = true }) {
 }
 
 // زر دعم عائم: واتساب إن ضُبط الرقم، وإلا بريد
-export function SupportButton({ lang = "ar", context = "" }) {
-  if (!SUPPORT_PHONE && !SUPPORT_EMAIL) return null;
-  const msg = encodeURIComponent((lang === "ar" ? "مرحباً إدارة البراق، أحتاج مساعدة" : "Hello AL-BURAQ admin, I need help") + (context ? ` (${context})` : ""));
-  const href = SUPPORT_PHONE ? `https://wa.me/${SUPPORT_PHONE}?text=${msg}` : `mailto:${SUPPORT_EMAIL}?subject=${msg}`;
-  const L = { ar: ["📞 اتصل بنا", "مع تحيات إدارة البراق"], fr: ["📞 Contactez-nous", "L'administration AL-BURAQ"], en: ["📞 Contact us", "AL-BURAQ administration"] }[lang] || ["📞 Contact us", "AL-BURAQ administration"];
+export function SupportButton({ lang = "ar" }) {
+  // رقم الإدارة: يُستعمل للاتصال فقط ولا يُعرَض نصّاً في التطبيق
+  const L = { ar: ["📞 اتصل بنا", "مع تحيات إدارة البراق"], fr: ["📞 Appelez-nous", "L'administration AL-BURAQ"], en: ["📞 Call us", "AL-BURAQ administration"] }[lang] || ["📞 Call us", "AL-BURAQ administration"];
   return (
-    <a href={href} target="_blank" rel="noreferrer" aria-label="contact AL-BURAQ administration" style={{ position: "fixed", bottom: "calc(env(safe-area-inset-bottom,0px) + 14px)", left: 12, zIndex: 40, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1, padding: "7px 14px", borderRadius: 16, background: "#1d1b3a", color: "#fff", boxShadow: "0 6px 18px rgba(0,0,0,.28)", textDecoration: "none", lineHeight: 1.25, maxWidth: "62vw" }}>
-      <span style={{ fontSize: 13, fontWeight: 800 }}>{L[0]}</span>
-      <span style={{ fontSize: 10, opacity: .75 }}>{L[1]}</span>
+    <a href={"tel:" + SUPPORT_CALL} aria-label="call AL-BURAQ administration" style={{ position: "fixed", bottom: "calc(env(safe-area-inset-bottom,0px) + 12px)", left: "50%", transform: "translateX(-50%)", zIndex: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 1, padding: "8px 26px", borderRadius: 18, background: "linear-gradient(135deg,#22c55e,#15803d)", color: "#fff", boxShadow: "0 6px 18px rgba(21,128,61,.45)", textDecoration: "none", lineHeight: 1.25, whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: 14, fontWeight: 800 }}>{L[0]}</span>
+      <span style={{ fontSize: 10, opacity: .9 }}>{L[1]}</span>
     </a>
   );
 }
