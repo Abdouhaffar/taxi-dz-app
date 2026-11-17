@@ -60,10 +60,14 @@ export function LegalLinks({ lang = "ar", dark = true }) {
 // زر دعم عائم: واتساب إن ضُبط الرقم، وإلا بريد
 export function SupportButton({ lang = "ar", context = "" }) {
   if (!SUPPORT_PHONE && !SUPPORT_EMAIL) return null;
-  const msg = encodeURIComponent((lang === "ar" ? "مرحباً، أحتاج مساعدة في AL-BURAQ" : "Hello, I need help with AL-BURAQ") + (context ? ` (${context})` : ""));
+  const msg = encodeURIComponent((lang === "ar" ? "مرحباً إدارة البراق، أحتاج مساعدة" : "Hello AL-BURAQ admin, I need help") + (context ? ` (${context})` : ""));
   const href = SUPPORT_PHONE ? `https://wa.me/${SUPPORT_PHONE}?text=${msg}` : `mailto:${SUPPORT_EMAIL}?subject=${msg}`;
+  const L = { ar: ["📞 اتصل بنا", "مع تحيات إدارة البراق"], fr: ["📞 Contactez-nous", "L'administration AL-BURAQ"], en: ["📞 Contact us", "AL-BURAQ administration"] }[lang] || ["📞 Contact us", "AL-BURAQ administration"];
   return (
-    <a href={href} target="_blank" rel="noreferrer" aria-label="support" style={{ position: "fixed", bottom: "calc(env(safe-area-inset-bottom,0px) + 14px)", left: 14, zIndex: 40, width: 44, height: 44, borderRadius: "50%", background: "#25D366", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 18px rgba(0,0,0,.28)", textDecoration: "none", fontSize: 22 }}>💬</a>
+    <a href={href} target="_blank" rel="noreferrer" aria-label="contact AL-BURAQ administration" style={{ position: "fixed", bottom: "calc(env(safe-area-inset-bottom,0px) + 14px)", left: 12, zIndex: 40, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1, padding: "7px 14px", borderRadius: 16, background: "#1d1b3a", color: "#fff", boxShadow: "0 6px 18px rgba(0,0,0,.28)", textDecoration: "none", lineHeight: 1.25, maxWidth: "62vw" }}>
+      <span style={{ fontSize: 13, fontWeight: 800 }}>{L[0]}</span>
+      <span style={{ fontSize: 10, opacity: .75 }}>{L[1]}</span>
+    </a>
   );
 }
 
