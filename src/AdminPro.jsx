@@ -653,7 +653,7 @@ export function GlobalSearch({ drivers, passengers, bookings, onNav }) {
 // ================================================================
 // التسعير (settings/pricing) — يقرأه تطبيق الراكب مباشرة
 // ================================================================
-const DEF_PRICE = { perKm: 30, base: 40, min: 100, perMin: 0, surge: 1, trafficK: 1, trafficMax: 1.5, trafficWilayas: [], mult: { economy: 1, comfort: 1.4, xl: 1.8 } };
+const DEF_PRICE = { perKm: 30, base: 40, min: 100, perMin: 0, surge: 1, trafficK: 1, trafficMax: 1.5, trafficWilayas: [], dispatchRadiusKm: 8, mult: { economy: 1, comfort: 1.4, xl: 1.8 } };
 const BIG_CITIES = ["16", "31", "25", "09", "23", "19", "35", "42"];
 export function PricingPanel({ db, adminName, canEdit }) {
   const [p, setP] = useState(DEF_PRICE);
@@ -674,7 +674,7 @@ export function PricingPanel({ db, adminName, canEdit }) {
   const save = async () => {
     setSaving(true); setMsg("");
     try {
-      await setDoc(doc(db, "settings", "pricing"), { perKm: +p.perKm, base: +p.base, min: +p.min, perMin: +p.perMin || 0, surge: +p.surge || 1, trafficK: +p.trafficK >= 0 ? +p.trafficK : 1, trafficMax: +p.trafficMax >= 1 ? +p.trafficMax : 1.5, trafficWilayas: (p.trafficWilayas || []).map(String), mult: { economy: +p.mult.economy, comfort: +p.mult.comfort, xl: +p.mult.xl }, updatedAt: serverTimestamp(), updatedBy: adminName || "admin" }, { merge: true });
+      await setDoc(doc(db, "settings", "pricing"), { perKm: +p.perKm, base: +p.base, min: +p.min, perMin: +p.perMin || 0, surge: +p.surge || 1, trafficK: +p.trafficK >= 0 ? +p.trafficK : 1, trafficMax: +p.trafficMax >= 1 ? +p.trafficMax : 1.5, trafficWilayas: (p.trafficWilayas || []).map(String), dispatchRadiusKm: +p.dispatchRadiusKm > 0 ? +p.dispatchRadiusKm : 8, mult: { economy: +p.mult.economy, comfort: +p.mult.comfort, xl: +p.mult.xl }, updatedAt: serverTimestamp(), updatedBy: adminName || "admin" }, { merge: true });
       setMsg("✅ تم الحفظ — يطبَّق فوراً على الطلبات الجديدة");
     } catch (e) { setMsg("❌ " + (e.code === "permission-denied" ? "قواعد Firestore تمنع الكتابة في settings" : e.message)); }
     setSaving(false);
@@ -698,6 +698,7 @@ export function PricingPanel({ db, adminName, canEdit }) {
             <div style={{ fontWeight: 800, color: T.text, marginBottom: 16 }}>الأسعار الأساسية</div>
             <Field label="سعر الانطلاق" k="base" unit="دج" />
             <Field label="السعر لكل كيلومتر" k="perKm" unit="دج / كم" />
+            <Field label="نطاق وصول الطلب للسائقين (يتّسع تدريجياً إن لم يُقبل)" k="dispatchRadiusKm" unit="كم" step={1} />
             <Field label="الحد الأدنى للرحلة (أقل من 2 كم)" k="min" unit="دج" />
             <Field label="السعر لكل دقيقة (يحسب الازدحام: وقت الطريق الحقيقي من جوجل)" k="perMin" unit="دج / دقيقة" />
             <Field label="حساسية الازدحام التلقائي (كم تزيد الأسعار مع كل 100% تأخير عن الوضع العادي)" k="trafficK" unit="×" step={0.1} />
