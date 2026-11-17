@@ -1,6 +1,6 @@
 /* eslint-disable */
 // 1) جهاز واحد لكل حساب  2) لوحة الأذونات (الموقع/الإشعارات/التثبيت)
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { doc, setDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -45,12 +45,12 @@ export function KickedScreen({ onLogout, lang = "ar" }) {
     en: ["Signed out", "Your account was opened on another phone. Only one device at a time is allowed.", "OK"],
   }[lang] || [];
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "#141012", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'IBM Plex Sans Arabic',Cairo,sans-serif", direction: lang === "ar" ? "rtl" : "ltr", textAlign: "center" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "#0d0b1f", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'IBM Plex Sans Arabic',Cairo,sans-serif", direction: lang === "ar" ? "rtl" : "ltr", textAlign: "center" }}>
       <div style={{ maxWidth: 360 }}>
         <div style={{ fontSize: 60 }}>📱</div>
         <div style={{ fontSize: 22, fontWeight: 900, margin: "10px 0" }}>{T[0]}</div>
         <div style={{ fontSize: 14, color: "#c7a9ae", lineHeight: 1.8, marginBottom: 22 }}>{T[1]}</div>
-        <button onClick={onLogout} style={{ background: "#c4001d", border: "none", color: "#fff", borderRadius: 14, padding: "13px 34px", fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>{T[2]}</button>
+        <button onClick={onLogout} style={{ background: "#7c5cfc", border: "none", color: "#fff", borderRadius: 14, padding: "13px 34px", fontFamily: "inherit", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>{T[2]}</button>
       </div>
     </div>
   );
@@ -75,6 +75,7 @@ export function PermissionGate({ lang = "ar" }) {
   const notifSupported = typeof Notification !== "undefined";
   const [notif, setNotif] = useState(notifSupported ? Notification.permission : "unsupported");
   const ios = isIOS();
+  const geoRef = useRef("checking");
 
   const refresh = async () => {
     const g = await geoState();
@@ -82,6 +83,17 @@ export function PermissionGate({ lang = "ar" }) {
     if (notifSupported) setNotif(Notification.permission);
   };
   useEffect(() => { refresh(); const t = setInterval(refresh, 2500); return () => clearInterval(t); }, []);
+  geoRef.current = geo;
+  // بعد تغيير إذن الموقع من إعدادات الهاتف، Safari لا يطبّقه إلا بعد إعادة تحميل الصفحة: نعيد التحميل عند العودة (مرة كل 20 ثانية كحدّ أقصى)
+  useEffect(() => {
+    const f = () => {
+      if (document.visibilityState !== "visible" || geoRef.current !== "denied") return;
+      const last = Number(safe(() => sessionStorage.getItem("taxidz_geo_reload")) || 0);
+      if (Date.now() - last > 20000) { safe(() => sessionStorage.setItem("taxidz_geo_reload", String(Date.now()))); window.location.reload(); }
+    };
+    document.addEventListener("visibilitychange", f);
+    return () => document.removeEventListener("visibilitychange", f);
+  }, []);
 
   const askGeo = () => {
     setBusy(true);
@@ -105,7 +117,7 @@ export function PermissionGate({ lang = "ar" }) {
       geo: "الموقع الجغرافي", geoWhy: "لتحديد نقطة الانطلاق وإيجاد أقرب سائق", on: "مفعّل ✓", allow: "تفعيل", recheck: "تحقّقت من الإعدادات",
       notif: "الإشعارات", notifWhy: "لتنبيهك بقبول الرحلة ووصول السائق", later: "لاحقاً", done: "متابعة",
       denied: "الموقع محظور على هذا المتصفح. فعّله بهذه الخطوات:",
-      iosSteps: ["اضغط على الرمز «aA» في شريط عنوان Safari (يسار/يمين الرابط)", "اختر «إعدادات الموقع الإلكتروني»", "اجعل «الموقع» = السماح", "أو: الإعدادات ← الخصوصية والأمان ← خدمات الموقع ← مواقع Safari ← «أثناء استخدام التطبيق»", "ثم ارجع واضغط «تحقّقت من الإعدادات»"],
+      iosSteps: ["اضغط على الرمز «aA» في شريط عنوان Safari (يسار/يمين الرابط)", "اختر «إعدادات الموقع الإلكتروني»", "اجعل «الموقع» = السماح", "أو: الإعدادات ← الخصوصية والأمان ← خدمات الموقع ← مواقع Safari ← «أثناء استخدام التطبيق»", "سيُعاد تحميل الصفحة تلقائياً عند عودتك للمتصفح","إن لم تظهر لك هذه الخيارات: أضِف التطبيق إلى الشاشة الرئيسية (زر المشاركة ← إضافة إلى الشاشة الرئيسية) وافتحه من أيقونته، وسيطلب إذن الموقع من جديد"],
       andSteps: ["اضغط على أيقونة القفل 🔒 بجانب الرابط", "الأذونات ← الموقع ← السماح", "ثم ارجع واضغط «تحقّقت من الإعدادات»"],
       install: "للحصول على الإشعارات والصوت على iPhone: اضغط زر المشاركة ⬆️ في Safari ثم «إضافة إلى الشاشة الرئيسية» وافتح التطبيق من أيقونته.",
     },
@@ -114,7 +126,7 @@ export function PermissionGate({ lang = "ar" }) {
       geo: "Localisation", geoWhy: "Pour votre point de départ et les chauffeurs proches", on: "Activée ✓", allow: "Activer", recheck: "J'ai vérifié les réglages",
       notif: "Notifications", notifWhy: "Pour être alerté de l'acceptation et de l'arrivée", later: "Plus tard", done: "Continuer",
       denied: "La localisation est bloquée. Activez-la ainsi :",
-      iosSteps: ["Touchez « aA » dans la barre d'adresse de Safari", "Choisissez « Réglages du site web »", "Localisation = Autoriser", "Ou : Réglages ← Confidentialité ← Service de localisation ← Sites Safari ← « Lors de l'utilisation »", "Revenez et touchez « J'ai vérifié les réglages »"],
+      iosSteps: ["Touchez « aA » dans la barre d'adresse de Safari", "Choisissez « Réglages du site web »", "Localisation = Autoriser", "Ou : Réglages ← Confidentialité ← Service de localisation ← Sites Safari ← « Lors de l'utilisation »", "Revenez et touchez « J'ai vérifié les réglages »","La page se recharge automatiquement à votre retour","Si ces options n'apparaissent pas : ajoutez l'app à l'écran d'accueil (Partager → Sur l'écran d'accueil) et ouvrez-la depuis l'icône"],
       andSteps: ["Touchez le cadenas 🔒 à côté de l'adresse", "Autorisations ← Localisation ← Autoriser", "Revenez et touchez « J'ai vérifié les réglages »"],
       install: "Pour les notifications et le son sur iPhone : touchez Partager ⬆️ dans Safari puis « Sur l'écran d'accueil », et ouvrez l'app depuis son icône.",
     },
@@ -123,14 +135,14 @@ export function PermissionGate({ lang = "ar" }) {
       geo: "Location", geoWhy: "To set your pickup point and find nearby drivers", on: "Enabled ✓", allow: "Enable", recheck: "I've checked settings",
       notif: "Notifications", notifWhy: "To alert you when a driver accepts and arrives", later: "Later", done: "Continue",
       denied: "Location is blocked. Turn it on like this:",
-      iosSteps: ["Tap “aA” in Safari's address bar", "Choose “Website Settings”", "Set Location = Allow", "Or: Settings ← Privacy & Security ← Location Services ← Safari Websites ← “While Using”", "Come back and tap “I've checked settings”"],
+      iosSteps: ["Tap “aA” in Safari's address bar", "Choose “Website Settings”", "Set Location = Allow", "Or: Settings ← Privacy & Security ← Location Services ← Safari Websites ← “While Using”", "The page reloads automatically when you come back","If you don't see these options: Add the app to your Home Screen (Share → Add to Home Screen) and open it from the icon — it will ask for location again"],
       andSteps: ["Tap the lock 🔒 next to the address", "Permissions ← Location ← Allow", "Come back and tap “I've checked settings”"],
       install: "For notifications & sound on iPhone: tap Share ⬆️ in Safari then “Add to Home Screen”, and open the app from its icon.",
     },
   }[lang] || {};
   const rtl = lang === "ar";
-  const row = { background: "#201a1d", border: "1px solid #3a2a2f", borderRadius: 16, padding: 14, marginBottom: 12 };
-  const btn = { background: "#c4001d", border: "none", color: "#fff", borderRadius: 12, padding: "10px 18px", fontFamily: "inherit", fontWeight: 800, fontSize: 14, cursor: "pointer" };
+  const row = { background: "#17142e", border: "1px solid #2b2750", borderRadius: 16, padding: 14, marginBottom: 12 };
+  const btn = { background: "#7c5cfc", border: "none", color: "#fff", borderRadius: 12, padding: "10px 18px", fontFamily: "inherit", fontWeight: 800, fontSize: 14, cursor: "pointer" };
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 99990, background: "rgba(10,6,8,0.96)", color: "#fff", overflowY: "auto", padding: "calc(env(safe-area-inset-top,0px) + 56px) 18px 24px", fontFamily: "'IBM Plex Sans Arabic',Cairo,sans-serif", direction: rtl ? "rtl" : "ltr" }}>
       <div style={{ maxWidth: 400, margin: "0 auto" }}>
@@ -146,7 +158,7 @@ export function PermissionGate({ lang = "ar" }) {
           </div>
           {geo === "denied" && (
             <div style={{ marginTop: 12, fontSize: 13, lineHeight: 1.8 }}>
-              <div style={{ color: "#ff8fa0", fontWeight: 700, marginBottom: 6 }}>{L.denied}</div>
+              <div style={{ color: "#c4b5fd", fontWeight: 700, marginBottom: 6 }}>{L.denied}</div>
               <ol style={{ paddingInlineStart: 20, margin: 0 }}>{(ios ? L.iosSteps : L.andSteps).map((x, i) => <li key={i}>{x}</li>)}</ol>
               <button style={{ ...btn, marginTop: 12, width: "100%" }} onClick={() => { askGeo(); }}>{L.recheck}</button>
             </div>
@@ -160,7 +172,7 @@ export function PermissionGate({ lang = "ar" }) {
               <div style={{ flex: 1 }}><div style={{ fontWeight: 800 }}>{L.notif}</div><div style={{ fontSize: 12, color: "#c7a9ae" }}>{L.notifWhy}</div></div>
               {notif === "granted" ? <div style={{ color: "#37d67a", fontWeight: 800, fontSize: 13 }}>{L.on}</div>
                 : notif === "default" ? <button style={btn} onClick={askNotif}>{L.allow}</button>
-                : <div style={{ color: "#ff8fa0", fontSize: 12 }}>⛔</div>}
+                : <div style={{ color: "#c4b5fd", fontSize: 12 }}>⛔</div>}
             </div>
           </div>
         )}
@@ -168,7 +180,7 @@ export function PermissionGate({ lang = "ar" }) {
         {needInstall && <div style={{ ...row, fontSize: 13, lineHeight: 1.8 }}>📲 {L.install}</div>}
 
         <button onClick={() => { safe(() => localStorage.setItem("taxidz_install_seen", "1")); skip(); }}
-          style={{ ...btn, width: "100%", marginTop: 6, background: geoOk ? "#c4001d" : "transparent", border: geoOk ? "none" : "1px solid #5a4348", color: geoOk ? "#fff" : "#c7a9ae" }}>
+          style={{ ...btn, width: "100%", marginTop: 6, background: geoOk ? "#7c5cfc" : "transparent", border: geoOk ? "none" : "1px solid #5a4348", color: geoOk ? "#fff" : "#c7a9ae" }}>
           {geoOk ? L.done : L.later}
         </button>
       </div>
