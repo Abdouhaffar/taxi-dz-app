@@ -12,7 +12,7 @@ const FONT = "'IBM Plex Sans Arabic',Cairo,sans-serif";
 // ================= رمز الركوب =================
 export const makeRideCode = () => String(Math.floor(1000 + Math.random() * 9000));
 
-export function RideCodeGate({ code, verify, passengerName, onOk, onCancel }) {
+export function RideCodeGate({ code, verify, passengerName, onOk, onCancel, onSkip }) {
   const [busy, setBusy] = useState(false);
   const [v, setV] = useState("");
   const [fails, setFails] = useState(0);
@@ -42,6 +42,7 @@ export function RideCodeGate({ code, verify, passengerName, onOk, onCancel }) {
           <button onClick={onCancel} style={{ flex: 1, background: K.soft, border: "none", borderRadius: 14, padding: 14, fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>رجوع</button>
           <button onClick={submit} disabled={v.length !== 4 || fails >= 5 || busy} style={{ flex: 2, background: v.length === 4 && fails < 5 ? K.dark : "#ccc", color: "#fff", border: "none", borderRadius: 14, padding: 14, fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>تأكيد وبدء الرحلة</button>
         </div>
+        {onSkip && <button onClick={onSkip} style={{ marginTop: 12, background: "none", border: "none", color: K.muted, textDecoration: "underline", fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>تخطي الرمز وبدء الرحلة</button>}
       </div>
     </div>
   );
