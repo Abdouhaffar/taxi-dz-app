@@ -509,7 +509,7 @@ function ChatBox({ bookingId, userId, userName, otherName, lang, onClose }) {
       {/* Input */}
       <div style={{ background:C.card,padding:"12px 16px",borderTop:`1px solid ${C.border}`,display:"flex",gap:10,alignItems:"center" }}>
         <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder={t.typeMessage}
-          style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:24,padding:"12px 18px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:isRTL?"rtl":"ltr" }} />
+          style={{ flex:1,minWidth:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:24,padding:"12px 18px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:isRTL?"rtl":"ltr" }} />
         <button onClick={sendMsg} disabled={!text.trim()} style={{ width:46,height:46,borderRadius:"50%",background:text.trim()?`${C.dark}`:C.border,border:"none",cursor:text.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0 }}>
           {isRTL?"➤":"➤"}
         </button>
@@ -1389,6 +1389,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const [selectedDriver,setSelectedDriver]=useState(null);
   const [driverLocation,setDriverLocation]=useState(null);
   const driverArrivedNotified=useRef(false);
+  const destNearNotified=useRef(false);
+  const tripEndedHandled=useRef(false);
   const [eta,setEta]=useState(null);
   const [elapsed,setElapsed]=useState(0);
   const [showRating,setShowRating]=useState(false);
@@ -1457,7 +1459,10 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   },[user?.uid]);
 
   useEffect(()=>{ if(distanceKm>0){const p=calcPrice(distanceKm,multiplier,effMin,effRatio);setSuggestedPrice(p);setOfferPrice(p);} },[rideType,distanceKm,tripMin,trafficRatio,trafficOn,PRICING.trafficWilayas.join(",")]);
-  useEffect(()=>{ if(!bookingId||(screen!=="found"&&screen!=="ride")) return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo&&screen==="searching"){setSelectedDriver(d.driverInfo);setScreen("found");} if(d.status==="arrived"&&!driverArrivedNotified.current){ driverArrivedNotified.current=true; setFcmToast({title:lang==="ar"?"🚕 السائق وصل!":"🚕 Le chauffeur est arrivé!",body:lang==="ar"?"السائق بانتظارك عند نقطة الانطلاق":"Le chauffeur vous attend au point de départ"}); } if(d.driverCurrentLocation){const dLoc=d.driverCurrentLocation;setDriverLocation(dLoc);const pLoc=passengerGPS||(originPlace?getLatLng(originPlace):null);if(pLoc&&screen==="found") setEta(Math.max(1,Math.round(getDistanceKm(dLoc.lat,dLoc.lng,pLoc.lat,pLoc.lng)/0.5)));} }); return()=>u(); },[bookingId,screen,originPlace,passengerGPS,lang]);
+  useEffect(()=>{ if(!bookingId||(screen!=="found"&&screen!=="ride")) return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo&&screen==="searching"){setSelectedDriver(d.driverInfo);setScreen("found");} if(d.pickupArrivedAt&&!driverArrivedNotified.current){ driverArrivedNotified.current=true; setFcmToast({title:lang==="ar"?"🚕 السائق وصل!":lang==="fr"?"🚕 Le chauffeur est arrivé!":"🚕 Your driver has arrived!",body:lang==="ar"?"السائق بانتظارك عند نقطة الانطلاق — أعطه رمز الركوب":lang==="fr"?"Le chauffeur vous attend — donnez-lui le code":"Your driver is waiting — give them the ride code"}); try{navigator.vibrate&&navigator.vibrate([300,150,300]);}catch(e){} }
+      if(d.status==="arrived"&&screen==="found"){ setElapsed(0); setScreen("ride"); setFcmToast({title:lang==="ar"?"🚀 بدأت الرحلة":lang==="fr"?"🚀 Le trajet a commencé":"🚀 Trip started",body:lang==="ar"?"تتبّع رحلتك الآن":lang==="fr"?"Suivez votre trajet":"Track your trip now"}); }
+      if(d.destNearAt&&!destNearNotified.current){ destNearNotified.current=true; setFcmToast({title:lang==="ar"?"📍 اقتربتما من الوجهة":lang==="fr"?"📍 Vous approchez":"📍 Almost there",body:lang==="ar"?"أنتما قرب وجهتكما":lang==="fr"?"Vous êtes près de la destination":"You are near the destination"}); }
+      if((d.status==="completed"||d.status==="rated")&&!tripEndedHandled.current){ tripEndedHandled.current=true; setFcmToast({title:lang==="ar"?"🏁 وصلتما إلى الوجهة":lang==="fr"?"🏁 Vous êtes arrivés":"🏁 You have arrived",body:lang==="ar"?"قيّم رحلتك (يمكنك التخطي)":lang==="fr"?"Évaluez votre trajet (facultatif)":"Rate your trip (optional)"}); try{navigator.vibrate&&navigator.vibrate([300,150,300]);}catch(e){} setScreen("ride"); setShowRating(true); } if(d.driverCurrentLocation){const dLoc=d.driverCurrentLocation;setDriverLocation(dLoc);const pLoc=passengerGPS||(originPlace?getLatLng(originPlace):null);if(pLoc&&screen==="found") setEta(Math.max(1,Math.round(getDistanceKm(dLoc.lat,dLoc.lng,pLoc.lat,pLoc.lng)/0.5)));} }); return()=>u(); },[bookingId,screen,originPlace,passengerGPS,lang]);
   useEffect(()=>{ if(!bookingId||screen!=="searching") return; const u=onSnapshot(doc(db,"bookings",bookingId),snap=>{ if(!snap.exists()) return; const d=snap.data(); if(d.status==="accepted"&&d.driverInfo){setSelectedDriver(d.driverInfo);setScreen("found");} }); return()=>u(); },[bookingId,screen]);
   useEffect(()=>{ if(screen!=="searching") return; const t=setInterval(()=>setTimer(p=>p+1),1000); return()=>clearInterval(t); },[screen]);
   useEffect(()=>{ if(screen==="searching"&&timer===60) setNoDrivers(true); },[timer,screen]);
@@ -1487,6 +1492,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   };
   const resumeBooking=(b)=>{
     const o={lat:b.originLat,lng:b.originLng}, d={lat:b.destLat,lng:b.destLng};
+    driverArrivedNotified.current=false;destNearNotified.current=false;tripEndedHandled.current=false;
     setBookingId(b.id); setBooking({...b,originPlace:o,destPlace:d,id:b.id});
     setOriginPlace(o); setOriginText(b.originText||""); setDestPlace(d); setDestText(b.destText||"");
     setDistanceKm(b.distanceKm||0); setSelectedDriver(b.driverInfo||null);
@@ -1649,6 +1655,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         return;
       }
       setPromo(null);
+      driverArrivedNotified.current=false;destNearNotified.current=false;tripEndedHandled.current=false;
       setBookingId(ref.id);
       setBooking({originPlace,destPlace,originText,destText,rideType,price,distanceKm,passengerPhone,passengerName,rideCode,id:ref.id});setShareToken(null);setShowShare(false);
       const snap=await getDocs(query(collection(db,"drivers"),where("isOnline","==",true),where("verificationStatus","==","approved")));
@@ -1702,7 +1709,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     setBookingId(null);setScreen("home");
   };
   const finishRide=async()=>{ if(bookingId){try{await updateDoc(doc(db,"bookings",bookingId),{status:"completed",completedAt:serverTimestamp()});}catch(e){}} setShowRating(true); };
-  const resetTrip=()=>{ setScreen("home");setShowRating(false);setDistanceKm(0);setBookingId(null);setFinalRating(0);setSelectedDriver(null);setShowChat(false);driverArrivedNotified.current=false; };
+  const resetTrip=()=>{ setScreen("home");setShowRating(false);setDistanceKm(0);setBookingId(null);setFinalRating(0);setSelectedDriver(null);setShowChat(false);driverArrivedNotified.current=false;destNearNotified.current=false;tripEndedHandled.current=false; };
+  useEffect(()=>{ if(!showRating) return; const tm=setTimeout(()=>resetTrip(),15*60*1000); return()=>clearTimeout(tm); },[showRating]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // HOME — أسلوب Uber: خريطة بملء الشاشة + لوحة سفلية
   if(kicked) return <KickedScreen onLogout={onLogout} lang={lang==="fr"||lang==="en"?lang:"ar"} />;
