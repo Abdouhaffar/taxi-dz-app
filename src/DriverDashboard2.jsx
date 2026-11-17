@@ -25,15 +25,18 @@ const SESSION_KEY = "taxidz_session_id";
 
 
 
-const PRICING={ perKm:30, base:40, min:100, perMin:0, surge:1, trafficK:1, trafficMax:1.5, trafficWilayas:[], mult:{ economy:1, comfort:1.4, xl:1.8 } };
+const PRICING={ perKm:30, base:40, min:100, perMin:0, surge:1, trafficK:1, trafficMax:1.5, trafficWilayas:[], dispatchRadiusKm:8, mult:{ economy:1, comfort:1.4, xl:1.8 } };
 const pricingListeners=new Set();
 try{ onSnapshot(doc(db,"settings","pricing"),snap=>{ if(!snap.exists())return; const d=snap.data();
-  if(d.perKm>0)PRICING.perKm=d.perKm; if(d.base>=0)PRICING.base=d.base; if(d.min>0)PRICING.min=d.min; if(d.perMin>=0)PRICING.perMin=d.perMin; if(d.surge>=1)PRICING.surge=d.surge; if(d.trafficK>=0)PRICING.trafficK=d.trafficK; if(d.trafficMax>=1)PRICING.trafficMax=d.trafficMax; PRICING.trafficWilayas=Array.isArray(d.trafficWilayas)?d.trafficWilayas.map(String):[]; if(d.mult)PRICING.mult={...PRICING.mult,...d.mult};
+  if(d.perKm>0)PRICING.perKm=d.perKm; if(d.base>=0)PRICING.base=d.base; if(d.min>0)PRICING.min=d.min; if(d.perMin>=0)PRICING.perMin=d.perMin; if(d.surge>=1)PRICING.surge=d.surge; if(d.trafficK>=0)PRICING.trafficK=d.trafficK; if(d.trafficMax>=1)PRICING.trafficMax=d.trafficMax; PRICING.trafficWilayas=Array.isArray(d.trafficWilayas)?d.trafficWilayas.map(String):[]; if(d.dispatchRadiusKm>0)PRICING.dispatchRadiusKm=Number(d.dispatchRadiusKm); if(d.mult)PRICING.mult={...PRICING.mult,...d.mult};
   pricingListeners.forEach(f=>f()); },()=>{}); }catch(e){}
 const usePricing=()=>{ const [,setV]=useState(0); useEffect(()=>{ const f=()=>setV(v=>v+1); pricingListeners.add(f); return ()=>pricingListeners.delete(f); },[]); };
 const autoSurge=(r)=>{ const k=PRICING.trafficK,mx=PRICING.trafficMax; if(!(r>1.2)||!(mx>1)) return 1; return Math.min(mx,1+(r-1.2)*k); };
 const calcPrice=(km,rideType,minutes=0,ratio=1)=>{ if(!km||km<=0) return PRICING.min; const p=Math.round((PRICING.base+km*PRICING.perKm+(minutes||0)*(PRICING.perMin||0))*(PRICING.mult[rideType]||1)*(PRICING.surge||1)*autoSurge(ratio)/10)*10; return km<2?Math.max(p,PRICING.min):p; };
 const getDistKm=(lat1,lng1,lat2,lng2)=>{ const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2; return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); };
+// نطاق وصول الطلب: يبدأ بالنطاق الأساسي ثم يتّسع تدريجياً إن لم يقبله أحد (45ث ← ×1.5، 120ث ← ×2.5)
+const reqRadiusKm=(b)=>{ const base=PRICING.dispatchRadiusKm||8; const age=Date.now()-(b.createdAt?.toMillis?.()||Date.now()); return age<45000?base:age<120000?base*1.5:base*2.5; };
+const isNearReq=(b,loc)=>{ if(!loc||b.originLat==null||b.originLng==null) return false; return getDistKm(loc.lat,loc.lng,b.originLat,b.originLng)<=reqRadiusKm(b); };
 const openNavigation=(lat,lng)=>window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving&dir_action=navigate`,"_blank");
 
 // تنبيه صوتي + اهتزاز عند وصول طلب جديد — لا يعتمد على ملف صوت خارجي (Web Audio API)
@@ -1060,10 +1063,15 @@ export default function DriverDashboard({ user, onLogout }) {
   },[status,user?.uid]);
   const [online,setOnline]=useState(false);
   const [tab,setTab]=useState("home");
-  const [bookings,setBookings]=useState([]);
+  const [rawBookings,setBookings]=useState([]);
   const [acceptedBooking,setAcceptedBooking]=useState(null);
   const [driverScreen,setDriverScreen]=useState("dashboard");
   const [driverLocation,setDriverLocation]=useState(null);
+  const driverLocRef=useRef(null); driverLocRef.current=driverLocation;
+  const [nearTick,setNearTick]=useState(0);
+  useEffect(()=>{ const t=setInterval(()=>setNearTick(x=>x+1),15000); return()=>clearInterval(t); },[]);
+  const bookings=rawBookings.filter(b=>isNearReq(b,driverLocation)); // الطلبات القريبة فقط
+  void nearTick;
   const [showReport,setShowReport]=useState(false);
   const [showSessionAlert,setShowSessionAlert]=useState(false);
   const [showReset,setShowReset]=useState(false);
@@ -1190,9 +1198,10 @@ export default function DriverDashboard({ user, onLogout }) {
       const fresh=snap.docs.map(d=>({id:d.id,...d.data()}))
         .filter(b=>b.status==="pending"&&(now-(b.createdAt?.toMillis?.())||0)<10*60*1000)
         .sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
-      const freshIds=new Set(fresh.map(b=>b.id));
-      const isNew=fresh.some(b=>!knownBookingIdsRef.current.has(b.id));
-      if(isNew && knownBookingIdsRef.current.size>0) alertNewBooking(); // لا ننبّه عند أول تحميل، فقط عند وصول طلب جديد فعلاً
+      const nearFresh=fresh.filter(b=>isNearReq(b,driverLocRef.current));
+      const freshIds=new Set(nearFresh.map(b=>b.id));
+      const isNew=nearFresh.some(b=>!knownBookingIdsRef.current.has(b.id));
+      if(isNew && knownBookingIdsRef.current.size>0) alertNewBooking(); // لا ننبّه عند أول تحميل، ولا لطلب بعيد
       knownBookingIdsRef.current=freshIds;
       setBookings(fresh);
     }, err=>{
