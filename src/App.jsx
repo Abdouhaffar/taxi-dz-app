@@ -1368,7 +1368,9 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   const regions=useRegions();
   const t=T[lang];
   const isRTL=lang==="ar";
-  const [screen,setScreen]=useState("home");
+  const [screen,setScreen]=useState(()=>{ try{ const v=sessionStorage.getItem("taxidz_pscreen"); return v==="history"||v==="wallet"?v:"home"; }catch(e){ return "home"; } });
+  const screenRef=useRef(screen); screenRef.current=screen;
+  useEffect(()=>{ try{ sessionStorage.setItem("taxidz_pscreen",screen); }catch(e){} },[screen]);
   const [originPlace,setOriginPlace]=useState(null);
   const [destPlace,setDestPlace]=useState(null);
   const [originText,setOriginText]=useState("");
@@ -1498,6 +1500,33 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
     setDistanceKm(b.distanceKm||0); setSelectedDriver(b.driverInfo||null);
     setScreen("found");
   };
+  // عند تحديث الصفحة: نعيد الراكب إلى رحلته الجارية (بحث/سائق قادم/رحلة) بدل الشاشة الرئيسية
+  useEffect(()=>{
+    if(!user?.uid) return; let on=true;
+    (async()=>{
+      try{
+        const snap=await getDocs(query(collection(db,"bookings"),where("passengerId","==",user.uid),where("status","in",["pending","accepted","arrived"]),limit(10)));
+        if(!on||snap.empty) return;
+        const now=Date.now();
+        const list=snap.docs.map(d=>({id:d.id,...d.data()})).filter(b=>{
+          const ms=b.createdAt?.toMillis?b.createdAt.toMillis():now;
+          const maxAge=b.status==="pending"?3*3600000:12*3600000;
+          return b.originLat!=null&&b.destLat!=null&&now-ms<maxAge;
+        }).sort((x,y)=>(y.createdAt?.toMillis?.()||0)-(x.createdAt?.toMillis?.()||0));
+        const b=list[0]; if(!b) return;
+        if(screenRef.current!=="home") return; // المستخدم انتقل لشاشة أخرى بنفسه
+        const o={lat:b.originLat,lng:b.originLng}, d={lat:b.destLat,lng:b.destLng};
+        driverArrivedNotified.current=!!b.pickupArrivedAt; destNearNotified.current=!!b.destNearAt; tripEndedHandled.current=false;
+        setBookingId(b.id); setBooking({...b,originPlace:o,destPlace:d,id:b.id});
+        setOriginPlace(o); setOriginText(b.originText||""); setDestPlace(d); setDestText(b.destText||"");
+        setDistanceKm(b.distanceKm||0); setSelectedDriver(b.driverInfo||null);
+        if(b.status==="pending") setScreen("searching");
+        else if(b.status==="arrived"){ const st=b.arrivedAt?.toMillis?b.arrivedAt.toMillis():now; setElapsed(Math.max(0,Math.round((now-st)/1000))); setScreen("ride"); }
+        else setScreen("found");
+      }catch(e){ console.log("restore trip",e); }
+    })();
+    return()=>{on=false;};
+  },[user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const openShare=async()=>{
     if(!shareToken){
       try{
@@ -1767,7 +1796,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
             </button>
           ))}
         </div>
-        {passengerPhone&&<div style={{ textAlign:"center",fontSize:11,color:C.textLight,marginTop:12,direction:"ltr" }}>{passengerPhone} · <span style={{ color:C.red,fontWeight:800,letterSpacing:1 }}>AL-BURAQ</span></div>}
+        <div style={{ height:76 }} />{/* مساحة للزر الأخضر "اتصل بنا" */}
+        <SupportButton lang={lang} />
       </div>
     </div>
   );
@@ -2124,6 +2154,7 @@ export default function App() {
     try{await signOut(auth);}catch(e){}
     setUser(null);setRole(null);setScreen("welcome");
     ["taxidz_role","taxidz_phone","taxidz_name"].forEach(k=>localStorage.removeItem(k));clearDeviceClaim();
+    try{ sessionStorage.removeItem("taxidz_pscreen"); sessionStorage.removeItem("taxidz_dview"); }catch(e){}
   };
 
   const handleAuthSuccess=r=>{setRole(r);localStorage.setItem("taxidz_role",r);setScreen("app");};
@@ -2149,7 +2180,7 @@ export default function App() {
       <PermissionGate lang={lang} />
       <OfflineBanner lang={lang} />
       <LegalOverlay />
-      {screen==="app"&&<SupportButton lang={lang} />}
+      {screen==="app"&&role==="driver"&&<SupportButton lang={lang} />}
       <div style={{ position:"fixed",bottom:2,left:0,right:0,textAlign:"center",fontSize:9,color:"#8884",pointerEvents:"none",zIndex:1 }}>AL-BURAQ v2.7</div>
       {screen==="auth"&&<div style={{ position:"fixed",bottom:22,left:0,right:0,zIndex:5 }}><LegalLinks lang={lang} /></div>}
       {screen==="welcome"&&<WelcomeScreen onSelect={r=>{setRole(r);setScreen("auth");}} lang={lang} setLang={changeLang} />}
