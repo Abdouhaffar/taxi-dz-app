@@ -298,7 +298,7 @@ function ChatBox({ bookingId, userId, userName, otherName, onClose }) {
       </div>
       <div style={{ background:C.card,padding:"12px 16px",borderTop:`1px solid ${C.border}`,display:"flex",gap:10,alignItems:"center" }}>
         <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder="اكتب رسالة..."
-          style={{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:24,padding:"12px 18px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:"rtl" }} />
+          style={{ flex:1,minWidth:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:24,padding:"12px 18px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:"rtl" }} />
         <button onClick={sendMsg} disabled={!text.trim()} style={{ width:46,height:46,borderRadius:"50%",background:text.trim()?`linear-gradient(135deg,${C.green},${C.greenDark})`:C.border,border:"none",cursor:text.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0 }}>➤</button>
       </div>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
@@ -743,7 +743,7 @@ function DriverVerificationForm({ uid, userEmail, existingData, onDone, isUpdate
           <InputField label="اللقب" value={lastName} onChange={setLastName} placeholder="أدخل لقبك" />
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:13,color:C.textMuted,marginBottom:6,fontWeight:600 }}>تاريخ الميلاد *</div>
-            <input type="date" value={birthDate} onChange={e=>setBirthDate(e.target.value)} style={{ width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"13px 16px",fontFamily:"inherit",fontSize:14,color:C.text,outline:"none",direction:"ltr" }} />
+            <BirthDatePicker value={birthDate} onChange={setBirthDate} />
           </div>
           <SelectField label="نوع السائق" value={driverType} onChange={setDriverType} placeholder="اختر" options={["تاكسي","سيارة خاصة","حافلة صغيرة"]} />
           <SelectField label="الولاية" value={wilaya} onChange={setWilaya} placeholder="اختر ولايتك" options={WILAYAS} />
@@ -861,12 +861,44 @@ function DriverGPSMap({ driverLocation, passengerLocation, destLocation, mode })
 }
 
 // ===== تقييم الراكب بعد الرحلة =====
+// منتقي تاريخ الميلاد: يوم / شهر / سنة (أسهل وأدق من حقل التاريخ)
+const BIRTH_MONTHS=["جانفي","فيفري","مارس","أفريل","ماي","جوان","جويلية","أوت","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+function BirthDatePicker({ value, onChange }) {
+  const p=(value||"").split("-");
+  const [y,setY]=useState(p[0]||"");
+  const [m,setM]=useState(p[1]?String(parseInt(p[1],10)):"");
+  const [d,setD]=useState(p[2]?String(parseInt(p[2],10)):"");
+  const thisYear=new Date().getFullYear();
+  const years=[]; for(let i=thisYear-16;i>=thisYear-80;i--) years.push(i);
+  const maxDay=(y&&m)?new Date(Number(y),Number(m),0).getDate():31;
+  const days=[]; for(let i=1;i<=maxDay;i++) days.push(i);
+  const push=(ny,nm,nd)=>{
+    let dd=nd; if(ny&&nm&&dd){ const mx=new Date(Number(ny),Number(nm),0).getDate(); if(Number(dd)>mx){ dd=String(mx); setD(dd); } }
+    onChange(ny&&nm&&dd?`${ny}-${String(nm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`:"");
+  };
+  const sel={ flex:1,minWidth:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"13px 8px",fontFamily:"inherit",fontSize:15,fontWeight:700,color:C.text,outline:"none",textAlign:"center",textAlignLast:"center" };
+  return (
+    <div style={{ display:"flex",gap:8,direction:"rtl" }}>
+      <select value={d} onChange={e=>{ setD(e.target.value); push(y,m,e.target.value); }} style={{ ...sel,flex:0.8 }}>
+        <option value="">اليوم</option>{days.map(x=><option key={x} value={x}>{x}</option>)}
+      </select>
+      <select value={m} onChange={e=>{ setM(e.target.value); push(y,e.target.value,d); }} style={{ ...sel,flex:1.3 }}>
+        <option value="">الشهر</option>{BIRTH_MONTHS.map((n,i)=><option key={n} value={i+1}>{n}</option>)}
+      </select>
+      <select value={y} onChange={e=>{ setY(e.target.value); push(e.target.value,m,d); }} style={{ ...sel,flex:1 }}>
+        <option value="">السنة</option>{years.map(x=><option key={x} value={x}>{x}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function RatePassengerModal({ booking, onDone }) {
   const [stars,setStars]=useState(0);
   const [comment,setComment]=useState("");
   const [tags,setTags]=useState([]);
   const [saving,setSaving]=useState(false);
   useEffect(()=>{ setTags([]); },[stars>=4]);
+  useEffect(()=>{ const tm=setTimeout(()=>onDone(),15*60*1000); return()=>clearTimeout(tm); },[]); // eslint-disable-line react-hooks/exhaustive-deps
   const submit=async(skip=false)=>{
     setSaving(true);
     try {
@@ -1188,13 +1220,16 @@ export default function DriverDashboard({ user, onLogout }) {
   const [showMissions,setShowMissions]=useState(false);
   const [showDemand,setShowDemand]=useState(false);
   const [showShared,setShowShared]=useState(false);
+  // حفظ الشاشة الفرعية الحالية (محفظة/أرباح/مهام...) لتبقى بعد تحديث الصفحة
+  useEffect(()=>{ try{ const v=sessionStorage.getItem("taxidz_dview"); if(v==="wallet")setShowWallet(true); else if(v==="earnings")setShowEarnings(true); else if(v==="missions")setShowMissions(true); else if(v==="shared")setShowShared(true); else if(v==="demand")setShowDemand(true); else if(v==="subscription")setShowSubscription(true); }catch(e){} },[]);
+  useEffect(()=>{ try{ const v=showWallet?"wallet":showEarnings?"earnings":showMissions?"missions":showShared?"shared":showDemand?"demand":showSubscription?"subscription":""; if(v) sessionStorage.setItem("taxidz_dview",v); else sessionStorage.removeItem("taxidz_dview"); }catch(e){} },[showWallet,showEarnings,showMissions,showShared,showDemand,showSubscription]);
   const [showCodeGate,setShowCodeGate]=useState(false);
   const chatAlert=useChatAlert({ bookingId:acceptedBooking?.id, userId:user?.uid, open:showChat });
   const block=useAccountBlock("drivers",user?.uid);
   const kicked=useSingleSession(user?.uid);
   useEffect(()=>{ if(block.blocked&&user?.uid) setDoc(doc(db,"drivers",user.uid),{isOnline:false},{merge:true}).catch(()=>{}); },[block.blocked]);
   const verifyCode=async(code)=>{ const f=httpsCallable(cloudFunctions,"verifyRideCode"); await f({bookingId:acceptedBooking.id,code}); setShowCodeGate(false); setDriverScreen("ride"); };
-  const startRide=async()=>{ setShowCodeGate(false); if(acceptedBooking?.id){ try{ await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"arrived",arrivedAt:serverTimestamp(),codeVerified:true}); }catch(e){} } setDriverScreen("ride"); };
+  const startRide=async(skipped)=>{ const sk=skipped===true; setShowCodeGate(false); if(acceptedBooking?.id){ try{ await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"arrived",arrivedAt:serverTimestamp(),codeVerified:!sk,...(sk?{codeSkipped:true}:{})}); }catch(e){} } setDriverScreen("ride"); };
   const acceptBooking=async(booking)=>{
     try {
       await updateDoc(doc(db,"bookings",booking.id),{status:"accepted",driverId:user.uid,driverInfo:{name:data?.name||"السائق",phone:data?.phone||"",carBrand:data?.carBrand||"",carModel:data?.carModel||"",carColor:data?.carColor||"",plateNumber:data?.plateNumber||"",rating:data?.rating||null,selfieUrl:data?.selfieUrl||null,carFrontUrl:data?.carFrontUrl||null,uid:user.uid},acceptedAt:serverTimestamp()});
@@ -1220,6 +1255,46 @@ export default function DriverDashboard({ user, onLogout }) {
     if(acceptedBooking?.id){try{await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"completed",completedAt:serverTimestamp()});}catch(e){}}
     setAcceptedBooking(null);setDriverScreen("dashboard");setShowChat(false);setShowReport(false);
   };
+  const endedHandledRef=useRef(false);
+  const notifyDriver=(title,body)=>{ setFcmToast({title,body}); try{navigator.vibrate&&navigator.vibrate([250,120,250]);}catch(e){} };
+  // وصل السائق إلى الراكب: علامة في الحجز (يراها الراكب) + إشعار للسائق
+  const markArrivedPickup=async()=>{
+    const b=acceptedBooking; if(!b?.id||b.pickupArrivedAt) return;
+    setAcceptedBooking(x=>x?{...x,pickupArrivedAt:{local:true}}:x);
+    try{ await updateDoc(doc(db,"bookings",b.id),{pickupArrivedAt:serverTimestamp()}); }catch(e){}
+    notifyDriver("📍 وصلت إلى الراكب","تم إبلاغ الراكب بوصولك. اطلب منه الرمز لبدء الرحلة.");
+  };
+  // إنهاء الرحلة: يُسجَّل الإكمال فوراً فيظهر للراكب إشعار الوصول وشاشة التقييم
+  const completeTrip=async()=>{
+    endedHandledRef.current=true; stopTracking();
+    if(acceptedBooking?.id){ try{ await updateDoc(doc(db,"bookings",acceptedBooking.id),{status:"completed",completedAt:serverTimestamp(),completedBy:"driver"}); }catch(e){} }
+    notifyDriver("🏁 وصلتما إلى الوجهة","قيّم الراكب (يمكنك التخطي)");
+    setShowRatePassenger(true);
+  };
+  const cleanupTrip=()=>{ setShowRatePassenger(false); setAcceptedBooking(null); setDriverScreen("dashboard"); setShowChat(false); setShowReport(false); };
+  // الراكب أنهى الرحلة من جهته: يظهر للسائق الإشعار وشاشة التقييم
+  useEffect(()=>{
+    const id=acceptedBooking?.id; if(!id) return;
+    endedHandledRef.current=false;
+    const u=onSnapshot(doc(db,"bookings",id),snap=>{
+      if(!snap.exists()) return; const d=snap.data();
+      if((d.status==="completed"||d.status==="rated")&&!endedHandledRef.current){
+        endedHandledRef.current=true; stopTracking();
+        notifyDriver("🏁 وصلتما إلى الوجهة","قيّم الراكب (يمكنك التخطي)"); setShowRatePassenger(true);
+      }
+    });
+    return()=>u();
+  },[acceptedBooking?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // اكتشاف الوصول تلقائياً عبر GPS (60 م من الراكب، 100 م من الوجهة)
+  useEffect(()=>{
+    const b=acceptedBooking; if(!b?.id||!driverLocation) return;
+    if(driverScreen==="pickup"&&!b.pickupArrivedAt&&b.originLat!=null&&getDistKm(driverLocation.lat,driverLocation.lng,b.originLat,b.originLng)<0.06){ markArrivedPickup(); }
+    if(driverScreen==="ride"&&!b.destNearAt&&b.destLat!=null&&getDistKm(driverLocation.lat,driverLocation.lng,b.destLat,b.destLng)<0.1){
+      setAcceptedBooking(x=>x?{...x,destNearAt:{local:true}}:x);
+      updateDoc(doc(db,"bookings",b.id),{destNearAt:serverTimestamp()}).catch(()=>{});
+      notifyDriver("📍 اقتربت من الوجهة","عند الوصول اضغط «إنهاء الرحلة»");
+    }
+  },[driverLocation,driverScreen,acceptedBooking?.id,acceptedBooking?.pickupArrivedAt]); // eslint-disable-line react-hooks/exhaustive-deps
   const handleRetry=async()=>{try{await setDoc(doc(db,"drivers",user.uid),{verificationStatus:"none",submittedAt:null,rejectionReason:null},{merge:true});}catch(e){}};
 
   if(loading) return <div style={{ minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif" }}><div style={{ textAlign:"center" }}><img src="/logo192.png" alt="" style={{ width:80,height:80,objectFit:"contain",marginBottom:16 }} onError={e=>e.target.style.display="none"} /><div style={{ color:C.textMuted,fontSize:14 }}>جارٍ التحقق...</div></div></div>;
@@ -1251,7 +1326,7 @@ export default function DriverDashboard({ user, onLogout }) {
 
   return (
     <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"'IBM Plex Sans Arabic',Cairo,sans-serif",direction:"rtl" }}>
-      {showRatePassenger&&acceptedBooking&&<RatePassengerModal booking={acceptedBooking} onDone={()=>{setShowRatePassenger(false);finishRide();}} />}
+      {showRatePassenger&&acceptedBooking&&<RatePassengerModal booking={acceptedBooking} onDone={cleanupTrip} />}
       {fcmToast&&<DriverNotificationToast notification={fcmToast} onClose={()=>setFcmToast(null)} />}
       {showChat&&acceptedBooking&&<ChatBox bookingId={acceptedBooking.id} userId={user?.uid} userName={data?.name||"السائق"} otherName={acceptedBooking.passengerName||"الراكب"} onClose={()=>setShowChat(false)} />}
       {showSessionAlert&&(
@@ -1280,7 +1355,7 @@ export default function DriverDashboard({ user, onLogout }) {
         </div>
       )}
       <ChatToast toast={chatAlert.toast} onOpen={()=>setShowChat(true)} onClose={chatAlert.clearToast} lang="ar" />
-      {showCodeGate&&acceptedBooking&&<RideCodeGate verify={verifyCode} passengerName={acceptedBooking.passengerName} onOk={startRide} onCancel={()=>setShowCodeGate(false)} />}
+      {showCodeGate&&acceptedBooking&&<RideCodeGate verify={verifyCode} passengerName={acceptedBooking.passengerName} onOk={()=>startRide()} onSkip={()=>startRide(true)} onCancel={()=>setShowCodeGate(false)} />}
       {showReport&&acceptedBooking&&<DriverReportModal targetId={acceptedBooking.passengerId} targetName={acceptedBooking.passengerName||"الراكب"} driverId={user?.uid} driverName={data?.name||"السائق"} onClose={()=>setShowReport(false)} />}
       {showReset&&<DriverPinChange uid={user?.uid} phone={data?.phone} currentPin={data?.pinCode} onClose={()=>setShowReset(false)} />}
 
@@ -1331,7 +1406,7 @@ export default function DriverDashboard({ user, onLogout }) {
               <DriverGPSMap driverLocation={driverLocation} passengerLocation={passengerLoc} destLocation={destLoc} mode="pickup" />
               <div style={{ margin:"10px 20px",background:C.card,borderRadius:"6px 22px 22px 22px",padding:16,border:`2px solid ${C.orange}` }}>
                 <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
-                  <div style={{ fontWeight:800,fontSize:14,color:C.orange }}>🚶 في طريقك للراكب</div>
+                  <div style={{ fontWeight:800,fontSize:14,color:acceptedBooking.pickupArrivedAt?C.green:C.orange }}>{acceptedBooking.pickupArrivedAt?"✅ وصلت — الراكب يعلم بوصولك":"🚶 في طريقك للراكب"}</div>
                   {eta&&<div style={{ background:`${C.orange}22`,borderRadius:20,padding:"4px 12px",fontSize:13,color:C.orange,fontWeight:700 }}>⏱ ~{eta} دق</div>}
                 </div>
                 <div style={{ display:"flex",alignItems:"center",gap:10,fontSize:14,fontWeight:700,color:C.text,marginBottom:8 }}><Avatar src={acceptedBooking.passengerPhoto} name={acceptedBooking.passengerName||"راكب"} size={40} />{acceptedBooking.passengerName}</div>
@@ -1350,7 +1425,9 @@ export default function DriverDashboard({ user, onLogout }) {
                   <button onClick={()=>setShowReport(true)} style={{ flex:1,background:`${C.orange}22`,border:`1px solid ${C.orange}44`,borderRadius:10,padding:"11px",color:C.orange,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>🚨 بلّغ</button>
                   <button onClick={sendSOS} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>🆘 SOS</button>
                   <button onClick={finishRide} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}44`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>❌ إلغاء</button>
-                  <button onClick={()=>{ if(acceptedBooking?.rideCode||acceptedBooking?.hasRideCode) setShowCodeGate(true); else startRide(); }} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>{(acceptedBooking?.rideCode||acceptedBooking?.hasRideCode)?"🔐 وصلت — أدخل رمز الراكب":"✅ وصلت"}</button>
+                  {!acceptedBooking.pickupArrivedAt
+                    ? <button onClick={markArrivedPickup} style={{ flex:2,background:`linear-gradient(135deg,${C.orange},#c2410c)`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>📍 وصلت إلى الراكب</button>
+                    : <button onClick={()=>{ if(acceptedBooking?.rideCode||acceptedBooking?.hasRideCode) setShowCodeGate(true); else startRide(); }} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:10,padding:"11px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>{(acceptedBooking?.rideCode||acceptedBooking?.hasRideCode)?"🔐 بدء الرحلة — رمز الراكب":"🚀 بدء الرحلة"}</button>}
                 </div>
               </div>
             </div>
@@ -1380,7 +1457,7 @@ export default function DriverDashboard({ user, onLogout }) {
                 <div style={{ display:"flex",gap:8 }}>
                   <button onClick={()=>setShowReport(true)} style={{ flex:1,background:`${C.orange}22`,border:`1px solid ${C.orange}44`,borderRadius:10,padding:"11px",color:C.orange,fontFamily:"inherit",fontWeight:700,cursor:"pointer",fontSize:12 }}>🚨 بلّغ</button>
                   <button onClick={sendSOS} style={{ flex:1,background:C.redLight,border:`1px solid ${C.red}`,borderRadius:10,padding:"11px",color:C.red,fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:12 }}>🆘 SOS</button>
-                  <button onClick={()=>setShowRatePassenger(true)} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:12,padding:"13px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:14 }}>🏁 إنهاء الرحلة</button>
+                  <button onClick={completeTrip} style={{ flex:2,background:`linear-gradient(135deg,${C.green},${C.greenDark})`,border:"none",borderRadius:12,padding:"13px",color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer",fontSize:14 }}>🏁 إنهاء الرحلة</button>
                 </div>
               </div>
             </div>
@@ -1411,9 +1488,15 @@ export default function DriverDashboard({ user, onLogout }) {
                     <div style={{ textAlign:"left" }}>
                       <div style={{ fontSize:22,fontWeight:900,color:C.orange }}>{r.price} دج</div>
                       <div style={{ fontSize:11,color:C.textMuted }}>{r.distanceKm?.toFixed(1)} كم</div>
-                      {(()=>{ if(!driverLocation||r.originLat==null) return <div style={{ marginTop:6,fontSize:10,color:C.textMuted }}>📍 فعّل الموقع</div>; const dk=getDistKm(driverLocation.lat,driverLocation.lng,r.originLat,r.originLng); const near=dk<=2, far=dk>6; const col=near?C.green:far?C.red:C.orange; return <div style={{ marginTop:6,background:col+"1f",border:`1px solid ${col}66`,color:col,borderRadius:10,padding:"4px 8px",fontSize:12,fontWeight:900,textAlign:"center" }}>🚗 {dk.toFixed(1)} كم منك<div style={{ fontSize:10,fontWeight:700 }}>~{Math.max(1,Math.round(dk*3))} د · {near?"قريب جداً":far?"بعيد":"متوسط"}</div></div>; })()}
                     </div>
                   </div>
+                  {(()=>{
+                    if(!driverLocation||r.originLat==null) return <div style={{ background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"9px 14px",marginBottom:10,fontSize:12,color:C.textMuted,textAlign:"center" }}>📍 فعّل الموقع لمعرفة بُعد الراكب عنك</div>;
+                    const dk=getDistKm(driverLocation.lat,driverLocation.lng,r.originLat,r.originLng);
+                    const txt=dk<1?`${Math.max(10,Math.round(dk*1000/10)*10)} متر`:`${dk.toFixed(1)} كم`;
+                    const col=dk<=2?C.green:dk>6?C.red:C.orange;
+                    return <div style={{ background:col+"1f",border:`1px solid ${col}66`,borderRadius:12,padding:"10px 14px",marginBottom:10,fontSize:14,fontWeight:900,color:col,textAlign:"center" }}>🧍 الراكب يبعد عنك مسافة {txt}<span style={{ fontSize:11,fontWeight:700,opacity:.85 }}> · ~{Math.max(1,Math.round(dk*3))} د بالسيارة</span></div>;
+                  })()}
                   {r.passengerPhone&&<a href={`tel:${r.passengerPhone}`} style={{ display:"flex",alignItems:"center",gap:10,background:C.greenLight,border:`1px solid ${C.green}44`,borderRadius:12,padding:"10px 14px",marginBottom:10,textDecoration:"none" }}>
                     <span style={{ fontSize:20 }}>📞</span>
                     <div style={{ flex:1 }}><div style={{ fontSize:11,color:C.textMuted }}>رقم الراكب</div><div style={{ fontSize:15,fontWeight:900,color:C.green,direction:"ltr" }}>{r.passengerPhone}</div></div>
