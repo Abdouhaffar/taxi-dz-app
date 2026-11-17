@@ -135,6 +135,8 @@ exports.onNewBooking = functions.firestore
         .where("verificationStatus", "==", "approved")
         .get();
 
+      let radiusKm = 8;
+      try { const ps = await db.collection("settings").doc("pricing").get(); const rv = Number(ps.data()?.dispatchRadiusKm); if (rv > 0) radiusKm = rv; } catch (e) {}
       const nearbyTokens = [];
       driversSnap.forEach(doc => {
         const driver = doc.data();
@@ -146,7 +148,7 @@ exports.onNewBooking = functions.firestore
         const a = Math.sin(dLat/2)**2 + Math.cos(originLat*Math.PI/180) * Math.cos(driver.location.lat*Math.PI/180) * Math.sin(dLng/2)**2;
         const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-        if (dist <= 5) {
+        if (dist <= radiusKm) {
           nearbyTokens.push(driver.fcmToken);
         }
       });
