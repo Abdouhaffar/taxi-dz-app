@@ -1291,9 +1291,33 @@ export default function DriverDashboard({ user, onLogout }) {
         endedHandledRef.current=true; stopTracking();
         notifyDriver("🏁 وصلتما إلى الوجهة","قيّم الراكب (يمكنك التخطي)"); setShowRatePassenger(true);
       }
+      if(d.status==="arrived"&&driverScreenRef.current==="pickup"){ setShowCodeGate(false); setDriverScreen("ride"); notifyDriver("🚀 بدأت الرحلة","التوجّه نحو الوجهة"); }
+      setPassLoc(d.passengerCurrentLocation||null);
     });
     return()=>u();
   },[acceptedBooking?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // مزامنة ذكية بالـGPS: السائق والراكب معاً 20 ثانية → تبدأ الرحلة / تنتهي تلقائياً
+  const [passLoc,setPassLoc]=useState(null);
+  const driverScreenRef=useRef("dashboard"); driverScreenRef.current=driverScreen;
+  const togetherRef=useRef({k:"",t:0,lat:0,lng:0});
+  const [syncTick,setSyncTick]=useState(0);
+  useEffect(()=>{ if(!acceptedBooking?.id) return; const i=setInterval(()=>setSyncTick(x=>x+1),4000); return()=>clearInterval(i); },[acceptedBooking?.id]);
+  useEffect(()=>{
+    const b=acceptedBooking, T=togetherRef.current, reset=()=>{ togetherRef.current={k:"",t:0,lat:0,lng:0}; };
+    if(!b?.id||!driverLocation||!passLoc||!passLoc.t||Math.abs(Date.now()-passLoc.t)>60000){ reset(); return; }
+    const together=getDistKm(driverLocation.lat,driverLocation.lng,passLoc.lat,passLoc.lng)<0.06;
+    let key="";
+    if(driverScreen==="pickup"&&!showCodeGate&&together) key="start";
+    else if(driverScreen==="ride"&&together&&b.destLat!=null&&getDistKm(driverLocation.lat,driverLocation.lng,b.destLat,b.destLng)<0.1) key="end";
+    if(!key){ reset(); return; }
+    const now=Date.now();
+    if(T.k!==key){ togetherRef.current={k:key,t:now,lat:driverLocation.lat,lng:driverLocation.lng}; return; }
+    if(now-T.t<20000) return;
+    // للبدء: يجب أن يكونا متحركين معاً (لا مجرد واقفين عند نقطة الانطلاق)
+    if(key==="start"&&getDistKm(T.lat,T.lng,driverLocation.lat,driverLocation.lng)<0.03) return;
+    reset();
+    if(key==="start") startRide(true); else completeTrip();
+  },[driverLocation,passLoc,driverScreen,acceptedBooking?.id,showCodeGate,syncTick]); // eslint-disable-line react-hooks/exhaustive-deps
   // اكتشاف الوصول تلقائياً عبر GPS (60 م من الراكب، 100 م من الوجهة)
   useEffect(()=>{
     const b=acceptedBooking; if(!b?.id||!driverLocation) return;
