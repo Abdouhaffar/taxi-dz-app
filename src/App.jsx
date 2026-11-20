@@ -1470,6 +1470,39 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
   useEffect(()=>{ if(screen==="searching"&&timer===60) setNoDrivers(true); },[timer,screen]);
   const [codeShown,setCodeShown]=useState("");
   useEffect(()=>{ setCodeShown(""); if(!bookingId) return; let on=true; getDoc(doc(db,"ride_codes",bookingId)).then(s=>{ if(on&&s.exists()) setCodeShown(s.data().code||""); }).catch(()=>{}); return()=>{on=false;}; },[bookingId]);
+  // مزامنة ذكية بالـGPS: موقع الراكب الحيّ + اكتشاف تواجده مع السائق 20 ثانية
+  const [livePass,setLivePass]=useState(null);
+  const livePassRef=useRef(null); livePassRef.current=livePass;
+  const togetherRef=useRef({k:"",t:0,lat:0,lng:0});
+  const lastPassWrite=useRef(0);
+  const [syncTick,setSyncTick]=useState(0);
+  useEffect(()=>{
+    if(!bookingId||(screen!=="found"&&screen!=="ride")||showRating||!navigator.geolocation) return;
+    const w=navigator.geolocation.watchPosition(pos=>{
+      const loc={lat:pos.coords.latitude,lng:pos.coords.longitude,t:Date.now()};
+      setLivePass(loc);
+      if(Date.now()-lastPassWrite.current>5000){ lastPassWrite.current=Date.now(); updateDoc(doc(db,"bookings",bookingId),{passengerCurrentLocation:loc}).catch(()=>{}); }
+    },()=>{},{enableHighAccuracy:true,maximumAge:2000,timeout:8000});
+    const i=setInterval(()=>setSyncTick(x=>x+1),4000);
+    return()=>{ navigator.geolocation.clearWatch(w); clearInterval(i); };
+  },[bookingId,screen,showRating]);
+  useEffect(()=>{
+    const reset=()=>{ togetherRef.current={k:"",t:0,lat:0,lng:0}; };
+    const T=togetherRef.current, pl=livePassRef.current;
+    if(!bookingId||!pl||!driverLocation||showRating||(screen!=="found"&&screen!=="ride")){ reset(); return; }
+    const together=getDistanceKm(pl.lat,pl.lng,driverLocation.lat,driverLocation.lng)<0.06;
+    let key="";
+    if(screen==="found"&&together) key="start";
+    else if(screen==="ride"&&together&&destPlace){ const dl=getLatLng(destPlace); if(getDistanceKm(driverLocation.lat,driverLocation.lng,dl.lat,dl.lng)<0.1) key="end"; }
+    if(!key){ reset(); return; }
+    const now=Date.now();
+    if(T.k!==key){ togetherRef.current={k:key,t:now,lat:driverLocation.lat,lng:driverLocation.lng}; return; }
+    if(now-T.t<20000) return;
+    if(key==="start"&&getDistanceKm(T.lat,T.lng,driverLocation.lat,driverLocation.lng)<0.03) return;
+    reset();
+    if(key==="start"){ updateDoc(doc(db,"bookings",bookingId),{status:"arrived",arrivedAt:serverTimestamp(),codeSkipped:true}).catch(()=>{}); }
+    else { updateDoc(doc(db,"bookings",bookingId),{status:"completed",completedAt:serverTimestamp(),completedBy:"auto"}).catch(()=>{}); }
+  },[livePass,driverLocation,screen,bookingId,showRating,syncTick]); // eslint-disable-line react-hooks/exhaustive-deps
   const chatAlert=useChatAlert({ bookingId, userId:user?.uid, open:showChat });
   const block=useAccountBlock("passengers",user?.uid);
   const kicked=useSingleSession(user?.uid);
