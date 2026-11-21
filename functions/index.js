@@ -16,6 +16,9 @@
 const functions = require("firebase-functions");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
+const { setGlobalOptions } = require("firebase-functions/v2");
+// سقف أمان لعدد النسخ المتزامنة لكل دالة v2 (يمنع تضخّم الفاتورة عند هجوم/ذروة). يُرفع لدالة محددة عند الحاجة.
+setGlobalOptions({ maxInstances: 50 });
 const admin = require("firebase-admin");
 
 admin.initializeApp();
@@ -102,7 +105,7 @@ async function sendToMultiple(tokens, title, body, data = {}) {
 }
 
 // ===== 1. إشعار السائق عند وجود طلب جديد =====
-exports.onNewBooking = functions.firestore
+exports.onNewBooking = functions.runWith({ maxInstances: 100, memory: "512MB" }).firestore
   .document("bookings/{bookingId}")
   .onCreate(async (snap, context) => {
     const booking = snap.data();
@@ -130,13 +133,25 @@ exports.onNewBooking = functions.firestore
     }
 
     try {
-      const driversSnap = await db.collection("drivers")
-        .where("isOnline", "==", true)
-        .where("verificationStatus", "==", "approved")
-        .get();
-
       let radiusKm = 8;
       try { const ps = await db.collection("settings").doc("pricing").get(); const rv = Number(ps.data()?.dispatchRadiusKm); if (rv > 0) radiusKm = rv; } catch (e) {}
+      // استعلام جغرافي (نطاق خط العرض) يقلل القراءات؛ يتطلب فهرساً مركباً، وإن لم يوجد يرجع للاستعلام الشامل
+      const dLatDeg = radiusKm / 111;
+      let driversSnap;
+      try {
+        driversSnap = await db.collection("drivers")
+          .where("isOnline", "==", true)
+          .where("verificationStatus", "==", "approved")
+          .where("location.lat", ">=", originLat - dLatDeg)
+          .where("location.lat", "<=", originLat + dLatDeg)
+          .limit(400).get();
+      } catch (e) {
+        console.warn("geo query fallback (create index drivers: isOnline, verificationStatus, location.lat):", e.code || e.message);
+        driversSnap = await db.collection("drivers")
+          .where("isOnline", "==", true)
+          .where("verificationStatus", "==", "approved")
+          .limit(1500).get();
+      }
       const nearbyTokens = [];
       driversSnap.forEach(doc => {
         const driver = doc.data();
@@ -516,6 +531,28 @@ async function smssakPost(urls, body) {
   throw lastErr;
 }
 
+const WARM = 1; // نسخ "دافئة" لدوال الدخول/التسجيل (تلغي التأخر عند أول طلب). ضع 0 لإلغاء الكلفة الشهرية الصغيرة.
+const scryptAsync = (pw, salt, len) => new Promise((res, rej) => require("crypto").scrypt(pw, salt, len, (e, k) => (e ? rej(e) : res(k))));
+// حدّ معدّل بسيط على Firestore (لكل مفتاح: عدد أقصى خلال نافذة). عند عطل البنية يفتح (لا يحجب المستخدمين).
+async function rateLimit(key, max, windowMs, msg) {
+  const id = require("crypto").createHash("sha256").update(String(key)).digest("hex").slice(0, 40);
+  const ref = db.collection("rate_limits").doc(id);
+  let blocked = false;
+  try {
+    blocked = await db.runTransaction(async (tx) => {
+      const s = await tx.get(ref), d = s.exists ? s.data() : null, now = Date.now();
+      if (!d || now - d.start > windowMs) { tx.set(ref, { start: now, count: 1 }); return false; }
+      if (d.count >= max) return true;
+      tx.update(ref, { count: d.count + 1 });
+      return false;
+    });
+  } catch (e) { console.error("rateLimit infra error (fail-open):", e.message); return; }
+  if (blocked) throw new HttpsError("resource-exhausted", msg || "محاولات كثيرة، حاول لاحقاً");
+}
+function clientIp(request) {
+  const xf = request.rawRequest?.headers?.["x-forwarded-for"];
+  return String((xf ? String(xf).split(",")[0] : request.rawRequest?.ip) || "unknown").trim();
+}
 const OTP_REGION = "europe-west1"; // يطابق المنطقة في App.jsx (cloudFunctions)
 
 // ===== تسجيل الدخول بكود الحساب (بدون OTP) =====
@@ -524,13 +561,13 @@ const OTP_REGION = "europe-west1"; // يطابق المنطقة في App.jsx (cl
 // وقت التسجيل (المرتبط برقم الهاتف عبر verifyOtpTwilio) — فيبدو الحساب "جديداً"
 // في كل تسجيل دخول رغم وجوده فعلاً. هذه الدالة تُسجّل الدخول بنفس المعرّف الحقيقي دائماً.
 // ---- أكواد الحساب (PIN): تُحفظ مشفّرة في user_secrets (للخادم فقط) ----
-function pinHashOf(pin) {
+async function pinHashOf(pin) {
   const salt = crypto.randomBytes(16).toString("hex");
-  return { pinSalt: salt, pinHash: crypto.scryptSync(String(pin), salt, 32).toString("hex") };
+  return { pinSalt: salt, pinHash: (await scryptAsync(String(pin), salt, 32)).toString("hex") };
 }
-function pinHashMatches(sec, pin) {
+async function pinHashMatches(sec, pin) {
   if (!sec || !sec.pinHash || !sec.pinSalt) return false;
-  const H = Buffer.from(sec.pinHash, "hex"), G = crypto.scryptSync(String(pin || ""), sec.pinSalt, 32);
+  const H = Buffer.from(sec.pinHash, "hex"), G = await scryptAsync(String(pin || ""), sec.pinSalt, 32);
   return H.length === G.length && crypto.timingSafeEqual(H, G);
 }
 function plainEq(a, b) {
@@ -554,13 +591,13 @@ async function pinOkReset(uid) { await db.collection("pin_attempts").doc(uid).se
 async function verifyPinFor(uid, pin) {
   const secRef = db.collection("user_secrets").doc(uid);
   const [secSnap, dSnap, pSnap] = await Promise.all([secRef.get(), db.collection("drivers").doc(uid).get(), db.collection("passengers").doc(uid).get()]);
-  if (secSnap.exists && secSnap.data().pinHash) return pinHashMatches(secSnap.data(), pin);
+  if (secSnap.exists && secSnap.data().pinHash) return await pinHashMatches(secSnap.data(), pin);
   const legacy = [dSnap, pSnap].find((x) => x.exists && x.data().pinCode != null);
   if (legacy && plainEq(legacy.data().pinCode, pin)) { await storePin(uid, pin); return true; }
   return false;
 }
 async function storePin(uid, pin) {
-  await db.collection("user_secrets").doc(uid).set({ ...pinHashOf(pin), pinUpdatedAt: FV.serverTimestamp() }, { merge: true });
+  await db.collection("user_secrets").doc(uid).set({ ...(await pinHashOf(pin)), pinUpdatedAt: FV.serverTimestamp() }, { merge: true });
   for (const col of ["drivers", "passengers"]) {
     const r = db.collection(col).doc(uid);
     const s = await r.get();
@@ -569,7 +606,7 @@ async function storePin(uid, pin) {
 }
 
 exports.loginWithPin = onCall(
-  { region: OTP_REGION },
+  { region: OTP_REGION, memory: "512MiB", maxInstances: 100, minInstances: WARM, cpu: 1, concurrency: 40 },
   async (request) => {
     const phone = normalizePhone(request.data?.phone);
     const pin = request.data?.pin;
@@ -605,7 +642,7 @@ exports.loginWithPin = onCall(
 );
 
 // تعيين/تغيير كود الحساب: إما بالكود القديم الصحيح، أو بعد اجتياز OTP قبل أقل من 15 دقيقة
-exports.setPin = onCall({ region: OTP_REGION }, async (request) => {
+exports.setPin = onCall({ region: OTP_REGION, memory: "512MiB", maxInstances: 60 }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "سجّل الدخول أولاً");
   const pin = String(request.data?.pin || "");
@@ -638,7 +675,7 @@ exports.migratePins = onCall({ region: OTP_REGION, timeoutSeconds: 540 }, async 
         const pin = d.data().pinCode;
         const secRef = db.collection("user_secrets").doc(d.id);
         const sec = await secRef.get();
-        if (!(sec.exists && sec.data().pinHash) && pin != null && String(pin).length > 0) await secRef.set({ ...pinHashOf(pin), pinUpdatedAt: FV.serverTimestamp() }, { merge: true });
+        if (!(sec.exists && sec.data().pinHash) && pin != null && String(pin).length > 0) await secRef.set({ ...(await pinHashOf(pin)), pinUpdatedAt: FV.serverTimestamp() }, { merge: true });
         await d.ref.update({ pinCode: FV.delete() });
         migrated++;
       }
@@ -649,7 +686,7 @@ exports.migratePins = onCall({ region: OTP_REGION, timeoutSeconds: 540 }, async 
 
 // ===== التحقق من وجود حساب مسبقاً بنفس الرقم (قبل إرسال أي SMS) =====
 exports.checkPhoneRegistered = onCall(
-  { region: OTP_REGION },
+  { region: OTP_REGION, maxInstances: 100, minInstances: WARM },
   async (request) => {
     const phone = normalizePhone(request.data?.phone);
     const { role } = request.data || {};
@@ -677,7 +714,7 @@ exports.checkPhoneRegistered = onCall(
 
 // ===== إرسال رمز التحقق (SMS عبر smssak) =====
 exports.sendOtpTwilio = onCall(
-  { region: OTP_REGION, secrets: [SMSSAK_KEY, SMSSAK_PROJECT_ID] },
+  { region: OTP_REGION, secrets: [SMSSAK_KEY, SMSSAK_PROJECT_ID], maxInstances: 60, minInstances: WARM },
   async (request) => {
     const phone = normalizePhone(request.data?.phone);
     if (!phone) {
@@ -693,6 +730,9 @@ exports.sendOtpTwilio = onCall(
         throw new HttpsError("resource-exhausted", "تم قفل حسابك مؤقتاً بسبب محاولات خاطئة متكررة");
       }
     }
+    // حدّ الإرسال: 3 رموز/ساعة لكل رقم (يحمي رصيد الرسائل) + سقف سخي لكل IP (شبكات الجوال تتشارك العنوان)
+    await rateLimit("otp:" + phone, 3, 3600000, "تجاوزت عدد الرموز المسموح، حاول بعد ساعة");
+    await rateLimit("otpip:" + clientIp(request), 300, 3600000, "طلبات كثيرة من هذا الاتصال، حاول لاحقاً");
 
     try {
       const r = await smssakPost(SMSSAK_SEND_URLS, {
@@ -714,7 +754,7 @@ exports.sendOtpTwilio = onCall(
 
 // ===== التحقق من الرمز + إنشاء/تسجيل الدخول في Firebase =====
 exports.verifyOtpTwilio = onCall(
-  { region: OTP_REGION, secrets: [SMSSAK_KEY, SMSSAK_PROJECT_ID] },
+  { region: OTP_REGION, secrets: [SMSSAK_KEY, SMSSAK_PROJECT_ID], maxInstances: 100, minInstances: WARM },
   async (request) => {
     const phone = normalizePhone(request.data?.phone);
     const code = request.data?.code;
@@ -1388,4 +1428,16 @@ exports.cancelSharedTrip = onCall({ region: "europe-west1" }, async (req) => {
     tx.update(tRef, { status: "cancelled", cancelledAt: FV.serverTimestamp() });
   });
   return { ok: true };
+});
+
+// تنظيف يومي لعدادات حدّ المعدّل القديمة (يبقي المجموعة صغيرة)
+exports.cleanupRateLimits = onSchedule({ schedule: "every 24 hours", region: "europe-west1" }, async () => {
+  const cutoff = Date.now() - 2 * 86400000;
+  for (let i = 0; i < 10; i++) {
+    const snap = await db.collection("rate_limits").where("start", "<", cutoff).limit(400).get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
 });
