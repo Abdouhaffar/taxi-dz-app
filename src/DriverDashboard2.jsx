@@ -330,9 +330,7 @@ function SubscriptionScreen({ uid, driverData, subscriptionEnabled, onBack }) {
   const handleReceiptUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => setReceipt(ev.target.result);
-    reader.readAsDataURL(file);
+    try { setReceipt(await compressToBase64(file,1000)); } catch(err) {}
   };
 
   const credit = Math.min(driverData?.compensationCredit || 0, selected?.price || 0);
@@ -1168,11 +1166,16 @@ export default function DriverDashboard({ user, onLogout }) {
     restoreActiveTrip();
   },[status,user?.uid]);
 
+  const writeLocRef=useRef({t:0,lat:0,lng:0});
   const startTracking=(bookingId)=>{
     if(!navigator.geolocation) return;
     watchIdRef.current=navigator.geolocation.watchPosition(async pos=>{
       const loc={lat:pos.coords.latitude,lng:pos.coords.longitude};
       setDriverLocation(loc);
+      // توفير كتابات Firestore: لا أكثر من مرة كل 4 ثوانٍ إلا عند تحرك > 15 م
+      const W=writeLocRef.current, nowT=Date.now();
+      if(nowT-W.t<4000&&getDistKm(W.lat,W.lng,loc.lat,loc.lng)<0.015) return;
+      writeLocRef.current={t:nowT,lat:loc.lat,lng:loc.lng};
       try { await updateDoc(doc(db,"bookings",bookingId),{driverCurrentLocation:loc,driverLocationUpdatedAt:serverTimestamp()}); await setDoc(doc(db,"drivers",user.uid),{location:loc},{merge:true}); } catch(e){}
     },err=>console.log("GPS:",err),{enableHighAccuracy:true,maximumAge:2000,timeout:5000});
   };
@@ -1191,7 +1194,7 @@ export default function DriverDashboard({ user, onLogout }) {
     // لأن ذلك يتطلب فهرسًا مركّبًا (composite index) في Firestore — وإن لم
     // يُنشأ هذا الفهرس، تفشل onSnapshot بصمت ولا تظهر أي طلبات للسائق إطلاقًا
     // (وهذا بالضبط كان يسبب عدم ظهور الطلبات رغم وصول الإشعار). الترتيب الآن يتم يدويًا بعد الجلب.
-    const q=query(collection(db,"bookings"),where("status","==","pending"));
+    const q=query(collection(db,"bookings"),where("status","==","pending"),limit(100));
     const u=onSnapshot(q,snap=>{
       setBookingsError("");
       const now=Date.now();
