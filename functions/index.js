@@ -531,7 +531,7 @@ async function smssakPost(urls, body) {
   throw lastErr;
 }
 
-const WARM = 1; // نسخ "دافئة" لدوال الدخول/التسجيل (تلغي التأخر عند أول طلب). ضع 0 لإلغاء الكلفة الشهرية الصغيرة.
+const WARM = 0; // نسخ "دافئة" لدوال الدخول/التسجيل (تلغي التأخر عند أول طلب). ضع 0 لإلغاء الكلفة الشهرية الصغيرة.
 const scryptAsync = (pw, salt, len) => new Promise((res, rej) => require("crypto").scrypt(pw, salt, len, (e, k) => (e ? rej(e) : res(k))));
 // حدّ معدّل بسيط على Firestore (لكل مفتاح: عدد أقصى خلال نافذة). عند عطل البنية يفتح (لا يحجب المستخدمين).
 async function rateLimit(key, max, windowMs, msg) {
