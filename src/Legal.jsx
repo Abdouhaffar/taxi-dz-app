@@ -59,12 +59,12 @@ export function LegalLinks({ lang = "ar", dark = true }) {
 }
 
 // زر دعم عائم: واتساب إن ضُبط الرقم، وإلا بريد
-export function SupportButton({ lang = "ar" }) {
+export function SupportButton({ lang = "ar", lift = 0 }) {
   // رقم الإدارة: يُستعمل للاتصال فقط ولا يُعرَض نصّاً في التطبيق
   const L = { ar: ["💬 تواصل معنا عبر واتساب", "مع تحيات إدارة البراق"], fr: ["💬 Contactez-nous sur WhatsApp", "L'administration AL-BURAQ"], en: ["💬 Chat with us on WhatsApp", "AL-BURAQ administration"] }[lang] || ["💬 Chat with us on WhatsApp", "AL-BURAQ administration"];
   const msg = encodeURIComponent(lang === "fr" ? "Bonjour l'administration AL-BURAQ, j'ai besoin d'aide" : lang === "en" ? "Hello AL-BURAQ admin, I need help" : "مرحباً إدارة البراق، أحتاج مساعدة");
   return (
-    <a href={`https://wa.me/${SUPPORT_WA}?text=${msg}`} target="_blank" rel="noreferrer" aria-label="WhatsApp AL-BURAQ administration" style={{ position: "fixed", bottom: "calc(env(safe-area-inset-bottom,0px) + 12px)", left: "50%", transform: "translateX(-50%)", zIndex: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 1, padding: "8px 26px", borderRadius: 18, background: "linear-gradient(135deg,#22c55e,#15803d)", color: "#fff", boxShadow: "0 6px 18px rgba(21,128,61,.45)", textDecoration: "none", lineHeight: 1.25, whiteSpace: "nowrap" }}>
+    <a href={`https://wa.me/${SUPPORT_WA}?text=${msg}`} target="_blank" rel="noreferrer" aria-label="WhatsApp AL-BURAQ administration" style={{ position: "fixed", bottom: `calc(env(safe-area-inset-bottom,0px) + ${12 + lift}px)`, left: "50%", transform: "translateX(-50%)", zIndex: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 1, padding: "8px 26px", borderRadius: 18, background: "linear-gradient(135deg,#22c55e,#15803d)", color: "#fff", boxShadow: "0 6px 18px rgba(21,128,61,.45)", textDecoration: "none", lineHeight: 1.25, whiteSpace: "nowrap" }}>
       <span style={{ fontSize: 14, fontWeight: 800 }}>{L[0]}</span>
       <span style={{ fontSize: 10, opacity: .9 }}>{L[1]}</span>
     </a>
