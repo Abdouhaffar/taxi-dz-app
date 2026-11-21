@@ -1,5 +1,5 @@
 /* eslint-disable */
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { auth, db, requestNotificationPermission, onForegroundMessage } from "./firebase";
 import { playPing } from "./Sound";
 import LangDropdown from "./LangDropdown";
@@ -25,7 +25,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 // Cloud Functions منشورة على europe-west1 — غيّر المنطقة إذا نشرت في مكان آخر
 const cloudFunctions = getFunctions(undefined, "europe-west1");
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Autocomplete } from "@react-google-maps/api";
-import DriverDashboard from "./DriverDashboard2";
+const DriverDashboard = lazy(()=>import("./DriverDashboard2"));
 import { ShareButton, TierProgress } from "./ReferralShare";
 import { Avatar, PhotoSheet } from "./ProfilePhoto";
 import { SavedPlacesBar, SchedulePicker, scheduleToTimestamp, scheduleValid, PromoBox, OffersBanner, UpcomingRides, HistoryScreen } from "./PassengerExtras";
@@ -645,7 +645,16 @@ function PassengerTrackingMap({ passengerLocation, driverLocation, destinationLo
   const mapRef=useRef(null);
   const makeMarker=(emoji,color)=>"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44'><circle cx='22' cy='22' r='20' fill='${color}' stroke='white' stroke-width='3'/><text x='22' y='29' text-anchor='middle' font-size='20'>${emoji}</text></svg>`);
   const target=mode==="pickup"?passengerLocation:destinationLocation;
-  useEffect(()=>{ if(!driverLocation||!target||!window.google){setDirections(null);return;} new window.google.maps.DirectionsService().route({origin:driverLocation,destination:target,travelMode:"DRIVING"},(r,s)=>{if(s==="OK")setDirections(r);}); },[driverLocation,target]);
+  const dirLast=useRef({t:0,lat:0,lng:0,k:""});
+  useEffect(()=>{
+    if(!driverLocation||!target||!window.google){setDirections(null);return;}
+    // توفير فواتير Directions: طلب جديد فقط عند تغيّر الهدف أو بعد 100 م/25 ثانية
+    const k=mode+":"+target.lat.toFixed(4)+","+target.lng.toFixed(4), L=dirLast.current, now=Date.now();
+    const moved=getDistanceKm(L.lat,L.lng,driverLocation.lat,driverLocation.lng);
+    if(L.k===k&&moved<0.1&&now-L.t<25000) return;
+    dirLast.current={t:now,lat:driverLocation.lat,lng:driverLocation.lng,k};
+    new window.google.maps.DirectionsService().route({origin:driverLocation,destination:target,travelMode:"DRIVING"},(r,s)=>{if(s==="OK")setDirections(r);});
+  },[driverLocation,target]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{ if(driverLocation&&mapRef.current) mapRef.current.panTo(driverLocation); },[driverLocation]);
   const t=T[lang];
   return (
@@ -671,7 +680,7 @@ function TaxiMap({ origin, destination, showDrivers, height=220, onMapClick, pic
   const [nearbyDrivers,setNearbyDrivers]=useState([]);
   const mapRef=useRef(null);
   useEffect(()=>{ navigator.geolocation?.getCurrentPosition(p=>setUserLocation({lat:p.coords.latitude,lng:p.coords.longitude}),()=>{}); },[]);
-  useEffect(()=>{ if(!showDrivers) return; const u=onSnapshot(collection(db,"drivers"),s=>setNearbyDrivers(s.docs.filter(d=>d.data().isOnline&&d.data().verificationStatus==="approved"&&d.data().location).map(d=>({id:d.id,...d.data()})))); return()=>u(); },[showDrivers]);
+  useEffect(()=>{ if(!showDrivers) return; const u=onSnapshot(query(collection(db,"drivers"),where("isOnline","==",true),where("verificationStatus","==","approved")),s=>setNearbyDrivers(s.docs.filter(d=>d.data().isOnline&&d.data().verificationStatus==="approved"&&d.data().location).map(d=>({id:d.id,...d.data()})))); return()=>u(); },[showDrivers]);
   useEffect(()=>{ if(!origin||!destination){setDirections(null);return;} new window.google.maps.DirectionsService().route({origin,destination,travelMode:"DRIVING"},(r,s)=>{if(s==="OK")setDirections(r);}); },[origin,destination]);
   const onLoad=useCallback(m=>{mapRef.current=m;},[]);
   const makeMarker=(emoji,color)=>"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><circle cx='20' cy='20' r='18' fill='${color}' stroke='white' stroke-width='3'/><text x='20' y='27' text-anchor='middle' font-size='18'>${emoji}</text></svg>`);
@@ -2045,9 +2054,9 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
         </div>
         <div style={{ background:C.bg,borderRadius:16,padding:16,marginBottom:14 }}>
           <div style={{ display:"flex",gap:12,alignItems:"center",marginBottom:10 }}>
-            {selectedDriver?.selfieUrl&&<img src={selectedDriver.selfieUrl} alt="" style={{ width:52,height:52,borderRadius:"50%",objectFit:"cover",border:`2px solid ${C.border}`,flexShrink:0 }} />}
+            {selectedDriver?.selfieUrl&&<img loading="lazy" src={selectedDriver.selfieUrl} alt="" style={{ width:52,height:52,borderRadius:"50%",objectFit:"cover",border:`2px solid ${C.border}`,flexShrink:0 }} />}
             <div style={{ width:52,height:52,borderRadius:12,background:C.dark,overflow:"hidden",border:`2px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24 }}>
-              {selectedDriver?.carFrontUrl?<img src={selectedDriver.carFrontUrl} alt="سيارة" style={{ width:"100%",height:"100%",objectFit:"cover" }} />:"🚗"}
+              {selectedDriver?.carFrontUrl?<img loading="lazy" src={selectedDriver.carFrontUrl} alt="سيارة" style={{ width:"100%",height:"100%",objectFit:"cover" }} />:"🚗"}
             </div>
             <div style={{ flex:1 }}>
               <div style={{ fontWeight:800,fontSize:15,color:C.text }}>{selectedDriver?.name||"السائق"}</div>
@@ -2213,13 +2222,13 @@ export default function App() {
       <PermissionGate lang={lang} />
       <OfflineBanner lang={lang} />
       <LegalOverlay />
-      {screen==="app"&&role==="driver"&&<SupportButton lang={lang} />}
+      {screen==="app"&&role==="driver"&&<SupportButton lang={lang} lift={92} />}
       <div style={{ position:"fixed",bottom:2,left:0,right:0,textAlign:"center",fontSize:9,color:"#8884",pointerEvents:"none",zIndex:1 }}>AL-BURAQ v2.7</div>
       {screen==="auth"&&<div style={{ position:"fixed",bottom:22,left:0,right:0,zIndex:5 }}><LegalLinks lang={lang} /></div>}
       {screen==="welcome"&&<WelcomeScreen onSelect={r=>{setRole(r);setScreen("auth");}} lang={lang} setLang={changeLang} />}
       {screen==="auth"&&<AuthForm role={role} onSuccess={handleAuthSuccess} onBack={()=>{setRole(null);setScreen("welcome");}} lang={lang} setLang={changeLang} resetGuardRef={resetGuardRef} />}
       {screen==="app"&&role==="passenger"&&<PassengerApp onLogout={handleLogout} user={user} lang={lang} setLang={changeLang} />}
-      {screen==="app"&&role==="driver"&&<DriverDashboard user={user} onLogout={handleLogout} />}
+      {screen==="app"&&role==="driver"&&<Suspense fallback={<div style={{ minHeight:"100vh",background:C.bg }} />}><DriverDashboard user={user} onLogout={handleLogout} /></Suspense>}
     </div>
   );
 }
