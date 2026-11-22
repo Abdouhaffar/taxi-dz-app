@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { DashboardPro, LiveOps, RidesPanel, SafetyPanel, GlobalSearch, PricingPanel, RegionsPanel, PromosPanel, MissionsAdmin, ComplaintsPro, AccountsPanel, adminProStyles, useIsMobile } from "./AdminPro";
+import { DashboardPro, LiveOps, RidesPanel, SafetyPanel, GlobalSearch, PricingPanel, RegionsPanel, PromosPanel, MissionsAdmin, AdsAdmin, ComplaintsPro, AccountsPanel, adminProStyles, useIsMobile } from "./AdminPro";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken, sendPasswordResetEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
@@ -270,6 +270,7 @@ function Sidebar({ tab, setTab, admin, onLogout, counts, isMobile, open, onClose
     { id: "missions", icon: "🎯", label: "المهام والحوافز" },
     { id: "accounts", icon: "⛔", label: "الحسابات والإيقاف" },
     { id: "promos", icon: "🎟️", label: "العروض والخصومات" },
+    { id: "ads", icon: "📢", label: "الإعلانات" },
     { id: "reports", icon: "📈", label: "التقارير" },
     { id: "analytics", icon: "💹", label: "التحليلات" },
     { id: "complaints", icon: "🚨", label: "التبليغات", badge: counts.pendingReports },
@@ -1337,6 +1338,7 @@ export default function AdminApp() {
         {tab === "regions" && <RegionsPanel db={db} adminName={admin.name} canEdit={admin.role === "super"} />}
         {tab === "missions" && <MissionsAdmin db={db} canEdit={admin.role === "super"} />}
         {tab === "promos" && <PromosPanel db={db} canEdit={admin.role === "super"} />}
+        {tab === "ads" && <AdsAdmin db={db} canEdit={admin.role === "super"} adminName={admin.name} />}
         {tab === "safety" && <SafetyPanel sos={sos} db={db} isMobile={isMobile} />}
         {tab === "drivers" && <DriversPanel drivers={drivers} isSuperAdmin={admin.role === "super"} />}
         {tab === "passengers" && <PassengersPanel passengers={passengers} isSuperAdmin={admin.role === "super"} />}
