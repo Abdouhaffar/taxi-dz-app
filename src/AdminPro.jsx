@@ -3,7 +3,7 @@
 import { WILAYA_LIST } from "./Wilayas";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from "@react-google-maps/api";
-import { doc, updateDoc, setDoc, deleteDoc, addDoc, collection, Timestamp, serverTimestamp, onSnapshot, arrayUnion, increment } from "firebase/firestore";
+import { doc, updateDoc, setDoc, deleteDoc, addDoc, collection, Timestamp, serverTimestamp, onSnapshot, arrayUnion, increment, query, where, getCountFromServer } from "firebase/firestore";
 
 // ===== الثيم =====
 export const T = {
@@ -1208,6 +1208,154 @@ export function RegionsPanel({ db, adminName, canEdit }) {
           </Card>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ================================================================
+// الإعلانات المباشرة: صورة أو فيديو قصير، حسب الولاية، مع ضوابط المحتوى وإحصاءات
+// ================================================================
+const AD_CATS = ["مطاعم وأطعمة حلال", "ملابس محتشمة", "خدمات وصيانة", "تعليم ودورات", "عقارات", "سيارات وقطع غيار", "صحة وصيدلة", "متاجر ومؤسسات", "أخرى مباحة"];
+const AD_RULES = [
+  "لا خمر ولا مسكرات ولا تبغ ولا مخدرات",
+  "لا قمار ولا رهان ولا يانصيب",
+  "لا قروض بفائدة (ربا) ولا منتجات مالية محرّمة",
+  "لا صور أو مشاهد مخلّة بالحياء، ولا إبراز لجسد المرأة ولا ملابس فاضحة",
+  "لا سحر ولا شعوذة ولا ادّعاء علم الغيب",
+  "لا إساءة لأي دين أو شخص أو جهة، ولا ادّعاءات كاذبة أو مضلِّلة",
+  "الفيديو بلا صوت تلقائياً؛ ولا موسيقى أو مؤثرات محرّمة إن فُعّل الصوت",
+];
+const adImgToB64 = (file, maxW) => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = (e) => { const im = new Image(); im.onload = () => { const c = document.createElement("canvas"); let { width: w, height: h } = im; if (w > maxW) { h = (h * maxW) / w; w = maxW; } c.width = w; c.height = h; c.getContext("2d").drawImage(im, 0, 0, w, h); res(c); }; im.onerror = rej; im.src = e.target.result; };
+  r.onerror = rej; r.readAsDataURL(file);
+});
+
+export function AdsAdmin({ db, canEdit, adminName }) {
+  const [rows, setRows] = useState([]);
+  const empty = { advertiser: "", title: "", category: AD_CATS[0], kind: "image", mediaUrl: "", link: "", city: "all", days: 30, ack: false };
+  const [f, setF] = useState(empty);
+  const [img, setImg] = useState("");
+  const [open, setOpen] = useState(false);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [stats, setStats] = useState({});
+  useEffect(() => onSnapshot(collection(db, "ads"), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0))), () => {}), [db]);
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const inp = { width: "100%", background: T.panel2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", color: T.text, fontFamily: "inherit", fontSize: 14, outline: "none" };
+  const F = ({ l, children }) => <label style={{ display: "block" }}><div style={{ fontSize: 11, color: T.muted, marginBottom: 5, fontWeight: 600 }}>{l}</div>{children}</label>;
+  const pick = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return; setErr("");
+    try {
+      for (const [w, q] of [[640, 0.6], [520, 0.5], [420, 0.45]]) {
+        const c = await adImgToB64(file, w); const d = c.toDataURL("image/jpeg", q);
+        if (d.length <= 90000) { setImg(d); return; }
+      }
+      setErr("الصورة ثقيلة جداً، اختر صورة أبسط أو استعمل رابطاً");
+    } catch (x) { setErr("تعذّرت قراءة الصورة"); }
+  };
+  const create = async () => {
+    const link = String(f.link).trim();
+    if (!f.advertiser.trim() || !f.title.trim()) return setErr("أدخل اسم المعلن وعنوان الإعلان");
+    if (link && !/^https:\/\/\S+$/i.test(link)) return setErr("الرابط يجب أن يبدأ بـ https://");
+    if (f.kind === "image" && !img && !f.mediaUrl.trim()) return setErr("ارفع صورة أو ضع رابطها");
+    if (f.kind === "video" && !/^https:\/\/\S+$/i.test(f.mediaUrl.trim())) return setErr("ضع رابط فيديو (يوتيوب أو mp4 مباشر) يبدأ بـ https://");
+    if (!f.ack) return setErr("أكّد التزام الإعلان بضوابط المحتوى");
+    setBusy(true);
+    try {
+      const ref = doc(collection(db, "ads"));
+      let mediaRef = null;
+      if (f.kind === "image" && img) { mediaRef = ref.id; await setDoc(doc(db, "ad_media", ref.id), { data: img, createdAt: serverTimestamp() }); }
+      await setDoc(ref, {
+        advertiser: f.advertiser.trim(), title: f.title.trim(), category: f.category, kind: f.kind,
+        mediaUrl: mediaRef ? "" : f.mediaUrl.trim(), mediaRef, link,
+        cities: f.city === "all" ? ["all"] : [f.city],
+        startsAt: Timestamp.now(), endsAt: +f.days > 0 ? Timestamp.fromDate(new Date(Date.now() + f.days * 86400000)) : null,
+        status: "approved", active: true, policyAck: true, approvedBy: adminName || "", createdAt: serverTimestamp(),
+      });
+      setF(empty); setImg(""); setOpen(false); setErr("");
+    } catch (e) { setErr(e.code === "permission-denied" ? "قواعد Firestore تمنع الكتابة — انشر القواعد الجديدة" : e.message); }
+    setBusy(false);
+  };
+  const loadStats = async (id) => {
+    try {
+      const c = (col, type) => getCountFromServer(query(collection(db, col), ...(type ? [where("adId", "==", id), where("type", "==", type)] : [where("adId", "==", id)]))).then((x) => x.data().count);
+      const [v, k, r] = await Promise.all([c("ad_events", "view"), c("ad_events", "click"), c("ad_reports")]);
+      setStats((s) => ({ ...s, [id]: { v, k, r } }));
+    } catch (e) { setStats((s) => ({ ...s, [id]: { err: true } })); }
+  };
+  const remove = async (a) => {
+    if (!window.confirm("حذف الإعلان نهائياً؟")) return;
+    try { if (a.mediaRef) await deleteDoc(doc(db, "ad_media", a.mediaRef)); await deleteDoc(doc(db, "ads", a.id)); } catch (e) {}
+  };
+  const expired = (a) => { const e = toDate(a.endsAt); return e && e < new Date(); };
+  return (
+    <div>
+      <PageTitle title="📢 الإعلانات" sub="إعلانات مباشرة (صورة/فيديو) تُعرض للركاب أثناء انتظار السائق فقط"
+        right={canEdit && <button onClick={() => setOpen(!open)} style={{ background: T.brand, border: "none", color: "#fff", borderRadius: 12, padding: "10px 18px", fontFamily: "inherit", fontWeight: 800, cursor: "pointer" }}>{open ? "إغلاق" : "+ إعلان جديد"}</button>} />
+      <Card style={{ marginBottom: 14 }}>
+        <div style={{ fontWeight: 800, color: T.text, marginBottom: 8 }}>🕌 ضوابط المحتوى المقبول</div>
+        <ul style={{ margin: 0, paddingInlineStart: 18, color: T.muted, fontSize: 13, lineHeight: 1.9 }}>{AD_RULES.map((r) => <li key={r}>{r}</li>)}</ul>
+        <div style={{ color: T.muted, fontSize: 12, marginTop: 8 }}>يستطيع الراكب الإبلاغ عن أي إعلان من داخل التطبيق، وتظهر عدد البلاغات هنا. أوقف أي إعلان يصلك عنه بلاغ مبرَّر.</div>
+      </Card>
+      {open && canEdit && (
+        <Card style={{ marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
+            <F l="اسم المعلن"><input style={inp} value={f.advertiser} onChange={(e) => set("advertiser", e.target.value)} /></F>
+            <F l="عنوان الإعلان"><input style={inp} value={f.title} onChange={(e) => set("title", e.target.value)} maxLength={70} /></F>
+            <F l="الفئة"><select style={inp} value={f.category} onChange={(e) => set("category", e.target.value)}>{AD_CATS.map((c) => <option key={c}>{c}</option>)}</select></F>
+            <F l="النوع"><select style={inp} value={f.kind} onChange={(e) => { set("kind", e.target.value); setImg(""); }}><option value="image">صورة</option><option value="video">فيديو قصير</option></select></F>
+            <F l="الولاية"><select style={inp} value={f.city} onChange={(e) => set("city", e.target.value)}><option value="all">كل الولايات</option>{WILAYA_LIST.map((w) => <option key={w.c} value={w.c}>{w.c} - {w.n}</option>)}</select></F>
+            <F l="مدة العرض (أيام، 0 = مفتوحة)"><input type="number" style={inp} value={f.days} onChange={(e) => set("days", e.target.value)} /></F>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 12, marginTop: 12 }}>
+            {f.kind === "image" ? (
+              <>
+                <F l="رفع صورة (تُضغط تلقائياً)"><input type="file" accept="image/*" onChange={pick} style={{ ...inp, padding: 8 }} /></F>
+                <F l="أو رابط صورة https"><input style={inp} value={f.mediaUrl} onChange={(e) => set("mediaUrl", e.target.value)} placeholder="https://..." dir="ltr" /></F>
+              </>
+            ) : (
+              <F l="رابط الفيديو: يوتيوب (يُفضّل غير مدرج) أو mp4 مباشر"><input style={inp} value={f.mediaUrl} onChange={(e) => set("mediaUrl", e.target.value)} placeholder="https://youtu.be/..." dir="ltr" /></F>
+            )}
+            <F l="رابط الإعلان عند الضغط (واتساب/موقع/فيسبوك) اختياري"><input style={inp} value={f.link} onChange={(e) => set("link", e.target.value)} placeholder="https://wa.me/213..." dir="ltr" /></F>
+          </div>
+          {img && <img src={img} alt="" style={{ marginTop: 12, maxHeight: 140, borderRadius: 10 }} />}
+          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 14, color: T.text, fontSize: 13, cursor: "pointer" }}>
+            <input type="checkbox" checked={f.ack} onChange={(e) => set("ack", e.target.checked)} style={{ marginTop: 3 }} />
+            <span>راجعتُ الإعلان وهو يلتزم بضوابط المحتوى أعلاه (لا محرّمات ولا مخلّات بالحياء)</span>
+          </label>
+          {err && <div style={{ color: T.bad, fontSize: 13, margin: "10px 0" }}>{err}</div>}
+          <button disabled={busy} onClick={create} style={{ marginTop: 12, background: T.brand, border: "none", color: "#fff", borderRadius: 12, padding: "12px 24px", fontFamily: "inherit", fontWeight: 800, cursor: "pointer", opacity: busy ? .6 : 1 }}>{busy ? "..." : "نشر الإعلان"}</button>
+        </Card>
+      )}
+      {rows.length === 0 && <Card><Empty icon="📢" text="لا توجد إعلانات بعد" /></Card>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {rows.map((a) => {
+          const st = stats[a.id];
+          return (
+            <Card key={a.id} pad={16}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 800, color: T.text }}>{a.title}</span>
+                    <Pill color={expired(a) ? T.dim : a.active === false ? T.warn || T.dim : T.ok}>{expired(a) ? "منتهٍ" : a.active === false ? "متوقف" : "نشط"}</Pill>
+                    <Pill color={T.brandL}>{a.kind === "video" ? "فيديو" : "صورة"}</Pill>
+                  </div>
+                  <div style={{ fontSize: 12, color: T.muted, marginTop: 5 }}>{a.advertiser} · {a.category} · {(a.cities || ["all"])[0] === "all" ? "كل الولايات" : "ولاية " + a.cities[0]}{toDate(a.endsAt) ? " · حتى " + toDate(a.endsAt).toLocaleDateString("ar-DZ") : ""}</div>
+                  {st && !st.err && <div style={{ fontSize: 13, color: T.text, marginTop: 6 }}>👁️ {st.v} مشاهدة (مستخدم/يوم) · 👆 {st.k} نقرة · 🚩 {st.r} بلاغ</div>}
+                  {st?.err && <div style={{ fontSize: 12, color: T.bad, marginTop: 6 }}>تعذّر جلب الإحصاءات (انشر القواعد)</div>}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
+                  <button onClick={() => loadStats(a.id)} style={{ background: T.panel2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "7px 14px", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>📊 الإحصاءات</button>
+                  {canEdit && <button onClick={() => updateDoc(doc(db, "ads", a.id), { active: a.active === false })} style={{ background: T.panel2, border: `1px solid ${T.border}`, color: T.text, borderRadius: 10, padding: "7px 14px", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>{a.active === false ? "تفعيل" : "إيقاف"}</button>}
+                  {canEdit && <button onClick={() => remove(a)} style={{ background: "none", border: `1px solid ${T.bad}55`, color: T.bad, borderRadius: 10, padding: "7px 14px", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}>حذف</button>}
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }
