@@ -11,6 +11,7 @@ const LegalOverlay = (p) => (LegalMod.LegalOverlay ? <LegalMod.LegalOverlay {...
 const SupportButton = (p) => (LegalMod.SupportButton ? <LegalMod.SupportButton {...p} /> : null);
 const OfflineBanner = (p) => (LegalMod.OfflineBanner ? <LegalMod.OfflineBanner {...p} /> : null);
 import { useRegions, wilayaOf, isEnabled } from "./Wilayas";
+import { AdSlot } from "./Ads";
 import { SharedModeBox, SharedTripPicker, SharedTripScreen, ActiveSharedBanner, createSharedBooking, joinTrip } from "./SharedTrips";
 import { useSingleSession, KickedScreen, PermissionGate, clearDeviceClaim } from "./DeviceGuard";
 import {
@@ -85,6 +86,7 @@ const calcPrice = (km, multiplier=1.0, minutes=0, ratio=1) => {
   return km<2 ? Math.max(price,PRICING.min) : price;
 };
 
+const adWilaya = (p) => { if (!p) return undefined; const l = getLatLng(p); return l ? wilayaOf(l.lat, l.lng)?.c : undefined; };
 const getLatLng = (place) => {
   if (!place) return { lat:0, lng:0 };
   return { lat: typeof place.lat==="function"?place.lat():place.lat, lng: typeof place.lng==="function"?place.lng():place.lng };
@@ -2020,6 +2022,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           <div style={{ flex:1,minWidth:0 }}><div style={{ whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:700 }}>{booking?.originText}</div><div style={{ height:10 }} /><div style={{ whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:700 }}>{booking?.destText}</div></div>
         </div>
       </div>
+      <div style={{ margin:"14px 20px 0",color:C.text }}><AdSlot lang={lang} wilaya={adWilaya(booking?.originPlace)} /></div>
       {noDrivers&&(
         <div style={{ margin:"14px 20px",background:C.orangeLight,borderRadius:20,padding:20,border:`1px solid ${C.orange}44`,textAlign:"center" }}>
           <div style={{ fontSize:36,marginBottom:8 }}>😔</div>
@@ -2087,6 +2090,7 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           <button onClick={()=>{setElapsed(0);setScreen("ride");}} style={{ flex:2,background:`${C.dark}`,border:"none",borderRadius:12,padding:12,color:"#fff",fontFamily:"inherit",fontWeight:800,cursor:"pointer" }}>{t.trackTrip}</button>
         </div>
       </div>
+      <div style={{ margin:"14px 20px 90px",color:C.text }}><AdSlot lang={lang} wilaya={adWilaya(booking?.originPlace)} /></div>
       <SOSButton passengerName={passengerName} bookingId={bookingId} />
     </div>
   );
