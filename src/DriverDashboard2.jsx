@@ -36,7 +36,7 @@ const calcPrice=(km,rideType,minutes=0,ratio=1)=>{ if(!km||km<=0) return PRICING
 const getDistKm=(lat1,lng1,lat2,lng2)=>{ const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2; return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); };
 // نطاق وصول الطلب: يبدأ بالنطاق الأساسي ثم يتّسع تدريجياً إن لم يقبله أحد (45ث ← ×1.5، 120ث ← ×2.5)
 const reqRadiusKm=(b)=>{ const base=PRICING.dispatchRadiusKm||8; const age=Date.now()-(b.createdAt?.toMillis?.()||Date.now()); return age<45000?base:age<120000?base*1.5:base*2.5; };
-const isNearReq=(b,loc)=>{ if(!loc||b.originLat==null||b.originLng==null) return false; return getDistKm(loc.lat,loc.lng,b.originLat,b.originLng)<=reqRadiusKm(b); };
+const isNearReq=(b,loc)=>{ if(!loc||b.originLat==null||b.originLng==null) return true; /* موقع غير معروف: لا نخفي الطلب */ return getDistKm(loc.lat,loc.lng,b.originLat,b.originLng)<=reqRadiusKm(b); };
 const openNavigation=(lat,lng)=>window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving&dir_action=navigate`,"_blank");
 
 // تنبيه صوتي + اهتزاز عند وصول طلب جديد — لا يعتمد على ملف صوت خارجي (Web Audio API)
@@ -1063,12 +1063,13 @@ export default function DriverDashboard({ user, onLogout }) {
   const [tab,setTab]=useState("home");
   const [rawBookings,setBookings]=useState([]);
   const [acceptedBooking,setAcceptedBooking]=useState(null);
+  const acceptedRef=useRef(null); acceptedRef.current=acceptedBooking;
   const [driverScreen,setDriverScreen]=useState("dashboard");
   const [driverLocation,setDriverLocation]=useState(null);
   const driverLocRef=useRef(null); driverLocRef.current=driverLocation;
   const [nearTick,setNearTick]=useState(0);
   useEffect(()=>{ const t=setInterval(()=>setNearTick(x=>x+1),15000); return()=>clearInterval(t); },[]);
-  const bookings=rawBookings.filter(b=>isNearReq(b,driverLocation)); // الطلبات القريبة فقط
+  const bookings=acceptedBooking?[]:rawBookings.filter(b=>isNearReq(b,driverLocation)); // الطلبات القريبة فقط، ولا طلبات جديدة أثناء رحلة جارية
   void nearTick;
   const [showReport,setShowReport]=useState(false);
   const [showSessionAlert,setShowSessionAlert]=useState(false);
@@ -1179,6 +1180,25 @@ export default function DriverDashboard({ user, onLogout }) {
       try { await updateDoc(doc(db,"bookings",bookingId),{driverCurrentLocation:loc,driverLocationUpdatedAt:serverTimestamp()}); await setDoc(doc(db,"drivers",user.uid),{location:loc},{merge:true}); } catch(e){}
     },err=>console.log("GPS:",err),{enableHighAccuracy:true,maximumAge:2000,timeout:5000});
   };
+  // تتبّع موقع السائق باستمرار وهو متصل (يُحدّث فلترة الطلبات وتوزيعها من الخادم)
+  const idleWriteRef=useRef({t:0,lat:0,lng:0});
+  useEffect(()=>{
+    if(!online||!user?.uid||acceptedBooking||!navigator.geolocation) return;
+    const w=navigator.geolocation.watchPosition(pos=>{
+      const loc={lat:pos.coords.latitude,lng:pos.coords.longitude}; setDriverLocation(loc);
+      const W=idleWriteRef.current, now=Date.now();
+      if(now-W.t<30000&&getDistKm(W.lat,W.lng,loc.lat,loc.lng)<0.1) return;
+      idleWriteRef.current={t:now,lat:loc.lat,lng:loc.lng};
+      setDoc(doc(db,"drivers",user.uid),{location:loc,isOnline:true},{merge:true}).catch(()=>{});
+    },()=>{},{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
+    return()=>navigator.geolocation.clearWatch(w);
+  },[online,user?.uid,!!acceptedBooking]); // eslint-disable-line react-hooks/exhaustive-deps
+  // علامة "مشغول": السائق في رحلة فلا تصله طلبات جديدة (الرحلات التشاركية مستثناة)
+  const busyFlagRef=useRef(false);
+  useEffect(()=>{
+    if(!user?.uid) return; const busy=!!acceptedBooking?.id; if(busy===busyFlagRef.current) return; busyFlagRef.current=busy;
+    setDoc(doc(db,"drivers",user.uid),{busy,busyAt:busy?Date.now():0},{merge:true}).catch(()=>{});
+  },[acceptedBooking?.id,user?.uid]);
   const stopTracking=()=>{ if(watchIdRef.current){navigator.geolocation.clearWatch(watchIdRef.current);watchIdRef.current=null;} };
 
   const toggleOnline=async()=>{
@@ -1204,7 +1224,7 @@ export default function DriverDashboard({ user, onLogout }) {
       const nearFresh=fresh.filter(b=>isNearReq(b,driverLocRef.current));
       const freshIds=new Set(nearFresh.map(b=>b.id));
       const isNew=nearFresh.some(b=>!knownBookingIdsRef.current.has(b.id));
-      if(isNew && knownBookingIdsRef.current.size>0) alertNewBooking(); // لا ننبّه عند أول تحميل، ولا لطلب بعيد
+      if(isNew && knownBookingIdsRef.current.size>0 && !acceptedRef.current) alertNewBooking(); // لا ننبّه عند أول تحميل، ولا لطلب بعيد
       knownBookingIdsRef.current=freshIds;
       setBookings(fresh);
     }, err=>{
