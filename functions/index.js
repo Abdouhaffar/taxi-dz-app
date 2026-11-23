@@ -156,6 +156,8 @@ exports.onNewBooking = functions.runWith({ maxInstances: 100, memory: "512MB" })
       driversSnap.forEach(doc => {
         const driver = doc.data();
         if (!driver.fcmToken || !driver.location) return;
+        // سائق مشغول برحلة (آخر 3 ساعات) لا يُنبَّه بطلبات جديدة
+        if (driver.busy && Date.now() - (Number(driver.busyAt) || 0) < 3 * 3600 * 1000) return;
 
         const R = 6371;
         const dLat = (driver.location.lat - originLat) * Math.PI / 180;
