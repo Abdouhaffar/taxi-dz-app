@@ -1626,8 +1626,8 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
       return;
     }
     setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      pos=>{
+    let retried=false;
+    const ok=pos=>{
         const ll=new window.google.maps.LatLng(pos.coords.latitude,pos.coords.longitude);
         setOriginPlace(ll);setPassengerGPS({lat:pos.coords.latitude,lng:pos.coords.longitude});
         new window.google.maps.Geocoder().geocode({location:ll},(results,status)=>{
@@ -1635,18 +1635,21 @@ function PassengerApp({ onLogout, user, lang, setLang }) {
           setGpsLoading(false);
           if(destPlace){const{lat:lat2,lng:lng2}=getLatLng(destPlace);updateDistance(pos.coords.latitude,pos.coords.longitude,lat2,lng2);}
         });
-      },
-      err=>{
+    };
+    const fail=err=>{
+        // أخطاء مؤقتة (خصوصاً في سفاري): أعد المحاولة مرة بدقة أقل
+        if((err.code===2||err.code===3)&&!retried){ retried=true; navigator.geolocation.getCurrentPosition(ok,fail,{ enableHighAccuracy:false, timeout:15000, maximumAge:60000 }); return; }
         setGpsLoading(false);
+        const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
         const msgs = {
-          1: lang==="ar"?"تم رفض إذن الموقع — فعّله من إعدادات المتصفح/الهاتف لهذا الموقع":lang==="fr"?"Autorisation de localisation refusée — activez-la dans les paramètres":"Location permission denied — enable it in your browser/phone settings",
+          1: isIOS?(lang==="ar"?"الموقع مرفوض لهذا الموقع. في سفاري: اضغط (aA) في شريط العنوان ← إعدادات الموقع الإلكتروني ← الموقع ← «السماح»، ثم أعد تحميل الصفحة. وتأكد من: الإعدادات ← الخصوصية والأمان ← خدمات الموقع ← مواقع Safari ← «أثناء استخدام التطبيق»":lang==="fr"?"Localisation refusée. Safari : touchez (aA) dans la barre d'adresse → Réglages du site web → Position → Autoriser, puis rechargez. Vérifiez aussi Réglages → Confidentialité → Service de localisation → Sites web Safari":"Location denied. In Safari: tap (aA) in the address bar → Website Settings → Location → Allow, then reload. Also check Settings → Privacy & Security → Location Services → Safari Websites → While Using")
+          : lang==="ar"?"تم رفض إذن الموقع — فعّله من إعدادات المتصفح/الهاتف لهذا الموقع":lang==="fr"?"Autorisation de localisation refusée — activez-la dans les paramètres":"Location permission denied — enable it in your browser/phone settings",
           2: lang==="ar"?"تعذر تحديد موقعك حالياً — تأكد أن GPS الهاتف مفعّل":lang==="fr"?"Position indisponible — vérifiez que le GPS est activé":"Position unavailable — make sure GPS is enabled",
           3: lang==="ar"?"استغرق تحديد الموقع وقتاً طويلاً — حاول مجدداً":lang==="fr"?"Délai dépassé — réessayez":"Location request timed out — try again",
         };
         setGpsError(msgs[err.code] || (lang==="ar"?"تعذر تحديد الموقع":lang==="fr"?"Échec de la localisation":"Failed to get location"));
-      },
-      { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
-    );
+    };
+    navigator.geolocation.getCurrentPosition(ok,fail,{ enableHighAccuracy:true, timeout:10000, maximumAge:0 });
   };
 
   // اختيار نقطة الانطلاق أو الوجهة مباشرة بالنقر على الخريطة
